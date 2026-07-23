@@ -1,0 +1,226 @@
+# Agile Delivery Plan — Auto-Trade Signal Dashboard
+
+## Vision
+
+A personal, paper-trading-first webapp that turns a ticker (stock or crypto) into a
+clear Buy/Sell/Hold call with a suggested hold-term, computed from standard technical
+indicators — and lets me execute that call as a real broker/exchange order in one
+click, with amount, leverage, take-profit and stop-loss set up front. Paper trading
+first; live trading only after the flow has proven itself.
+
+## Confirmed scope (from clarifying Q&A)
+
+| Decision | Answer |
+|---|---|
+| Asset classes | Stocks **and** crypto |
+| Execution targets | Broker-agnostic adapter layer; first two reference adapters: **Alpaca** (stocks) + **Binance** (crypto) |
+| Signal source | Standard technical indicators (RSI, MACD, MA crossover, volatility/volume) |
+| Users | Personal, single-user tool |
+| Trading mode | **Paper/simulated first**, live mode gated behind an explicit switch later |
+| Team | Solo, building with Claude Code as primary assistant → sequence epics, avoid parallel workstreams |
+| Database | Oracle Database, local (e.g. Oracle XE via Docker), managed via Oracle SQL Developer |
+| Agent/skill automation | Documented in this plan only — not activated yet |
+
+## Assumptions to confirm as we go (flag before locking in)
+
+- **Backend framework**: "Java" alone isn't a framework — this plan assumes **Spring Boot**
+  (REST, scheduling, security, JPA all standard), since it's the default choice for this
+  shape of app. Say the word if you'd rather use Jakarta EE, Micronaut, Quarkus, etc.
+- **Indicator math**: plan assumes we either hand-roll RSI/MACD/MA/volatility or use a
+  library like `ta4j` — a build-time decision for an Explore agent, not a product decision.
+- **Stock vs. crypto detection**: the dashboard needs a simple rule (ticker format, or an
+  explicit asset-type toggle) to know which adapter/data source to call. Treated as a
+  small story in the Signal Engine epic, not decided yet.
+
+---
+
+## Epics, features, and user stories (INVEST)
+
+Each story is written to be **I**ndependent, **N**egotiable, **V**aluable, **E**stimable,
+**S**mall, and **T**estable — sized in story points (Fibonacci) and paired with concrete
+acceptance criteria so "done" isn't a judgment call.
+
+### E1 — Platform Foundation
+*Get a working skeleton (DB, backend, frontend) that later epics build on.*
+
+**F1.1 Local dev environment**
+| ID | Story | Acceptance Criteria | Pts |
+|---|---|---|---|
+| E1-F1-S1 | As a developer, I want a Docker Compose file for Oracle XE so I can spin up the DB with one command. | `docker compose up` starts Oracle XE; reachable from SQL Developer; connection details documented in CLAUDE.md. | 3 |
+| E1-F1-S2 | As a developer, I want a Spring Boot backend skeleton with a health endpoint so later features have a place to plug in. | `/health` returns 200; builds via Maven/Gradle; runs locally with one command. | 2 |
+| E1-F1-S3 | As a developer, I want a React app skeleton with routing so dashboard pages can be added incrementally. | `npm run dev` serves a shell app with a placeholder route; clean build, no console errors. | 2 |
+
+**F1.2 Core data model**
+| ID | Story | Acceptance Criteria | Pts |
+|---|---|---|---|
+| E1-F2-S1 | As a developer, I want Oracle tables for tickers, indicator snapshots, orders, and broker credentials so the app has persistent storage. | Schema script creates tables with PK/FK constraints; runs cleanly against the Dockerized DB. | 5 |
+| E1-F2-S2 | As a developer, I want a JPA/Hibernate data-access layer mapped to that schema so business logic never hand-writes SQL. | Repository class per table; integration test proves CRUD round-trip. | 5 |
+
+**F1.3 Secrets & config management**
+| ID | Story | Acceptance Criteria | Pts |
+|---|---|---|---|
+| E1-F3-S1 | As a user, I want broker API keys stored encrypted at rest so a leaked config file can't expose live trading credentials. | Keys encrypted (e.g. Jasypt or OS keystore); never appear in logs; rotation process documented. | 5 |
+
+### E2 — Signal Engine
+*Turn a ticker into indicator numbers and a single Buy/Sell/Hold + hold-term call.*
+
+**F2.1 Market data ingestion**
+| ID | Story | Acceptance Criteria | Pts |
+|---|---|---|---|
+| E2-F1-S1 | As a user, I want to enter a ticker and have the backend fetch recent price history so indicators can be computed. | Valid ticker returns last N candles from the right source (Alpaca for stocks, Binance for crypto). | 5 |
+| E2-F1-S2 | As a user, I want a clear error for an unrecognized ticker so I'm not left staring at a blank dashboard. | Unknown ticker returns a specific error message, rendered in the UI, not a generic failure. | 2 |
+
+**F2.2 Technical indicator calculation**
+| ID | Story | Acceptance Criteria | Pts |
+|---|---|---|---|
+| E2-F2-S1 | As a user, I want RSI, MACD, and moving-average crossover computed for my ticker so I have objective signal inputs. | Unit tests validate each indicator against known reference values; all returned in one API call. | 8 |
+| E2-F2-S2 | As a user, I want a volatility/volume-trend metric included so I can spot dead or erratic tickers before trading. | Metric present in API response; unit-tested against reference data. | 5 |
+
+**F2.3 Buy/Sell/Hold signal & hold-term**
+| ID | Story | Acceptance Criteria | Pts |
+|---|---|---|---|
+| E2-F3-S1 | As a user, I want the indicators combined into a single Buy/Sell/Hold call so I don't have to interpret raw numbers myself. | Deterministic rule table maps indicator combinations → call; thresholds documented; each branch unit-tested. | 8 |
+| E2-F3-S2 | As a user, I want a suggested hold-term alongside the call so I know the expected horizon before entering. | Hold-term derived from volatility/trend strength; shown as a labeled range (e.g. "3–10 days"). | 5 |
+
+### E3 — Dashboard (Frontend)
+*Make the signal legible at a glance.*
+
+**F3.1 Ticker lookup & metrics display**
+| ID | Story | Acceptance Criteria | Pts |
+|---|---|---|---|
+| E3-F1-S1 | As a user, I want to type a ticker and see its key metrics on one screen so I can decide fast. | Search triggers backend call; metrics render as stat tiles within 2s. | 5 |
+| E3-F1-S2 | As a user, I want the Buy/Sell/Hold call and hold-term shown prominently and color-coded so the decision is legible at a glance. | Color-coded badge + hold-term text rendered above the metrics grid (built with `dataviz` skill guidance). | 3 |
+
+**F3.2 Metric visualization**
+| ID | Story | Acceptance Criteria | Pts |
+|---|---|---|---|
+| E3-F2-S1 | As a user, I want a price chart with indicator overlays (MA lines, RSI subplot) so I can sanity-check the signal visually. | Chart renders candles + overlays; responsive; accessible color use per `dataviz` skill. | 8 |
+
+**F3.3 Watchlist (stretch)**
+| ID | Story | Acceptance Criteria | Pts |
+|---|---|---|---|
+| E3-F3-S1 | As a user, I want to save tickers I've checked so I can revisit them without retyping. | List persisted in Oracle DB; add/remove works; survives app restart. | 3 |
+
+### E4 — Broker Adapter Layer
+*One trading interface, multiple brokers behind it.*
+
+**F4.1 Adapter interface**
+| ID | Story | Acceptance Criteria | Pts |
+|---|---|---|---|
+| E4-F1-S1 | As a developer, I want a `BrokerAdapter` interface (placeOrder, getPosition, cancelOrder, getAccountStatus) so any broker can plug in without touching trading logic. | Interface + contract documented; a mock implementation passes a shared adapter test suite. | 5 |
+
+**F4.2 Alpaca adapter (stocks)**
+| ID | Story | Acceptance Criteria | Pts |
+|---|---|---|---|
+| E4-F2-S1 | As a user, I want my Alpaca paper account connected so stock orders route through a real simulated broker. | Adapter authenticates with Alpaca paper keys; `getAccountStatus` returns balance. | 5 |
+| E4-F2-S2 | As a user, I want to place a market order via Alpaca so the dashboard button has something real to call. | Order submitted, order ID returned, status is pollable. | 5 |
+
+**F4.3 Binance adapter (crypto)**
+| ID | Story | Acceptance Criteria | Pts |
+|---|---|---|---|
+| E4-F3-S1 | As a user, I want my Binance testnet account connected so crypto orders route through a simulated exchange. | Adapter authenticates with testnet keys; `getAccountStatus` returns balances. | 5 |
+| E4-F3-S2 | As a user, I want to place a leveraged order via Binance testnet so crypto trades support the same flow as stocks. | Order submitted with leverage param bounded by adapter limits; order ID returned, status pollable. | 8 |
+
+### E5 — Auto-Trade Execution
+*The button: amount, leverage, TP/SL → a real order.*
+
+**F5.1 Trade input form**
+| ID | Story | Acceptance Criteria | Pts |
+|---|---|---|---|
+| E5-F1-S1 | As a user, I want to enter amount, leverage, take-profit, and stop-loss so I control risk before submitting. | Form validates numeric ranges against broker limits; submit disabled until valid. | 3 |
+| E5-F1-S2 | As a user, I want the form to only show fields relevant to the asset type so I can't submit a nonsensical order. | Stock tickers hide/default leverage to 1×; crypto shows a leverage control bounded by the adapter's max. | 3 |
+
+**F5.2 Order construction & submission**
+| ID | Story | Acceptance Criteria | Pts |
+|---|---|---|---|
+| E5-F2-S1 | As a user, I want clicking "Trade" to submit a bracket order (entry + TP + SL) to the correct adapter so the signal becomes a real position in one click. | Payload includes TP/SL; adapter chosen by asset type; confirmation returned to UI. | 8 |
+| E5-F2-S2 | As a user, I want an explicit confirmation step before the order fires so a mistyped amount or leverage can't execute instantly. | Modal shows order summary; requires explicit confirm; cancel makes no API call. | 3 |
+
+**F5.3 Order status & history**
+| ID | Story | Acceptance Criteria | Pts |
+|---|---|---|---|
+| E5-F3-S1 | As a user, I want to see the status of orders I've placed so I know what happened after clicking Trade. | Status page polls adapter and/or stores updates in Oracle DB; rejections show the broker's reason. | 5 |
+
+### E6 — Risk & Safety Controls
+*Because this moves real money once live mode is on.*
+
+**F6.1 Paper/live mode toggle**
+| ID | Story | Acceptance Criteria | Pts |
+|---|---|---|---|
+| E6-F1-S1 | As a user, I want a global paper/live switch so I can validate the whole flow with fake money first. | Switch changes which API keys/base URLs adapters use; current mode shown in a persistent UI banner. | 3 |
+| E6-F1-S2 | As a user, I want live mode blocked until I've completed a minimum number of successful paper trades so I can't skip validation by accident. | Configurable threshold; switch stays disabled with an explanation until met. | 3 |
+
+**F6.2 Guardrails**
+| ID | Story | Acceptance Criteria | Pts |
+|---|---|---|---|
+| E6-F2-S1 | As a user, I want a hard server-side cap on leverage and position size so a UI bug or fat-finger can't exceed my risk limits. | Backend rejects any order beyond configured caps, regardless of what the frontend sent. | 5 |
+| E6-F2-S2 | As a user, I want a kill switch that cancels all open orders and blocks new submissions so I can stop everything instantly. | One control cancels open orders on both adapters and blocks new trades until manually cleared. | 5 |
+
+**F6.3 Audit log**
+| ID | Story | Acceptance Criteria | Pts |
+|---|---|---|---|
+| E6-F3-S1 | As a user, I want every order and the signal that triggered it logged immutably so I can review my decision trail later. | Append-only Oracle audit table: ticker, signal snapshot, order params, timestamp, result. | 3 |
+
+### E7 — Observability & Hardening
+*Threaded through the whole build, not a phase at the end.*
+
+| ID | Story | Acceptance Criteria | Pts |
+|---|---|---|---|
+| E7-F1-S1 | As a developer, I want structured logging across backend services so broker/indicator failures are diagnosable. | Consistent log format; broker errors logged with context, never silently swallowed. | 3 |
+| E7-F2-S1 | As a user, I want the credential-storage and order-submission code security-reviewed before any live account is connected so leaked keys or injection bugs don't cost real money. | `security-review` run against secrets + adapter code; findings triaged before E6 live-mode gate is closed. | 3 |
+
+---
+
+## Suggested build sequence (solo, sequential — not parallel workstreams)
+
+```
+E1 (Foundation) → E2 (Signal Engine) → E3.1/E3.2 (Dashboard core)
+   → E4 (Adapter interface → Alpaca → Binance, paper/testnet keys only)
+   → E5 (Auto-Trade Execution) → E6 (Risk Controls) → live-mode gate
+E7 threaded throughout; E3.3 (watchlist) slotted in whenever there's slack.
+```
+
+Rationale: nothing in E3–E6 is testable without E1+E2 existing first, and the highest-risk
+code (real order submission) is deliberately last, behind a paper-mode requirement.
+
+## Definition of Ready / Done (applies to every story above)
+
+- **Ready**: acceptance criteria above are understood; any open assumption it touches
+  (framework, indicator library, asset-type detection) has been resolved.
+- **Done**: acceptance criteria met; `run` skill used to verify in the actual running app,
+  not just unit tests; `simplify` skill applied; CLAUDE.md updated; committed with a
+  meaningful message (per this repo's mandatory workflow).
+
+---
+
+## Agent & skill architecture (documented now, not activated — per your choice)
+
+Goal: keep the solo build moving through ~45 stories without you re-prompting for every
+one. Mapped by role, not by epic, since the same roles recur every epic:
+
+| Role | Tool | When to use it |
+|---|---|---|
+| Design gate before coding a non-trivial feature | `Plan` agent | Before E1's schema, E2's indicator/signal rules, E4's adapter interface, E5's bracket-order construction — anywhere a wrong first design is expensive to unwind later. |
+| Research without burning main-thread context | `Explore` agent | Looking up exact Alpaca/Binance API fields for bracket + leverage orders, comparing `ta4j` vs. hand-rolled indicators, Oracle/JPA quirks. |
+| Independent implementation chunks, run in background | `general-purpose` agent, `isolation: "worktree"` | Self-contained stories (one indicator module, the React skeleton, one adapter) that don't need turn-by-turn steering — spawn it, keep working the next story yourself, get notified when it's done instead of babysitting it. |
+| Dashboard visuals | `dataviz` skill | Before F3.1's stat tiles and F3.2's chart — consistent, accessible metric visualization instead of ad hoc colors. |
+| Verify a feature actually works | `run` skill | End of every story — launches the React + Spring Boot stack and click-throughs the golden path, per this project's own "test in the browser" bar. |
+| Keep code lean before it's committed | `simplify` skill | Right before each commit — prevents the backlog's pace from accumulating cruft. |
+| Gate on money-handling code | `security-review` skill | Mandatory before F1.3 (secrets) ships, and again before E6.1's live-mode switch is unlocked — this is the code that, if wrong, leaks keys or fires unintended real trades. |
+| Gate on the highest-blast-radius code | `/code-review` (consider `ultra` tier) | On the full diff for E4/E5 (adapter + order execution) before calling those epics done — this is where a bug costs real money, not just dev time. |
+| Backlog auto-advance | `/loop` (dynamic/self-paced) | When you're ready to execute rather than just plan: each iteration takes the next story, implements it (delegating independent chunks per the row above), runs `run` + `simplify`, commits, updates CLAUDE.md, and self-schedules the next iteration — this is the actual fix for "the loop gets interrupted by prompting." Not turned on yet; say the word when you want it live. |
+| Scheduled/recurring execution | `CronCreate` / `schedule` skill | **Not used for building.** Flagged only as a possible *future product feature* (e.g., auto-refreshing signals for a watchlist on a timer) — out of scope for v1, since the spec calls for a manual "Trade" button, not an unattended bot. |
+
+### Why this shape
+
+- `Plan` before code prevents relitigating architecture mid-epic.
+- `Explore` keeps API-detail lookups from polluting the main conversation with long
+  fetched docs.
+- Background `general-purpose` agents are the actual throughput lever for a solo
+  builder — they let independent stories progress while you're steering the next one.
+- The two review gates (`security-review`, `/code-review`) are placed deliberately at
+  the two points where a mistake has real financial consequence: secrets handling and
+  order execution.
+- `/loop` is the mechanism that removes re-prompting entirely once you're ready to
+  execute the backlog — everything above it is what `/loop` would actually be calling
+  under the hood.

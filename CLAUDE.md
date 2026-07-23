@@ -4,7 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status
 
-This directory is currently empty — no source code, configuration, or documentation exists yet. There are no build, lint, or test commands to document, and no architecture to describe.
+No source code yet. An agile delivery plan for the project has been drafted at
+`docs/agile-plan.md` — an auto-trade signal dashboard (React frontend, Java/Spring
+Boot backend, Oracle Database via local Oracle XE, broker adapters starting with
+Alpaca for stocks and Binance for crypto). It covers epics/features/user stories
+(INVEST format) and the recommended subagent/skill usage for solo-driven
+implementation. There are no build, lint, or test commands yet since no code has
+been written.
 
 When code is added to this repository, update this file with:
 - Build, lint, and test commands (including how to run a single test)
