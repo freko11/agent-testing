@@ -1,0 +1,18 @@
+services:
+  oracle-xe:
+    image: gvenzl/oracle-xe:21-slim
+    container_name: autotrade-oracle-xe
+    ports:
+      - "${ORACLE_HOST_PORT:-1522}:1521"
+    environment:
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD}
+      APP_USER: ${ORACLE_APP_USER}
+      APP_USER_PASSWORD: ${ORACLE_APP_USER_PASSWORD}
+    volumes:
+      - ./oracle-data:/opt/oracle/oradata
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s

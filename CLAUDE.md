@@ -4,7 +4,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status
 
-No source code yet. An agile delivery plan for the project has been drafted at
+E1-F1-S1 (local Oracle XE via Docker Compose) is done. `docker-compose.yml` runs
+`gvenzl/oracle-xe:21-slim`, with credentials and host port sourced from `.env` (see
+`.env.example` — never commit `.env`). Local data persists to `oracle-data/`
+(gitignored). Connect from SQL Developer / `sqlplus` with:
+- Host: `localhost`, Port: `1522` (not the default 1521 — this dev machine already
+  runs a native Oracle listener on 1521, so the container's host port defaults to
+  1522 via `ORACLE_HOST_PORT` in `.env`; override if your machine doesn't conflict)
+- Service name: `XEPDB1`
+- App user/password: `ORACLE_APP_USER` / `ORACLE_APP_USER_PASSWORD` from `.env`
+- SYS password: `ORACLE_PASSWORD` from `.env` (SYSDBA role required for SYS)
+
+Bring the DB up with `docker compose up -d`; first boot takes ~60-90s before the
+healthcheck reports healthy (`docker compose ps`).
+
+The rest of E1-F1 (backend skeleton, frontend skeleton, CI, env profiles) is in
+progress — see stories below as they land.
+
+Beyond that, no other source code yet. An agile delivery plan for the project has been drafted at
 `docs/agile-plan.md` — an auto-trade signal dashboard (React frontend, Java/Spring
 Boot backend, Oracle Database via local Oracle XE, broker adapters starting with
 Alpaca for stocks and Binance for crypto). It covers epics/features/user stories
