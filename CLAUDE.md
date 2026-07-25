@@ -32,7 +32,18 @@ E1-F1-S3 (React app skeleton) is done. `frontend/` is a Vite + React 19 + TypeSc
 app with `react-router-dom`, one placeholder route (`/` → `DashboardPage`). Run with
 `npm install && npm run dev` from `frontend/`; build with `npm run build`.
 
-The rest of E1-F1 (CI, env profiles) is in progress — see stories below as they land.
+E1-F1-S4 (CI pipeline) is done. `.github/workflows/ci.yml` runs on every push and PR:
+a `backend` job (`./mvnw -B verify`, Temurin 21) and a `frontend` job (`npm ci && npm run build`,
+Node 22). Backend tests run against an in-memory H2 datasource
+(`backend/src/test/resources/application.properties` overrides the main Oracle
+datasource for the test classpath only) so CI and local `mvn verify` don't need Docker
+or `.env` — Oracle is still what the running app uses in dev/paper/prod.
+**Manual follow-up, not yet done**: GitHub branch protection ("failure blocks merge")
+requires a repo-settings change on `github.com/freko11/agent-testing`, which wasn't
+made — needs the user's own action (Settings → Branches) or an explicit go-ahead to
+do it via `gh api`, since it changes shared repo governance.
+
+E1-F1-S5 (env profiles) is in progress — see stories below as they land.
 
 Beyond that, no other source code yet. An agile delivery plan for the project has been drafted at
 `docs/agile-plan.md` — an auto-trade signal dashboard (React frontend, Java/Spring
