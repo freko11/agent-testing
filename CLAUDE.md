@@ -28,8 +28,11 @@ base-path `/`) returns 200 once the Oracle XE container from S1 is up, since the
 datasource is already pointed at it (`jdbc:oracle:thin:@//localhost:${ORACLE_HOST_PORT:1522}/XEPDB1`)
 — no JPA entities/repositories yet, that's F1.2. Build/test: `./mvnw verify`.
 
-The rest of E1-F1 (frontend skeleton, CI, env profiles) is in
-progress — see stories below as they land.
+E1-F1-S3 (React app skeleton) is done. `frontend/` is a Vite + React 19 + TypeScript
+app with `react-router-dom`, one placeholder route (`/` → `DashboardPage`). Run with
+`npm install && npm run dev` from `frontend/`; build with `npm run build`.
+
+The rest of E1-F1 (CI, env profiles) is in progress — see stories below as they land.
 
 Beyond that, no other source code yet. An agile delivery plan for the project has been drafted at
 `docs/agile-plan.md` — an auto-trade signal dashboard (React frontend, Java/Spring
