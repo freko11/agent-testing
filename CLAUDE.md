@@ -62,9 +62,43 @@ Switch profiles via `SPRING_PROFILES_ACTIVE=paper` (env var) or
 using their respective env-var names.
 
 This completes E1-F1 (local dev environment) — DB, backend, frontend, CI, and profiles
-all in place. Next up per the plan's build sequence: E1-F1.2 (core data model), which
-per the plan's own agent-role table warrants a `Plan` agent design gate before coding
-(a real schema decision, not scaffolding).
+all in place.
+
+E1-F2 (core data model) is done — all three stories:
+- **E1-F2-S1**: Oracle tables for `tickers`, `indicator_snapshots`, `broker_credentials`,
+  and `orders` (`backend/src/main/resources/db/migration/V1__init_core_schema.sql`),
+  with PK/FK/CHECK/UNIQUE constraints — including a DB-level defense-in-depth check
+  that stock orders can never carry leverage, ahead of E6's guardrails.
+- **E1-F2-S2**: A JPA entity + Spring Data repository per table (`broker`, `indicator`,
+  `order`, `ticker` packages under `com.autotrade.dashboard`), with a `CredentialCipherConverter`
+  (AES/GCM, key from `CREDENTIAL_ENC_KEY` env var — see `.env.example`) encrypting
+  `broker_credentials`' key/secret columns at rest. This is F1.2's minimal safeguard
+  only; full key rotation/keystore-backed encryption is separate F1.3 work.
+  `CoreDataModelIntegrationTest` proves CRUD round-trips through all four repositories
+  plus unique/FK/check-constraint violations.
+- **E1-F2-S3**: Flyway (`V1__init_core_schema.sql` + `V2__add_supporting_indexes.sql`)
+  is the single source of schema truth; `spring.jpa.hibernate.ddl-auto=validate` on
+  every profile (local/paper/prod/test) so Hibernate only checks entity mappings
+  against what Flyway already created, never generates DDL itself.
+
+Two real bugs were found and fixed while bringing this into `master` (this code was
+originally produced by a background agent run that never committed and skipped the
+`Plan`-agent design gate the story called for; it was reviewed, debugged, and verified
+against a live Oracle XE container — not just the H2 test profile — before merging):
+`BrokerCredential.isActive` needed `@Convert(NumericBooleanConverter.class)` +
+`@JdbcTypeCode(SqlTypes.NUMERIC)` to bind a Java `boolean` against an Oracle
+`NUMBER(1)` column (plain `boolean` defaults to native `BOOLEAN`, which Oracle XE
+21c doesn't have); and the migration's `NOT NULL DEFAULT x` column clauses had to be
+reordered to `DEFAULT x NOT NULL` (Oracle requires `DEFAULT` before inline
+constraints — H2's Oracle-compatibility mode silently accepted the wrong order, real
+Oracle rejected it with `ORA-00907`). Backend tests (`./mvnw verify`, H2 in Oracle
+mode) and a live run against the Docker Oracle XE container (`./mvnw spring-boot:run`,
+`local` profile — Flyway migrations applied, `/health` returned `UP`) both pass.
+
+Next up per the plan's build sequence: E1-F3 (secrets & config management — encrypted
+credential storage already has a first pass via F1.2's `CredentialCipherConverter`,
+but F1.3-S1's full key-rotation requirement and F1.3-S2's dashboard login are still
+open) or E2 (Signal Engine), per the build sequence in `docs/agile-plan.md`.
 
 Beyond that, no other source code yet. An agile delivery plan for the project has been drafted at
 `docs/agile-plan.md` — an auto-trade signal dashboard (React frontend, Java/Spring
