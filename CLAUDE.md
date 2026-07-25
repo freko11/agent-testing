@@ -38,14 +38,13 @@ Node 22). Backend tests run against an in-memory H2 datasource
 (`backend/src/test/resources/application.properties` overrides the main Oracle
 datasource for the test classpath only) so CI and local `mvn verify` don't need Docker
 or `.env` — Oracle is still what the running app uses in dev/paper/prod.
-**Manual follow-up, still not done**: GitHub branch protection ("failure blocks merge")
-requires a repo-settings change on `github.com/freko11/agent-testing`. Attempted via
-`gh api .../branches/master/protection` (requiring the `backend`/`frontend` CI jobs as
-status checks) and it was rejected: branch protection on `master` needs GitHub Pro/Team
-or a public repo — this repo is private on the free plan, which doesn't support it.
-Unblocks via either: upgrade the repo/org to a paid plan, or make the repo public, then
-retry the same `gh api` call (or Settings → Branches manually). Deferred by user choice
-for now.
+GitHub branch protection on `master` ("failure blocks merge") is now enabled via
+`gh api .../branches/master/protection`, requiring the `backend` and `frontend` CI
+jobs to pass (strict mode — branch must be up to date) before a PR can merge. This
+required making `github.com/freko11/agent-testing` **public** first — branch
+protection on private repos needs a paid GitHub plan (Pro/Team), which this account
+doesn't have; the user explicitly chose public visibility over upgrading. This
+completes E1-F1-S4's acceptance criteria in full.
 
 E1-F1-S5 (env/config profiles) is done. Three Spring profiles in `backend/src/main/resources/`:
 - `local` (default — activates automatically if `SPRING_PROFILES_ACTIVE` is unset):
