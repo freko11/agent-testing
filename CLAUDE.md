@@ -18,7 +18,17 @@ E1-F1-S1 (local Oracle XE via Docker Compose) is done. `docker-compose.yml` runs
 Bring the DB up with `docker compose up -d`; first boot takes ~60-90s before the
 healthcheck reports healthy (`docker compose ps`).
 
-The rest of E1-F1 (backend skeleton, frontend skeleton, CI, env profiles) is in
+E1-F1-S2 (Spring Boot backend skeleton) is done. `backend/` is a Maven project
+(Java 21, Spring Boot 4.1, package `com.autotrade.dashboard`) with `web`, `actuator`,
+`data-jpa`, `validation` starters plus the `ojdbc11` Oracle driver. Run it with
+`./mvnw spring-boot:run` from `backend/` (requires `ORACLE_APP_USER_PASSWORD` in the
+environment, matching `.env`'s app-user password — Spring Boot reads env vars via
+relaxed binding, no extra wiring needed). `/health` (actuator remapped to web
+base-path `/`) returns 200 once the Oracle XE container from S1 is up, since the
+datasource is already pointed at it (`jdbc:oracle:thin:@//localhost:${ORACLE_HOST_PORT:1522}/XEPDB1`)
+— no JPA entities/repositories yet, that's F1.2. Build/test: `./mvnw verify`.
+
+The rest of E1-F1 (frontend skeleton, CI, env profiles) is in
 progress — see stories below as they land.
 
 Beyond that, no other source code yet. An agile delivery plan for the project has been drafted at
