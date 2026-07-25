@@ -49,17 +49,27 @@ acceptance criteria so "done" isn't a judgment call.
 | E1-F1-S1 | As a developer, I want a Docker Compose file for Oracle XE so I can spin up the DB with one command. | `docker compose up` starts Oracle XE; reachable from SQL Developer; connection details documented in CLAUDE.md. | 3 |
 | E1-F1-S2 | As a developer, I want a Spring Boot backend skeleton with a health endpoint so later features have a place to plug in. | `/health` returns 200; builds via Maven/Gradle; runs locally with one command. | 2 |
 | E1-F1-S3 | As a developer, I want a React app skeleton with routing so dashboard pages can be added incrementally. | `npm run dev` serves a shell app with a placeholder route; clean build, no console errors. | 2 |
+| E1-F1-S4 | As a developer, I want a CI pipeline that builds and tests both apps on every push so regressions are caught before they reach `master`. | Push to any branch triggers build+test (e.g. GitHub Actions); failure blocks merge; pipeline documented in CLAUDE.md. | 3 |
+| E1-F1-S5 | As a developer, I want environment/config profiles (local / paper / future prod) so config doesn't hardcode one environment. | Spring profiles (or equivalent) switch DB/API base URLs without code changes; documented in CLAUDE.md. | 2 |
 
 **F1.2 Core data model**
 | ID | Story | Acceptance Criteria | Pts |
 |---|---|---|---|
 | E1-F2-S1 | As a developer, I want Oracle tables for tickers, indicator snapshots, orders, and broker credentials so the app has persistent storage. | Schema script creates tables with PK/FK constraints; runs cleanly against the Dockerized DB. | 5 |
 | E1-F2-S2 | As a developer, I want a JPA/Hibernate data-access layer mapped to that schema so business logic never hand-writes SQL. | Repository class per table; integration test proves CRUD round-trip. | 5 |
+| E1-F2-S3 | As a developer, I want DB migration tooling (Flyway or Liquibase) so schema changes after initial creation are versioned, not manual ALTERs. | Migrations run automatically on startup; a second migration file proves incremental change works. | 3 |
 
 **F1.3 Secrets & config management**
 | ID | Story | Acceptance Criteria | Pts |
 |---|---|---|---|
 | E1-F3-S1 | As a user, I want broker API keys stored encrypted at rest so a leaked config file can't expose live trading credentials. | Keys encrypted (e.g. Jasypt or OS keystore); never appear in logs; rotation process documented. | 5 |
+| E1-F3-S2 | As a user, I want the dashboard itself to require login so it isn't wide open even as a single-user tool on my network. | Dashboard requires authentication; session expires; unauthenticated API calls rejected. | 3 |
+
+**F1.4 Testing strategy**
+| ID | Story | Acceptance Criteria | Pts |
+|---|---|---|---|
+| E1-F4-S1 | As a developer, I want an integration/end-to-end test covering ticker → signal → order against a mock broker adapter so the full flow is verified, not just isolated units. | One E2E test exercises the full happy path against a mock adapter and passes in CI. | 5 |
+| E1-F4-S2 | As a developer, I want deterministic fixture data for indicator math so RSI/MACD/MA tests aren't each inventing their own numbers. | Fixture dataset checked in; reused by indicator unit tests (ties into E2-F2's reference-value ACs). | 2 |
 
 ### E2 — Signal Engine
 *Turn a ticker into indicator numbers and a single Buy/Sell/Hold + hold-term call.*
@@ -69,6 +79,7 @@ acceptance criteria so "done" isn't a judgment call.
 |---|---|---|---|
 | E2-F1-S1 | As a user, I want to enter a ticker and have the backend fetch recent price history so indicators can be computed. | Valid ticker returns last N candles from the right source (Alpaca for stocks, Binance for crypto). | 5 |
 | E2-F1-S2 | As a user, I want a clear error for an unrecognized ticker so I'm not left staring at a blank dashboard. | Unknown ticker returns a specific error message, rendered in the UI, not a generic failure. | 2 |
+| E2-F1-S3 | As a user, I want stock tickers to reflect market hours (crypto stays 24/7) so I'm not shown stale data as if it were current. | A stock ticker request outside market hours returns a distinct "market closed" state, not stale data presented as current. | 3 |
 
 **F2.2 Technical indicator calculation**
 | ID | Story | Acceptance Criteria | Pts |
@@ -81,6 +92,11 @@ acceptance criteria so "done" isn't a judgment call.
 |---|---|---|---|
 | E2-F3-S1 | As a user, I want the indicators combined into a single Buy/Sell/Hold call so I don't have to interpret raw numbers myself. | Deterministic rule table maps indicator combinations → call; thresholds documented; each branch unit-tested. | 8 |
 | E2-F3-S2 | As a user, I want a suggested hold-term alongside the call so I know the expected horizon before entering. | Hold-term derived from volatility/trend strength; shown as a labeled range (e.g. "3–10 days"). | 5 |
+
+**F2.4 Backtesting**
+| ID | Story | Acceptance Criteria | Pts |
+|---|---|---|---|
+| E2-F4-S1 | As a user, I want the Buy/Sell/Hold rule table backtested against historical price data so I trust it before risking paper or real money on it. | Given a historical price series, backtest reports the call the rules would have produced at each point plus simple win/loss stats; run as a script or test, not part of the live API. | 5 |
 
 ### E3 — Dashboard (Frontend)
 *Make the signal legible at a glance.*
@@ -108,6 +124,8 @@ acceptance criteria so "done" isn't a judgment call.
 | ID | Story | Acceptance Criteria | Pts |
 |---|---|---|---|
 | E4-F1-S1 | As a developer, I want a `BrokerAdapter` interface (placeOrder, getPosition, cancelOrder, getAccountStatus) so any broker can plug in without touching trading logic. | Interface + contract documented; a mock implementation passes a shared adapter test suite. | 5 |
+| E4-F1-S2 | As a user, I want rate-limit/retry/backoff handling built into the adapter contract so both Alpaca and Binance adapters get it uniformly instead of each reimplementing it. | Adapter retries transient failures with backoff; a hard rate-limit error surfaces as a distinct, user-visible state rather than a generic failure. | 3 |
+| E4-F1-S3 | As a user, I want a broker/data-provider outage to fail visibly and safely so no order is silently dropped or duplicated. | When a broker is unreachable, the UI shows a clear "broker unavailable" state; retries never duplicate an already-submitted order. | 5 |
 
 **F4.2 Alpaca adapter (stocks)**
 | ID | Story | Acceptance Criteria | Pts |
@@ -140,6 +158,12 @@ acceptance criteria so "done" isn't a judgment call.
 | ID | Story | Acceptance Criteria | Pts |
 |---|---|---|---|
 | E5-F3-S1 | As a user, I want to see the status of orders I've placed so I know what happened after clicking Trade. | Status page polls adapter and/or stores updates in Oracle DB; rejections show the broker's reason. | 5 |
+| E5-F3-S2 | As a user, I want to export my trade history to CSV so I have records for my own tracking. | User can export order history for a date range to CSV, including a reference to the signal snapshot that triggered each order. | 2 |
+
+**F5.4 Notifications**
+| ID | Story | Acceptance Criteria | Pts |
+|---|---|---|---|
+| E5-F4-S1 | As a user, I want to be notified when a watchlisted ticker's signal changes, or when an order fills or is rejected, so I don't have to keep the dashboard open. | At least one delivery channel implemented (e.g. email); notification includes ticker, event type, and timestamp. | 5 |
 
 ### E6 — Risk & Safety Controls
 *Because this moves real money once live mode is on.*
@@ -149,17 +173,20 @@ acceptance criteria so "done" isn't a judgment call.
 |---|---|---|---|
 | E6-F1-S1 | As a user, I want a global paper/live switch so I can validate the whole flow with fake money first. | Switch changes which API keys/base URLs adapters use; current mode shown in a persistent UI banner. | 3 |
 | E6-F1-S2 | As a user, I want live mode blocked until I've completed a minimum number of successful paper trades so I can't skip validation by accident. | Configurable threshold; switch stays disabled with an explanation until met. | 3 |
+| E6-F1-S3 | As a user, I want an explicit risk disclaimer/consent step before live mode unlocks, on top of the paper-trade threshold, so switching to real money is a deliberate act. | Live mode requires a one-time explicit acknowledgment, stored with a timestamp. | 2 |
 
 **F6.2 Guardrails**
 | ID | Story | Acceptance Criteria | Pts |
 |---|---|---|---|
 | E6-F2-S1 | As a user, I want a hard server-side cap on leverage and position size so a UI bug or fat-finger can't exceed my risk limits. | Backend rejects any order beyond configured caps, regardless of what the frontend sent. | 5 |
 | E6-F2-S2 | As a user, I want a kill switch that cancels all open orders and blocks new submissions so I can stop everything instantly. | One control cancels open orders on both adapters and blocks new trades until manually cleared. | 5 |
+| E6-F2-S3 | As a user, I want a portfolio-level aggregate exposure cap, on top of per-order limits, so many individually-small orders can't add up to an outsized risk. | Backend rejects a new order that would push total open exposure beyond a configured aggregate cap, even if the order itself is within per-order limits. | 5 |
 
 **F6.3 Audit log**
 | ID | Story | Acceptance Criteria | Pts |
 |---|---|---|---|
 | E6-F3-S1 | As a user, I want every order and the signal that triggered it logged immutably so I can review my decision trail later. | Append-only Oracle audit table: ticker, signal snapshot, order params, timestamp, result. | 3 |
+| E6-F3-S2 | As a user, I want the audit log to record which version of the Buy/Sell/Hold rule table produced a signal so a later rule change doesn't retroactively obscure why a past order fired. | Audit log entries record the rule-table version alongside the signal snapshot. | 3 |
 
 ### E7 — Observability & Hardening
 *Threaded through the whole build, not a phase at the end.*
@@ -168,6 +195,7 @@ acceptance criteria so "done" isn't a judgment call.
 |---|---|---|---|
 | E7-F1-S1 | As a developer, I want structured logging across backend services so broker/indicator failures are diagnosable. | Consistent log format; broker errors logged with context, never silently swallowed. | 3 |
 | E7-F2-S1 | As a user, I want the credential-storage and order-submission code security-reviewed before any live account is connected so leaked keys or injection bugs don't cost real money. | `security-review` run against secrets + adapter code; findings triaged before E6 live-mode gate is closed. | 3 |
+| E7-F3-S1 | As a user, I want a tested backup/restore procedure for the Oracle instance so order history and the audit log aren't a single-disk-failure away from gone. | Documented/scripted backup command; a restore has been tested at least once against a fresh Oracle XE instance. | 3 |
 
 ---
 

@@ -9,8 +9,12 @@ No source code yet. An agile delivery plan for the project has been drafted at
 Boot backend, Oracle Database via local Oracle XE, broker adapters starting with
 Alpaca for stocks and Binance for crypto). It covers epics/features/user stories
 (INVEST format) and the recommended subagent/skill usage for solo-driven
-implementation. There are no build, lint, or test commands yet since no code has
-been written.
+implementation. The plan was expanded with stories closing gaps found in a review:
+CI pipeline, DB migrations, app auth, a testing strategy, market-hours handling,
+backtesting, adapter rate-limit/retry/outage handling, trade export, notifications,
+a live-mode consent step, a portfolio-level exposure cap, rule-versioned audit
+entries, and DB backup/restore. There are no build, lint, or test commands yet
+since no code has been written.
 
 When code is added to this repository, update this file with:
 - Build, lint, and test commands (including how to run a single test)
