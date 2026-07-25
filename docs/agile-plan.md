@@ -163,7 +163,7 @@ acceptance criteria so "done" isn't a judgment call.
 **F5.4 Notifications**
 | ID | Story | Acceptance Criteria | Pts |
 |---|---|---|---|
-| E5-F4-S1 | As a user, I want to be notified when a watchlisted ticker's signal changes, or when an order fills or is rejected, so I don't have to keep the dashboard open. | At least one delivery channel implemented (e.g. email); notification includes ticker, event type, and timestamp. | 5 |
+| E5-F4-S1 | As a user, I want to be notified when an order fills or is rejected, and (once E3-F3 watchlist exists) when a watchlisted ticker's signal changes, so I don't have to keep the dashboard open. | At least one delivery channel implemented (e.g. email); notification includes ticker, event type, and timestamp; order-event alerts don't block on the watchlist stretch feature. | 5 |
 
 ### E6 — Risk & Safety Controls
 *Because this moves real money once live mode is on.*
@@ -223,19 +223,19 @@ code (real order submission) is deliberately last, behind a paper-mode requireme
 
 ## Agent & skill architecture (documented now, not activated — per your choice)
 
-Goal: keep the solo build moving through ~45 stories without you re-prompting for every
+Goal: keep the solo build moving through ~49 stories without you re-prompting for every
 one. Mapped by role, not by epic, since the same roles recur every epic:
 
 | Role | Tool | When to use it |
 |---|---|---|
-| Design gate before coding a non-trivial feature | `Plan` agent | Before E1's schema, E2's indicator/signal rules, E4's adapter interface, E5's bracket-order construction — anywhere a wrong first design is expensive to unwind later. |
+| Design gate before coding a non-trivial feature | `Plan` agent | Before E1's schema, E2's indicator/signal rules and backtest harness, E4's adapter interface, E5's bracket-order construction, E6's guardrail logic (portfolio exposure cap, kill switch) — anywhere a wrong first design is expensive to unwind later. |
 | Research without burning main-thread context | `Explore` agent | Looking up exact Alpaca/Binance API fields for bracket + leverage orders, comparing `ta4j` vs. hand-rolled indicators, Oracle/JPA quirks. |
 | Independent implementation chunks, run in background | `general-purpose` agent, `isolation: "worktree"` | Self-contained stories (one indicator module, the React skeleton, one adapter) that don't need turn-by-turn steering — spawn it, keep working the next story yourself, get notified when it's done instead of babysitting it. |
 | Dashboard visuals | `dataviz` skill | Before F3.1's stat tiles and F3.2's chart — consistent, accessible metric visualization instead of ad hoc colors. |
 | Verify a feature actually works | `run` skill | End of every story — launches the React + Spring Boot stack and click-throughs the golden path, per this project's own "test in the browser" bar. |
 | Keep code lean before it's committed | `simplify` skill | Right before each commit — prevents the backlog's pace from accumulating cruft. |
 | Gate on money-handling code | `security-review` skill | Mandatory before F1.3 (secrets) ships, and again before E6.1's live-mode switch is unlocked — this is the code that, if wrong, leaks keys or fires unintended real trades. |
-| Gate on the highest-blast-radius code | `/code-review` (consider `ultra` tier) | On the full diff for E4/E5 (adapter + order execution) before calling those epics done — this is where a bug costs real money, not just dev time. |
+| Gate on the highest-blast-radius code | `/code-review` (consider `ultra` tier) | On the full diff for E4/E5 (adapter + order execution) and E6's guardrails (leverage/position caps, exposure cap, kill switch) before calling those epics done — a bug in either the order path or the checks meant to constrain it costs real money, not just dev time. |
 | Backlog auto-advance | `/loop` (dynamic/self-paced) | When you're ready to execute rather than just plan: each iteration takes the next story, implements it (delegating independent chunks per the row above), runs `run` + `simplify`, commits, updates CLAUDE.md, and self-schedules the next iteration — this is the actual fix for "the loop gets interrupted by prompting." Not turned on yet; say the word when you want it live. |
 | Scheduled/recurring execution | `CronCreate` / `schedule` skill | **Not used for building.** Flagged only as a possible *future product feature* (e.g., auto-refreshing signals for a watchlist on a timer) — out of scope for v1, since the spec calls for a manual "Trade" button, not an unattended bot. |
 
