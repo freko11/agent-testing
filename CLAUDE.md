@@ -40,6 +40,20 @@ Three are new, non-generic project skills with no generic equivalent —
 idempotency), and `guardrail-check.md` (E6 risk-control verification before
 the live-mode gate closes).
 
+A repo-readiness audit (full directory inventory, cross-checked against
+`docs/agile-plan.md`) confirmed the "no source code yet" status above is
+accurate and found no gaps owned by an existing story except two config-
+hygiene items: a `.gitignore` was missing (now added, covering Java/Maven/
+Gradle, Node, `.env*`, IDE files, and local Oracle data volumes, since E1's
+skeleton stories are about to generate exactly what it excludes) and the
+plan's own "Assumptions to confirm as we go" section (backend framework,
+indicator library, ticker asset-type detection) remains open — resolve
+those explicitly before starting E1-F1-S2/E2-F2 rather than defaulting
+silently mid-story. A secrets-template (`.env.example`) should be folded
+into F1.3-S1's own acceptance criteria when that story is built, and the
+`fewer-permission-prompts` skill is worth running once E1 scaffolding exists
+(not before — there's nothing to allowlist yet).
+
 When code is added to this repository, update this file with:
 - Build, lint, and test commands (including how to run a single test)
 - High-level architecture and project structure
