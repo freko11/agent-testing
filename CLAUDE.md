@@ -19,6 +19,13 @@ E4/E5), and flagged that E5's notification story softly depends on the stretch
 watchlist feature. There are no build, lint, or test commands yet since no code has
 been written.
 
+Project-specific subagent definitions now live in `.claude/agents/` — `Plan.md`,
+`Explore.md`, and `general-purpose.md` — customizing the three subagent roles the
+agile plan calls for (design gate, research, background implementation) with this
+project's domain specifics (Spring Boot/JPA/Oracle conventions, Alpaca/Binance order
+semantics, the E2 rule-engine and E6 guardrail requirements). These override the
+generic built-in agents of the same name for work done in this repo.
+
 When code is added to this repository, update this file with:
 - Build, lint, and test commands (including how to run a single test)
 - High-level architecture and project structure
