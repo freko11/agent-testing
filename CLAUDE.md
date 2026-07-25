@@ -43,7 +43,25 @@ requires a repo-settings change on `github.com/freko11/agent-testing`, which was
 made — needs the user's own action (Settings → Branches) or an explicit go-ahead to
 do it via `gh api`, since it changes shared repo governance.
 
-E1-F1-S5 (env profiles) is in progress — see stories below as they land.
+E1-F1-S5 (env/config profiles) is done. Three Spring profiles in `backend/src/main/resources/`:
+- `local` (default — activates automatically if `SPRING_PROFILES_ACTIVE` is unset):
+  Docker Compose Oracle XE via `ORACLE_HOST_PORT`/`ORACLE_APP_USER`/`ORACLE_APP_USER_PASSWORD`.
+- `paper`: reads `DB_URL`/`DB_USERNAME`/`DB_PASSWORD` (defaults fall back to the same
+  local XE instance until a real paper-environment DB exists); this is also where E4's
+  Alpaca-paper/Binance-testnet base URLs will be added.
+- `prod`: same `DB_*` vars, no defaults — every value must come from the environment,
+  so it can't silently start on placeholder config. Not usable until E6's live-mode
+  gate exists.
+
+Switch profiles via `SPRING_PROFILES_ACTIVE=paper` (env var) or
+`-Dspring-boot.run.profiles=paper` (mvnw) — no code changes needed; verified both
+`local` (default) and `paper` bring the app up against the same Docker XE instance
+using their respective env-var names.
+
+This completes E1-F1 (local dev environment) — DB, backend, frontend, CI, and profiles
+all in place. Next up per the plan's build sequence: E1-F1.2 (core data model), which
+per the plan's own agent-role table warrants a `Plan` agent design gate before coding
+(a real schema decision, not scaffolding).
 
 Beyond that, no other source code yet. An agile delivery plan for the project has been drafted at
 `docs/agile-plan.md` — an auto-trade signal dashboard (React frontend, Java/Spring
