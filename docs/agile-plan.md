@@ -21,16 +21,22 @@ first; live trading only after the flow has proven itself.
 | Database | Oracle Database, local (e.g. Oracle XE via Docker), managed via Oracle SQL Developer |
 | Agent/skill automation | Documented in this plan only — not activated yet |
 
+## Confirmed decisions
+
+- **Backend framework**: **Spring Boot** (REST, scheduling, security, JPA all standard).
+  Previously an open assumption in this section; confirmed during the pre-E1 repo-readiness
+  audit with no objection raised, so E1-F1-S2 can proceed without re-litigating it.
+
 ## Assumptions to confirm as we go (flag before locking in)
 
-- **Backend framework**: "Java" alone isn't a framework — this plan assumes **Spring Boot**
-  (REST, scheduling, security, JPA all standard), since it's the default choice for this
-  shape of app. Say the word if you'd rather use Jakarta EE, Micronaut, Quarkus, etc.
 - **Indicator math**: plan assumes we either hand-roll RSI/MACD/MA/volatility or use a
   library like `ta4j` — a build-time decision for an Explore agent, not a product decision.
+  Deliberately left open until E2-F2 starts; run the `Explore` agent's library comparison
+  then, not before.
 - **Stock vs. crypto detection**: the dashboard needs a simple rule (ticker format, or an
   explicit asset-type toggle) to know which adapter/data source to call. Treated as a
-  small story in the Signal Engine epic, not decided yet.
+  small story in the Signal Engine epic, not decided yet — decide when that story is
+  picked up, not in advance.
 
 ---
 
@@ -62,7 +68,7 @@ acceptance criteria so "done" isn't a judgment call.
 **F1.3 Secrets & config management**
 | ID | Story | Acceptance Criteria | Pts |
 |---|---|---|---|
-| E1-F3-S1 | As a user, I want broker API keys stored encrypted at rest so a leaked config file can't expose live trading credentials. | Keys encrypted (e.g. Jasypt or OS keystore); never appear in logs; rotation process documented. | 5 |
+| E1-F3-S1 | As a user, I want broker API keys stored encrypted at rest so a leaked config file can't expose live trading credentials. | Keys encrypted (e.g. Jasypt or OS keystore); never appear in logs; rotation process documented; a checked-in `.env.example` (or equivalent Spring `application-*.yml` placeholder) documents every required config key (Alpaca paper key/secret, Binance testnet key/secret, Oracle connection string) without real values. | 5 |
 | E1-F3-S2 | As a user, I want the dashboard itself to require login so it isn't wide open even as a single-user tool on my network. | Dashboard requires authentication; session expires; unauthenticated API calls rejected. | 3 |
 
 **F1.4 Testing strategy**
