@@ -26,6 +26,20 @@ project's domain specifics (Spring Boot/JPA/Oracle conventions, Alpaca/Binance o
 semantics, the E2 rule-engine and E6 guardrail requirements). These override the
 generic built-in agents of the same name for work done in this repo.
 
+Project-specific skill definitions now live in `.claude/skills/`. Four amend
+generic skills with this project's specifics — `run.md` (this stack's launch
+sequence: Oracle XE via Docker Compose, Spring Boot backend, React frontend),
+`dataviz.md` (Buy/Sell/Hold badge palette, stat tiles, candlestick+indicator
+chart for E3), `simplify.md` (where premature abstraction is a real risk here —
+adapters, rule engine — versus where a check that looks redundant is a
+deliberate E6 safety net), and `security-review.md` (a checklist covering
+broker-credential handling, the live-mode gate, and guardrail enforcement).
+Three are new, non-generic project skills with no generic equivalent —
+`signal-rule-review.md` (E2.3/E2.4 rule-table + backtest checklist),
+`adapter-contract-check.md` (E4.1 BrokerAdapter conformance, retry/backoff,
+idempotency), and `guardrail-check.md` (E6 risk-control verification before
+the live-mode gate closes).
+
 When code is added to this repository, update this file with:
 - Build, lint, and test commands (including how to run a single test)
 - High-level architecture and project structure
