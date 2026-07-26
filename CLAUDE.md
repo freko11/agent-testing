@@ -105,6 +105,11 @@ script (`gradlew`, a shell script, etc.) is added from a Windows checkout, check
 mode with `git ls-files -s <path>` before committing — it should read `100755`, not
 `100644`.
 
+`.github/workflows/ci.yml` now pins `actions/checkout@v5` and `actions/setup-java@v5`/
+`actions/setup-node@v5` (bumped from `@v4`), clearing the "forced to run on Node.js 24"
+deprecation warning GitHub surfaced on the first successful CI run (v4 actions still
+targeted the deprecated Node 20 runner).
+
 Next up per the plan's build sequence: E1-F3 (secrets & config management — encrypted
 credential storage already has a first pass via F1.2's `CredentialCipherConverter`,
 but F1.3-S1's full key-rotation requirement and F1.3-S2's dashboard login are still
