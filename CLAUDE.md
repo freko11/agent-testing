@@ -133,8 +133,58 @@ Tested via `CredentialEncryptionServiceTest` (keyring/rotation logic, unit) and
 repository) — both new, plus the existing `CoreDataModelIntegrationTest` updated to go
 through `BrokerCredentialService` instead of relying on transparent converter round-trips.
 
-Next up: E1-F3-S2 (dashboard login via Spring Security) to close out F1.3, then E2
-(Signal Engine), per the build sequence in `docs/agile-plan.md`.
+A real-Oracle-only bug surfaced while verifying E1-F3-S1 against the Docker XE
+container (H2's Oracle-compatibility mode didn't catch it): `V3`'s
+`ALTER TABLE ... MODIFY encryption_key_version VARCHAR2(20) DEFAULT 'v1' NOT NULL`
+passed on H2 but real Oracle rejected it with `ORA-01442` (column to be modified to
+NOT NULL is already NOT NULL) — real Oracle refuses to re-declare a `NOT NULL` a
+column already has, which H2's Oracle mode silently allows. Fixed by dropping the
+redundant `NOT NULL` clause (`MODIFY (encryption_key_version VARCHAR2(20) DEFAULT 'v1')`),
+which changes only the default and leaves the existing constraint untouched on both
+databases. The one failed-migration row this left in `flyway_schema_history` on the
+local XE container was deleted manually before re-running — a real Oracle instance,
+unlike H2, persists that state across app restarts. If a future migration ever fails
+against the local container, check `flyway_schema_history` for a `success=0` row
+before assuming the migration file itself is still broken.
+
+E1-F3-S2 (dashboard login) is done, closing out F1.3. `SecurityConfig`
+(`backend/.../security/`) adds Spring Security with a single in-memory operator
+account (`DASHBOARD_USERNAME`/`DASHBOARD_PASSWORD_HASH`, or `DASHBOARD_PASSWORD`
+in local — bcrypt-encoded at startup with a logged warning, same posture as the
+`CREDENTIAL_ENC_KEY` dev fallback) — no user table, since this is a single-user tool.
+Session-cookie auth (`formLogin` at `POST /api/auth/login`, `POST /api/auth/logout`),
+CSRF via `CookieCsrfTokenRepository` + a custom `SpaCsrfTokenRequestHandler` (the
+default `XorCsrfTokenRequestAttributeHandler` XOR-masks tokens for server-rendered
+forms, which breaks a plain cookie-reading SPA — this is the pattern Spring
+Security's own docs recommend for that case) plus a `CsrfCookieWriteFilter` that
+forces the deferred CSRF token to materialize into a cookie on every request (a pure
+REST API never renders `_csrf`, so nothing else triggers that write). `AuthController`
+exposes `GET /api/auth/csrf` (primes the cookie) and `GET /api/auth/me` (session
+check on page load). `/health` (not `/actuator/health` — this app's actuator base
+path is remapped to `/`, per E1-F1-S2) stays `permitAll` for the Docker/CI healthcheck;
+`management.endpoint.health.show-details` is now explicitly `never` so it can't leak
+DB details unauthenticated. Session timeout is set per profile: `local` 2h, `paper`
+30m, `prod` 15m. Frontend: `frontend/src/auth/AuthContext.tsx` (session state +
+login/logout), `RequireAuth.tsx` (route guard), `pages/LoginPage.tsx`; `vite.config.ts`
+proxies `/api` and `/actuator` to `localhost:8080` in dev so the browser sees
+same-origin (no CORS needed) — how `paper`/`prod` will serve the built frontend
+(bundled vs. separate origin, needing real CORS config) is still undecided, flagged
+for whenever a real deploy story picks this up. Verified via `SecurityConfigTest`
+(MockMvc: unauthenticated → 401, `/health` public, wrong password → 401, login →
+session → logout → 401 again) and manually end-to-end — `run` skill, real Oracle XE
+container, `curl` through the full CSRF/login/session/logout cycle, then clicked
+through the same flow in a browser (login redirect, dashboard, logout redirect).
+`security-review` skill run against both F1.3 stories before landing; one finding
+fixed: `BrokerCredentialService.DecryptedCredential` is a record, so its default
+`toString()` would have printed both plaintext fields if anything ever accidentally
+logged it — overridden to redact, ahead of E4 adapters that will be the first real
+callers of `readDecrypted()`.
+
+This closes out F1.3 (secrets & config management) and E1-F1 through E1-F4 except
+E1-F4 itself (testing strategy — E1-F4-S1's mock-broker E2E test and E1-F4-S2's
+indicator fixtures are still open, deferred since they're more naturally written once
+E2's signal engine and E4.1's mock adapter exist to exercise). Next up: E2 (Signal
+Engine), per the build sequence in `docs/agile-plan.md`.
 
 Beyond that, no other source code yet. An agile delivery plan for the project has been drafted at
 `docs/agile-plan.md` — an auto-trade signal dashboard (React frontend, Java/Spring

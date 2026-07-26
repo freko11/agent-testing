@@ -30,6 +30,11 @@ public class BrokerCredentialService {
 
     /** Result of decrypting a stored credential. Never log or serialize this. */
     public record DecryptedCredential(String apiKey, String apiSecret) {
+        /** Overridden so an accidental {@code log.info("{}", credential)} can't leak plaintext. */
+        @Override
+        public String toString() {
+            return "DecryptedCredential{REDACTED}";
+        }
     }
 
     @Transactional
