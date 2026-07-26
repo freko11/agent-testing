@@ -41,17 +41,15 @@ public class BrokerCredential {
     private TradingMode environment;
 
     @JsonIgnore
-    @Convert(converter = CredentialCipherConverter.class)
     @Column(name = "api_key_ciphertext", nullable = false, length = 4000)
     private String apiKeyCiphertext;
 
     @JsonIgnore
-    @Convert(converter = CredentialCipherConverter.class)
     @Column(name = "api_secret_ciphertext", nullable = false, length = 4000)
     private String apiSecretCiphertext;
 
     @Column(name = "encryption_key_version", nullable = false, length = 20)
-    private String encryptionKeyVersion = "v1-basic";
+    private String encryptionKeyVersion = "v1";
 
     @Convert(converter = org.hibernate.type.NumericBooleanConverter.class)
     @JdbcTypeCode(SqlTypes.NUMERIC)
@@ -68,12 +66,16 @@ public class BrokerCredential {
         // JPA
     }
 
+    /**
+     * Ciphertext must already be encrypted by {@link CredentialEncryptionService}
+     * (via {@link BrokerCredentialService}) — this constructor does not encrypt.
+     */
     public BrokerCredential(Broker broker, TradingMode environment,
-                             String apiKeyPlaintext, String apiSecretPlaintext) {
+                             String apiKeyCiphertext, String apiSecretCiphertext) {
         this.broker = broker;
         this.environment = environment;
-        this.apiKeyCiphertext = apiKeyPlaintext;
-        this.apiSecretCiphertext = apiSecretPlaintext;
+        this.apiKeyCiphertext = apiKeyCiphertext;
+        this.apiSecretCiphertext = apiSecretCiphertext;
     }
 
     @PrePersist
@@ -110,22 +112,20 @@ public class BrokerCredential {
         this.environment = environment;
     }
 
-    /** Plaintext in memory, transparently encrypted at rest by {@link CredentialCipherConverter}. */
-    public String getApiKeyPlaintext() {
+    public String getApiKeyCiphertext() {
         return apiKeyCiphertext;
     }
 
-    public void setApiKeyPlaintext(String apiKeyPlaintext) {
-        this.apiKeyCiphertext = apiKeyPlaintext;
+    public void setApiKeyCiphertext(String apiKeyCiphertext) {
+        this.apiKeyCiphertext = apiKeyCiphertext;
     }
 
-    /** Plaintext in memory, transparently encrypted at rest by {@link CredentialCipherConverter}. */
-    public String getApiSecretPlaintext() {
+    public String getApiSecretCiphertext() {
         return apiSecretCiphertext;
     }
 
-    public void setApiSecretPlaintext(String apiSecretPlaintext) {
-        this.apiSecretCiphertext = apiSecretPlaintext;
+    public void setApiSecretCiphertext(String apiSecretCiphertext) {
+        this.apiSecretCiphertext = apiSecretCiphertext;
     }
 
     public String getEncryptionKeyVersion() {

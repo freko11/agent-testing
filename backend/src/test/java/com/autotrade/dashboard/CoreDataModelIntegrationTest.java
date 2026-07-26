@@ -3,6 +3,7 @@ package com.autotrade.dashboard;
 import com.autotrade.dashboard.broker.Broker;
 import com.autotrade.dashboard.broker.BrokerCredential;
 import com.autotrade.dashboard.broker.BrokerCredentialRepository;
+import com.autotrade.dashboard.broker.BrokerCredentialService;
 import com.autotrade.dashboard.common.TradingMode;
 import com.autotrade.dashboard.indicator.IndicatorSnapshot;
 import com.autotrade.dashboard.indicator.IndicatorSnapshotRepository;
@@ -29,6 +30,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -56,6 +58,9 @@ class CoreDataModelIntegrationTest {
 
     @Autowired
     private BrokerCredentialRepository brokerCredentialRepository;
+
+    @Autowired
+    private BrokerCredentialService brokerCredentialService;
 
     @Autowired
     private OrderRepository orderRepository;
@@ -98,18 +103,21 @@ class CoreDataModelIntegrationTest {
         assertTrue(latest.isPresent());
         assertEquals(snapshot.getId(), latest.get().getId());
 
-        // --- BrokerCredential: insert (encrypted round trip), fetch, update, named finder ---
-        BrokerCredential credential = new BrokerCredential(
+        // --- BrokerCredential: insert (encrypted round trip via the service), fetch, update, named finder ---
+        BrokerCredential credential = brokerCredentialService.store(
                 Broker.ALPACA, TradingMode.PAPER, "plaintext-api-key", "plaintext-api-secret");
-        credential = brokerCredentialRepository.saveAndFlush(credential);
+        brokerCredentialRepository.flush();
         assertNotNull(credential.getId());
         assertNotNull(credential.getCreatedAt());
         Instant firstUpdatedAt = credential.getUpdatedAt();
 
         BrokerCredential fetchedCredential = brokerCredentialRepository.findById(credential.getId()).orElseThrow();
-        // Round-trips through CredentialCipherConverter transparently — what comes back is the plaintext again.
-        assertEquals("plaintext-api-key", fetchedCredential.getApiKeyPlaintext());
-        assertEquals("plaintext-api-secret", fetchedCredential.getApiSecretPlaintext());
+        // The stored columns are ciphertext, not plaintext — only the service can recover the plaintext.
+        assertNotEquals("plaintext-api-key", fetchedCredential.getApiKeyCiphertext());
+        BrokerCredentialService.DecryptedCredential decrypted =
+                brokerCredentialService.readDecrypted(fetchedCredential);
+        assertEquals("plaintext-api-key", decrypted.apiKey());
+        assertEquals("plaintext-api-secret", decrypted.apiSecret());
 
         fetchedCredential.setActive(false);
         brokerCredentialRepository.saveAndFlush(fetchedCredential);

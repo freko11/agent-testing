@@ -110,10 +110,31 @@ mode with `git ls-files -s <path>` before committing — it should read `100755`
 deprecation warning GitHub surfaced on the first successful CI run (v4 actions still
 targeted the deprecated Node 20 runner).
 
-Next up per the plan's build sequence: E1-F3 (secrets & config management — encrypted
-credential storage already has a first pass via F1.2's `CredentialCipherConverter`,
-but F1.3-S1's full key-rotation requirement and F1.3-S2's dashboard login are still
-open) or E2 (Signal Engine), per the build sequence in `docs/agile-plan.md`.
+E1-F3-S1 (broker-credential key rotation) is done. `CredentialCipherConverter` (a
+transparent JPA converter, single fixed key, no rotation) is replaced by
+`CredentialEncryptionService` (`backend/.../broker/CredentialEncryptionService.java`) —
+a keyring built at startup from every `CREDENTIAL_ENC_KEY_<ID>` env var (e.g.
+`CREDENTIAL_ENC_KEY_V1`, `CREDENTIAL_ENC_KEY_V2`), with `CREDENTIAL_ENC_ACTIVE_KEY_ID`
+naming which key new writes use; old and new keys can coexist so rotation never needs
+a Big Bang re-encrypt. `BrokerCredentialService` is now the sole entry point for
+plaintext broker keys (`store`, `readDecrypted`, `rotateAll`) — `BrokerCredential`'s
+ciphertext columns are plain (no `@Convert`), since a transparent converter can't see
+the sibling `encryption_key_version` column rotation depends on. `rotateAll()` is
+idempotent: re-encrypts every row not on the active key, safe to run repeatedly during
+a rotation window. The full operational procedure (generate key → add alongside old →
+flip active id → run `rotateAll()` → verify → remove old key) is documented in
+`docs/runbooks/credential-key-rotation.md`. `V3__rename_legacy_encryption_key_version.sql`
+renames the schema default from `'v1-basic'` to `'v1'` to match the new
+`CREDENTIAL_ENC_KEY_V1` naming (no real credentials existed yet, so this was a safe
+no-op). `.env.example` updated accordingly. Falls back to a single insecure dev-only
+key (logged warning) if no `CREDENTIAL_ENC_KEY_*` vars are set, same posture as before.
+Tested via `CredentialEncryptionServiceTest` (keyring/rotation logic, unit) and
+`BrokerCredentialServiceRotationTest` (end-to-end rotation against the real H2/Oracle-mode
+repository) — both new, plus the existing `CoreDataModelIntegrationTest` updated to go
+through `BrokerCredentialService` instead of relying on transparent converter round-trips.
+
+Next up: E1-F3-S2 (dashboard login via Spring Security) to close out F1.3, then E2
+(Signal Engine), per the build sequence in `docs/agile-plan.md`.
 
 Beyond that, no other source code yet. An agile delivery plan for the project has been drafted at
 `docs/agile-plan.md` — an auto-trade signal dashboard (React frontend, Java/Spring
