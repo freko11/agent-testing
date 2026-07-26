@@ -95,6 +95,16 @@ Oracle rejected it with `ORA-00907`). Backend tests (`./mvnw verify`, H2 in Orac
 mode) and a live run against the Docker Oracle XE container (`./mvnw spring-boot:run`,
 `local` profile — Flyway migrations applied, `/health` returned `UP`) both pass.
 
+A third bug surfaced in CI itself, on the push that landed E1-F2: `backend/mvnw` had
+been committed with mode `100644` instead of `100755`, so the `backend` CI job failed
+with exit code 126 ("permission denied") the first time GitHub Actions actually
+executed it — this is a known Windows/git gotcha, since Windows has no executable
+bit, so `mvnw` silently loses it unless explicitly `chmod +x`'d and staged before
+commit. Fixed via `git update-index --chmod=+x backend/mvnw`. If a future wrapper
+script (`gradlew`, a shell script, etc.) is added from a Windows checkout, check its
+mode with `git ls-files -s <path>` before committing — it should read `100755`, not
+`100644`.
+
 Next up per the plan's build sequence: E1-F3 (secrets & config management — encrypted
 credential storage already has a first pass via F1.2's `CredentialCipherConverter`,
 but F1.3-S1's full key-rotation requirement and F1.3-S2's dashboard login are still
