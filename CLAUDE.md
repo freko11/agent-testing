@@ -614,7 +614,107 @@ E2 (Signal Engine) — and, per both this story's and E2-F3-S1's own flagged
 caveats, it's now doing double duty: validating the rule-table thresholds
 *and* the hold-term day ranges, not just call win/loss.
 
-Beyond E1/E2-F1/E2-F2/E2-F3, no other source code yet. An agile delivery plan for the project has been drafted at
+E2-F4-S1 (backtest harness) is done, closing out E2 (Signal Engine) entirely.
+A `Plan`-agent design gate fixed every open design question before
+implementation: the harness is a **JUnit test that doubles as the "script"**
+the AC calls for (`BacktestHarnessTest`, rerunnable via
+`./mvnw test -Dtest=BacktestHarnessTest`) rather than a new CLI-runner class —
+no new build tooling, matching this codebase's existing bias (`RetryHelper`,
+`MarketHoursService`) against infrastructure for something this small;
+historical input is **real candles, not hand-authored fixtures** — hand-rolled
+data (like `IndicatorTestFixtures`) is right for exact-reference-value unit
+tests but wrong for asking "are these thresholds actually good," which needs
+real bull/bear/choppy/volatile-spike regimes; and the walk-forward replay
+recomputes every indicator over a **growing window anchored at index 0**
+(`candles.subList(0, i + 1)`), not a fixed trailing slice — MACD's EMA seed
+and RSI's Wilder seed are both anchored at wherever the passed-in list starts,
+so a fixed trailing window would silently compute different numbers than
+`IndicatorService.compute()` (which always passes the entire fetched candle
+list) ever would have on that historical day.
+
+New test-only `com.autotrade.dashboard.backtest` package (`src/test/java`,
+never ships in the production jar, consistent with "not part of the live
+API"): `BacktestCandleCsvLoader` (parses a checked-in CSV into an
+ascending-by-timestamp `List<Candle>`), `BacktestConfig` (harness-only
+diagnostic thresholds — 0.25% win/loss deadband, 5-day HOLD reference
+horizon, 3.0% large-move threshold — deliberately *not* versioned with
+`SignalRuleEngine.RULE_TABLE_VERSION`/`HoldTermCalculator.HOLD_TERM_TABLE_VERSION`,
+since these measure outcomes rather than define the rule table under test),
+`Checkpoint`/`DirectionalOutcome`/`HoldGateOutcome` enums, `BacktestDecisionPoint`/
+`CheckpointStats`/`DirectionalOutcomeStats`/`HoldGateStats` records, `BacktestReport`
+(aggregate + `printTo(PrintStream)`), and `BacktestHarness` (pure static
+`run(String, List<Candle>)` — the walk-forward loop itself, calling
+`RsiCalculator`/`MacdCalculator`/`MovingAverageCrossoverCalculator`/
+`VolatilityCalculator`/`VolumeTrendCalculator`, `SignalRuleEngine.evaluate`,
+and `HoldTermCalculator.calculate` directly as pure functions — never
+`MarketDataService`/`IndicatorService`/persistence, so a backtest run never
+writes a synthetic row into the real `signal_calls` audit table E6-F3-S2
+depends on for provenance). For each BUY/SELL decision point, win/loss is
+scored at **three checkpoints** (the hold-term's min/mid/max day) against the
+deadband — scoring all three, not just one, is what lets the hold-term range
+itself be evaluated, not just the call's direction. HOLD decision points are
+tracked separately (not excluded) via a fixed 5-day/3.0% "large move"
+reference check, broken down per matched `SignalRuleId`, since validating the
+three safety gates is this story's other explicit purpose.
+`BacktestHarnessTest`'s own assertions are structural only (every decision
+point lands in exactly one of the 9 `SignalRuleId` buckets) — the win rate
+itself is the evidence under review, not a fixed expectation to
+regress-test.
+
+Fixture data is **real, live-fetched, checked in**: 1000 daily candles each
+for `BTCUSDT` and `DOGEUSDT`, fetched once from Binance's public (no-auth)
+klines endpoint and converted to plain
+`timestamp,open,high,low,close,volume` CSV under
+`backend/src/test/resources/backtest/` (Nov 2023–Jul 2026, ~2.7 years, 967
+decision points per series after the 34-candle minimum). Crypto-only for v1,
+a scope call flagged by the Plan agent and accepted: no real `ALPACA_API_KEY`
+exists on this dev machine to fetch a genuine historical stock series (per
+E2-F1-S1's own note), and neither `SignalRuleEngine` nor `HoldTermCalculator`
+branch on asset type, so real crypto history is sufficient evidence for the
+shared rule logic — a stock series is a non-blocking follow-up once Alpaca
+paper credentials exist (E4-F2-S1). `DOGEUSDT` was picked as the second
+series (over `BTCUSDT` alone) after an offline check confirmed it actually
+crosses `VOLATILITY_EXTREME_THRESHOLD` (316 of 986 candles, ~32%) while
+`BTCUSDT` never does over the same window — needed to get any real evidence
+on that gate at all.
+
+Running the harness against this real data (not just asserting it runs
+without exception) surfaced genuine findings, per `signal-rule-review`'s
+explicit "don't ship a rule-table change on unit tests alone — run the
+backtest and look at the win/loss stats" instruction: **`BULLISH_UNANIMOUS`/
+`BEARISH_UNANIMOUS` never fired on either series** in ~2.7 years of real
+daily data — only the `MAJORITY` (2-of-3) branches ever matched in practice;
+**`MAJORITY` win rates cluster near a coin flip** (42.8–57.9% across
+BTC/DOGE at all three min/mid/max checkpoints) — no strong edge is visible
+yet in this data; **`VOLUME_DRIED_UP` and `NO_STRONG_SIGNAL` never fired on
+either real series** (0 hits each), matching the earlier offline check that
+neither pair's 10/30-day volume ratio ever dropped under 0.20; and
+**`VOLATILITY_TOO_EXTREME` looks justified on `DOGEUSDT`** — 74.7% of the
+time it fired, a >3% move followed within 5 days, real evidence the gate
+suppressed calls in genuinely erratic conditions rather than over-suppressing
+calm ones. Per this story's own scope (and `SignalRuleEngine`/
+`HoldTermCalculator`'s existing discipline that a threshold revision is its
+own auditable, versioned change), **no threshold was changed as part of this
+story** — these findings are flagged as a candidate follow-up story, not
+silently acted on here.
+
+Tested via `BacktestHarnessTest` (2 tests: `BTCUSDT`, `DOGEUSDT`, running the
+full harness against real fixture data and printing the report — structural
+assertions only) — 2 new tests, 125 backend tests total, `./mvnw verify`
+green. `simplify` and `signal-rule-review` skills both run clean: the harness
+stayed test-scoped diagnostic tooling (no CLI runner, no generic framework),
+it never touches `SignalRuleEngine`/`HoldTermCalculator` themselves or writes
+to real audit tables, determinism holds (pure function of checked-in fixture
+data, no wall-clock/randomness), and this story's real backtest evidence
+requirement is now satisfied for the first time since both rule tables
+shipped.
+
+This closes out E2 (Signal Engine) in full. E3 (Dashboard/Frontend) is next —
+E3-F1-S1 (ticker lookup + metrics display) and E3-F1-S2 (Buy/Sell/Hold badge
++ hold-term) can both pull straight from the existing `GET
+/api/tickers/{symbol}/signal` response with no further backend plumbing.
+
+Beyond E1/E2, no other source code yet. An agile delivery plan for the project has been drafted at
 `docs/agile-plan.md` — an auto-trade signal dashboard (React frontend, Java/Spring
 Boot backend, Oracle Database via local Oracle XE, broker adapters starting with
 Alpaca for stocks and Binance for crypto). It covers epics/features/user stories
