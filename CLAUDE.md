@@ -453,7 +453,84 @@ No frontend changes in this story (backend-only, same split as E2-F2-S1).
 
 This closes out E2-F2 (technical indicator calculation) in full.
 
-Beyond E1/E2-F1/E2-F2, no other source code yet. An agile delivery plan for the project has been drafted at
+E2-F3-S1 (indicators combined into a single Buy/Sell/Hold call) is done, starting
+F2.3. A `Plan`-agent design gate fixed the rule table before implementation: three
+**safety gates** run first and can only ever force HOLD (`NO_VOLUME_DATA` when
+volume-trend is null, `VOLUME_DRIED_UP` when the 10/30-day volume ratio is
+below 0.20, `VOLATILITY_TOO_EXTREME` when ATR% is above 8.0), then a **2-of-3
+directional vote** across RSI (oversold `<30`/overbought `>70`), MACD histogram
+sign, and MA-crossover relation decides BUY/SELL — any bullish/bearish split
+(at least one of each) falls through to `CONFLICTING_SIGNALS` (HOLD), and fewer
+than two agreeing indicators falls through to `NO_STRONG_SIGNAL` (HOLD). RSI
+30/70 are the conventional thresholds; the two new gate thresholds (ATR% > 8.0,
+volume ratio < 0.20) are provisional engineering estimates, explicitly **not
+yet validated against real price history** — flagged for revisit once
+E2-F4-S1's backtest harness exists, per `signal-rule-review.md`'s own "don't
+ship a rule-table change on unit tests alone" checklist item. Volume-trend and
+volatility are gates, not votes — they only ever suppress a call, never
+produce one, matching E2-F2-S2's stated "spot dead or erratic tickers" purpose.
+
+New `com.autotrade.dashboard.signal` package (split from `indicator`, mirroring
+the existing `marketdata`/`indicator` split even though one calls the other
+directly): `SignalRuleId` (an enum of all 9 rule-table branches, each carrying
+its `SignalCall` and a human-readable rationale string — this enum *is* the
+documented threshold table) and `SignalRuleEngine` (pure static `evaluate`,
+plus `RULE_TABLE_VERSION = "v1"` so a future threshold revision is an
+auditable, versioned change feeding E6-F3-S2's rule-provenance requirement).
+`SignalCallEntry` (a new JPA entity, named "Entry" to avoid colliding with the
+`SignalCall` enum) persists every call, FK'd to both `Ticker` and the specific
+`IndicatorSnapshot` that produced it — append-only, no unique constraint on
+ticker+day, the same audit-log-style pattern as `indicator_snapshots` (whose
+own comment had anticipated exactly this table). `IndicatorService` gained a
+public `computeForSignal` (returning both the response DTO and the persisted
+`IndicatorSnapshot`) so `SignalService` reuses the *same* snapshot instead of
+computing/persisting a second one per request; `computeIndicators` is now a
+thin wrapper over it, unchanged behavior. `GET /api/tickers/{symbol}/signal`
+(new `SignalController`, same limit bounds/validation as `/indicators`) returns
+`{ticker, call, matchedRule, ruleRationale, ruleTableVersion, indicators}` —
+nesting the existing `IndicatorResponse` rather than flattening its fields.
+No new error codes: every failure mode (`TICKER_NOT_REGISTERED`,
+`MARKET_CLOSED`, `NO_PRICE_DATA`, rate-limit/unavailable,
+`INSUFFICIENT_PRICE_HISTORY`, `INVALID_REQUEST`) is inherited unmodified
+through the existing `MarketDataExceptionHandler`, since `SignalService`
+delegates straight to `IndicatorService.computeForSignal`.
+`V4__add_signal_calls.sql` adds the `signal_calls` table/sequence/indexes.
+
+Tested via `SignalRuleEngineTest` (17 tests: one per rule-table branch, plus
+RSI/volatility/volume-trend boundary values proving thresholds are exclusive
+where documented, plus priority-ordering tests proving a gate wins even when
+a later condition would also match), `SignalServiceTest` (Mockito: engine
+invoked with the right fields, persisted `SignalCallEntry` carries the correct
+snapshot FK/ticker/version/matchedRule, `IndicatorService` failures propagate
+without persisting), and `SignalControllerTest` (`@WebMvcTest`, happy-path
+shape plus representative inherited-error cases) — 25 new tests, 107 backend
+tests total, `./mvnw verify` green. `simplify` and `signal-rule-review` skills
+both run clean: the rule table stayed a plain enum-driven mapping (no generic
+rule-engine framework), determinism holds (pure function of already-computed
+indicator values, no wall-clock/randomness), every branch has its own test,
+and the rule-table version is in place for E6-F3-S2 ahead of need.
+
+Verified live via the `run` skill against the real running stack (Docker
+Oracle XE + real public Binance API, no mocking; logged in through E1-F3-S2's
+session-cookie auth first, since guardrail testing now requires it) — `V4`
+applied cleanly against real Oracle (schema version 3 → 4). `GET
+/api/tickers/BTCUSDT/signal` returned live 200: `call: "HOLD"`, `matchedRule:
+"CONFLICTING_SIGNALS"` (RSI 45.97 neutral, MACD histogram negative/bearish,
+MA relation SHORT_ABOVE_LONG/bullish — one dissenting vote each way, correctly
+suppressed rather than guessing a direction). A direct `sqlplus` query against
+the live container confirmed the persisted `signal_calls` row matched the API
+response exactly (`call=HOLD`, `matched_rule=CONFLICTING_SIGNALS`,
+`rule_table_version=v1`, correct ticker/snapshot FKs). `GET
+.../NOTREAL/signal` correctly 404'd `TICKER_NOT_REGISTERED`, `limit=10`
+correctly 400'd `INVALID_REQUEST`, and `GET .../AAPL/signal` (a stock, checked
+after-hours) correctly 409'd `MARKET_CLOSED` — proving inherited
+error-handling works through the new endpoint exactly as through
+`/indicators`. No frontend changes in this story (backend-only; the call/badge
+UI is E3-F1-S2's job). E2-F3-S2 (hold-term) is next, and can derive its range
+from `SignalResponse.indicators().volatility()` without further plumbing
+changes.
+
+Beyond E1/E2-F1/E2-F2/E2-F3-S1, no other source code yet. An agile delivery plan for the project has been drafted at
 `docs/agile-plan.md` — an auto-trade signal dashboard (React frontend, Java/Spring
 Boot backend, Oracle Database via local Oracle XE, broker adapters starting with
 Alpaca for stocks and Binance for crypto). It covers epics/features/user stories

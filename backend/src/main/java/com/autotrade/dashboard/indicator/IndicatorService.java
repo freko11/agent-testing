@@ -23,6 +23,12 @@ public class IndicatorService {
     }
 
     public IndicatorResponse computeIndicators(String symbol, int limit) {
+        return computeForSignal(symbol, limit).response();
+    }
+
+    /** Same computation as {@link #computeIndicators}, but also returns the persisted {@link IndicatorSnapshot} so
+     * callers (e.g. the E2-F3 signal engine) can FK against it without a second snapshot write per request. */
+    public IndicatorComputation computeForSignal(String symbol, int limit) {
         PriceHistoryResult priceHistory = marketDataService.getPriceHistory(symbol, limit);
         List<Candle> candles = priceHistory.candles();
 
@@ -48,7 +54,8 @@ public class IndicatorService {
         snapshot.setVolumeTrend(indicators.volumeTrend());
         indicatorSnapshotRepository.save(snapshot);
 
-        return IndicatorResponse.from(priceHistory.ticker(), priceHistory.source(), latest, indicators);
+        IndicatorResponse response = IndicatorResponse.from(priceHistory.ticker(), priceHistory.source(), latest, indicators);
+        return new IndicatorComputation(response, snapshot);
     }
 
     private BigDecimalIndicators compute(List<Candle> candles) {
@@ -67,5 +74,8 @@ public class IndicatorService {
     record BigDecimalIndicators(java.math.BigDecimal rsi, MacdResult macd, MovingAverageResult movingAverage,
                                  java.math.BigDecimal volatility, java.math.BigDecimal volume,
                                  java.math.BigDecimal volumeTrend) {
+    }
+
+    public record IndicatorComputation(IndicatorResponse response, IndicatorSnapshot snapshot) {
     }
 }

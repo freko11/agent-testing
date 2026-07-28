@@ -24,8 +24,9 @@ import java.time.Instant;
 /**
  * A single point-in-time snapshot of indicator *inputs* for a ticker — RSI,
  * MACD components, moving averages, volatility/volume — with no Buy/Sell/Hold
- * call or rule-table version. That derivation belongs to a future, additive
- * {@code signal_calls} table in E2-F3.
+ * call or rule-table version. That derivation lives in the additive
+ * {@code signal_calls} table (see {@link com.autotrade.dashboard.signal.SignalCallEntry}),
+ * FK'd back to a specific snapshot row.
  */
 @Entity
 @Table(name = "indicator_snapshots")
