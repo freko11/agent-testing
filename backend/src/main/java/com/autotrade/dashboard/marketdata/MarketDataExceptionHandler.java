@@ -1,5 +1,7 @@
 package com.autotrade.dashboard.marketdata;
 
+import com.autotrade.dashboard.indicator.InsufficientPriceHistoryException;
+import com.autotrade.dashboard.indicator.InvalidIndicatorRequestException;
 import com.autotrade.dashboard.ticker.TickerAssetTypeConflictException;
 import com.autotrade.dashboard.ticker.TickerNotRegisteredException;
 import org.springframework.http.HttpHeaders;
@@ -72,5 +74,17 @@ public class MarketDataExceptionHandler {
         String source = e.source() != null ? e.source().name() : null;
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(ApiErrorResponse.of("MARKET_DATA_UNAVAILABLE", e.getMessage(), source));
+    }
+
+    @ExceptionHandler(InsufficientPriceHistoryException.class)
+    public ResponseEntity<ApiErrorResponse> handleInsufficientPriceHistory(InsufficientPriceHistoryException e) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(ApiErrorResponse.of("INSUFFICIENT_PRICE_HISTORY", e.getMessage()));
+    }
+
+    @ExceptionHandler(InvalidIndicatorRequestException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidIndicatorRequest(InvalidIndicatorRequestException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiErrorResponse.of("INVALID_REQUEST", e.getMessage()));
     }
 }

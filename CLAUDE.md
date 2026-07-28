@@ -317,13 +317,82 @@ process's own log after `mvnw spring-boot:run` — worth checking for a leftover
 process (`netstat -ano | grep :8080`) before trusting a live verification's result if
 `/health` was already returning 200 suspiciously fast on startup.
 
-Next up: E2-F2-S1 (RSI, MACD, and moving-average crossover computed for a ticker),
-starting F2.2 (technical indicator calculation) — per the build sequence in
-`docs/agile-plan.md`, this is also where the indicator-library choice (`ta4j` vs.
-hand-rolled) deliberately left open in the "Assumptions to confirm" section gets
-resolved via the `Explore` agent.
+E2-F2-S1 (RSI, MACD, and moving-average crossover computed for a ticker) is done,
+starting F2.2 (technical indicator calculation). The `docs/agile-plan.md` "Assumptions
+to confirm" indicator-library choice was resolved first via the `Explore` agent:
+hand-roll RSI/MACD/MA-crossover rather than pull in `ta4j` — its `BarSeries`/`Num`
+data model doesn't map cleanly onto this app's existing `Candle` DTO, and this
+codebase already has two precedents (`RetryHelper`, `MarketHoursService`) for
+hand-rolling small deterministic logic rather than taking on a library's adapter
+cost. A `Plan`-agent design gate then fixed every formula/parameter choice before
+implementation: RSI-14 (Wilder smoothing), MACD(12,26,9) (SMA-seeded EMA
+convention), and a **SMA10/SMA30** crossover — deliberately not the golden-cross
+50/200 pair, since the product vision's hold-term example ("3-10 days", E2-F3-S2)
+calls for something responsive enough to matter within a multi-day hold.
 
-Beyond E1/E2-F1-S1, no other source code yet. An agile delivery plan for the project has been drafted at
+New flat `com.autotrade.dashboard.indicator` package (alongside the existing
+`IndicatorSnapshot` entity/repository from E1-F2, which already anticipated every
+field this story populates — no Flyway migration needed): `RsiCalculator`,
+`MacdCalculator`/`MacdResult`, `MovingAverageCrossoverCalculator`/
+`MovingAverageResult`/`MovingAverageRelation` are pure static calculators over
+`List<Candle>` (each enforces its own minimum-candle-count precondition,
+ascending-timestamp order assumed, never re-sorted). `IndicatorService` calls
+`MarketDataService.getPriceHistory` directly (a service-to-service handoff, not a
+second HTTP hop) — this means ticker-registration and market-hours checks are
+inherited for free, and an unregistered/closed-market ticker fails exactly as
+`GET .../price-history` already does. `MIN_CANDLES_FOR_INDICATORS = 34` (MACD's
+`slowPeriod + signalPeriod - 1` is the binding constraint across all three
+indicators); fewer candles throws a new `InsufficientPriceHistoryException` → 422
+`INSUFFICIENT_PRICE_HISTORY` (distinct from `NO_PRICE_DATA`'s zero-data case).
+Every computation persists an `IndicatorSnapshot` row (append-only, no
+unique constraint on ticker+day — matching this codebase's other append-only
+audit-log-style tables; revisit only if a periodic-computation story arrives).
+`GET /api/tickers/{symbol}/indicators?limit=N` (default 200, bounded
+34-1000) returns ticker/source/asOf/price plus `rsi`, `macd` (line/signal/
+histogram), and `movingAverage` (shortMa/longMa/relation). Error handling extends
+the existing `MarketDataExceptionHandler` rather than adding a parallel handler,
+per its own Javadoc's stated extension point — reused as-is: `TICKER_NOT_REGISTERED`
+(404), `MARKET_CLOSED` (409), `NO_PRICE_DATA` (404), rate-limit/unavailable (429/503);
+newly added: `INSUFFICIENT_PRICE_HISTORY` (422) and `INVALID_REQUEST` (400, limit
+out of bounds) for indicator-specific failures. `TickerSummary.from` was bumped
+from package-private to `public static` (one-line visibility change) so the
+`indicator` package can reuse it in the response DTO.
+
+Reference values for RSI/MACD/SMA were computed independently via a Python/Decimal
+script (50-digit precision) before writing any Java, then cross-checked against the
+Plan agent's own computed values — both matched exactly, including the RSI edge
+cases most likely to be implemented wrong (`avgGain==0 && avgLoss==0` → neutral 50,
+not the all-gains 100 case) and the exact MACD signal-line seed boundary at the
+34-candle minimum. `IndicatorTestFixtures` (40 hardcoded daily closes, degenerate
+OHLC, no JSON/HTTP involved unlike the Alpaca/Binance client fixtures) also
+substantially fulfills the still-open **E1-F4-S2** ("deterministic fixture data for
+indicator math") for this indicator set — only E2-F2-S2's volatility/volume fixture
+(needing real high/low spread) remains open there. Tested via
+`RsiCalculatorTest`/`MacdCalculatorTest`/`MovingAverageCrossoverCalculatorTest`
+(exact reference-value + edge-case + minimum-candle-count assertions),
+`IndicatorServiceTest` (Mockito: calculator wiring, snapshot persistence, and that
+`MarketDataService` failures propagate unmodified), and `IndicatorControllerTest`
+(`@WebMvcTest`, status codes and error bodies) — 20 new tests, 72 backend tests
+total, `./mvnw verify` green.
+
+Verified live via the `run` skill against the real running stack (Docker Oracle XE
++ real public Binance API, no mocking) — one gotcha hit before verification even
+started: a stale `java.exe` (PID from an earlier session, started before this
+story's code existed) was still holding port 8080, caught via the same
+`netstat -ano | grep :8080` check this file's E2-F1-S3 entry already recommends;
+killed and restarted clean. `GET /api/tickers/BTCUSDT/indicators?limit=200`
+returned live 200 with real numbers (`rsi: 45.3816`, `macd.line: 191.31058207`,
+`movingAverage.relation: "SHORT_ABOVE_LONG"`); a direct `sqlplus` query against
+the live Oracle XE container confirmed the persisted `indicator_snapshots` row
+matched the API response exactly. `GET .../NOTREAL/indicators` correctly 404'd
+`TICKER_NOT_REGISTERED`, `limit=10` correctly 400'd `INVALID_REQUEST` ("limit must
+be between 34 and 1000"), and `GET .../AAPL/indicators` (a stock, checked
+after-hours) correctly 409'd `MARKET_CLOSED` — proving the inherited
+ticker-registration/market-hours checks work through the new endpoint exactly as
+through `price-history`. No frontend changes in this story (backend-only, same
+split as E2-F1-S1/S2 — indicator consumption in the UI is a later story).
+
+Beyond E1/E2-F1/E2-F2-S1, no other source code yet. An agile delivery plan for the project has been drafted at
 `docs/agile-plan.md` — an auto-trade signal dashboard (React frontend, Java/Spring
 Boot backend, Oracle Database via local Oracle XE, broker adapters starting with
 Alpaca for stocks and Binance for crypto). It covers epics/features/user stories
