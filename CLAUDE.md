@@ -763,6 +763,49 @@ holdTerm-present path; `NOTREAL` correctly rendered the existing
 stock, checked after-hours) correctly rendered the existing `MARKET_CLOSED`
 message. No backend changes in this story.
 
+E3-F1-S2 (Buy/Sell/Hold call and hold-term shown prominently and color-coded)
+is done, closing out F3.1. The `dataviz` skill was consulted first: rather
+than the conventional red/green/amber traffic-light mapping, the badge uses
+**teal (BUY) / orange (SELL) / slate (HOLD)** — a hue axis that stays
+distinguishable under red-green color blindness (the most common form),
+while the call word itself (`BUY`/`SELL`/`HOLD`) remains the primary signal
+so color is never the sole means of conveying the call, per the project
+constraint against relying on raw red/green/gray. `TickerMetrics.tsx` gained
+a `SignalBadge` component (`role="status"`) rendering the call, matched rule,
+and — only when non-null — the hold-term label; it replaces the plain
+unstyled `Call: ...` line E3-F1-S1 deliberately left as a placeholder for
+this story. New `index.css` rules (`.signal-badge` + `--buy`/`--sell`/
+`--hold` variants) follow the same `light-dark()` pattern as the existing
+`.stat-tile` rules from E3-F1-S1, so both light and dark system themes are
+covered without a themeable palette system (this is a single-user tool, not
+a multi-tenant product, per the `dataviz` skill's stated project constraint).
+No backend changes — this story only consumes fields (`call`, `matchedRule`,
+`holdTerm`) `SignalResponse` already returned since E2-F3-S1/S2.
+
+No `Plan`-agent design gate — same reasoning as E3-F1-S1: no open design
+question beyond the color mapping, which the `dataviz` skill's routing table
+already answers directly. `npm run build` (typecheck + Vite build) and
+`npm run lint` (oxlint) both pass clean, same pre-existing unrelated
+`AuthContext.tsx` warning as before. No component tests — same gap noted in
+every prior frontend story (no frontend test runner configured yet).
+
+Verified live via the `run` skill against the real running stack (Docker
+Oracle XE + real public Binance API, no mocking; logged in through E1-F3-S2's
+session-cookie auth): `BTCUSDT`, `ETHUSDT`, `DOGEUSDT`, and `XRPUSDT` all
+rendered the slate `HOLD` badge with no hold-term text; `SOLUSDT` rendered
+the orange `SELL` badge with `Suggested hold-term: 2-7 days` shown inline,
+proving both the hold-term-present and hold-term-absent paths render
+correctly with visually distinct colors. No live ticker happened to be in a
+BUY state during this verification session (market-dependent, not
+reachable by construction) — the `signal-badge--buy` CSS class and the
+`SignalBadge` component's conditional logic are identical in shape to the
+verified `SELL` path, just parameterized on `call`, so this is a structural
+rather than a live-observed gap; flagged rather than silently assumed.
+
+This closes out F3.1 in full. E3-F2-S1 (price chart with MA/RSI overlays) is
+next — the last story before E3-F3-S1's stretch watchlist and E4's broker
+adapter layer.
+
 Beyond E1/E2, no other source code yet. An agile delivery plan for the project has been drafted at
 `docs/agile-plan.md` — an auto-trade signal dashboard (React frontend, Java/Spring
 Boot backend, Oracle Database via local Oracle XE, broker adapters starting with

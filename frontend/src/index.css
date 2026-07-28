@@ -51,3 +51,50 @@ body {
   font-size: 0.8rem;
   color: light-dark(#666666, #999999);
 }
+
+.signal-badge {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem 1rem;
+  margin: 1rem 0;
+  padding: 0.75rem 1.25rem;
+  border-radius: 0.5rem;
+  border: 1px solid;
+}
+
+.signal-badge__call {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.signal-badge__rule {
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.signal-badge__hold-term {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+/* Teal/orange/slate rather than green/red/amber: stays distinguishable under
+   red-green color blindness, and the call word itself still carries the meaning. */
+.signal-badge--buy {
+  background: light-dark(#e3f6f3, #0f2e2b);
+  border-color: light-dark(#0f766e, #2dd4bf);
+  color: light-dark(#0f766e, #5eead4);
+}
+
+.signal-badge--sell {
+  background: light-dark(#fdf0e6, #3a2410);
+  border-color: light-dark(#c2410c, #fb923c);
+  color: light-dark(#c2410c, #fdba74);
+}
+
+.signal-badge--hold {
+  background: light-dark(#f1f4f7, #232a33);
+  border-color: light-dark(#475569, #94a3b8);
+  color: light-dark(#475569, #cbd5e1);
+}

@@ -50,6 +50,17 @@ function StatTile({ label, value, hint }: StatTileProps) {
   )
 }
 
+function SignalBadge({ signal }: { signal: SignalResponse }) {
+  const { call, matchedRule, holdTerm } = signal
+  return (
+    <div className={`signal-badge signal-badge--${call.toLowerCase()}`} role="status">
+      <span className="signal-badge__call">{call}</span>
+      <span className="signal-badge__rule">{matchedRule}</span>
+      {holdTerm && <span className="signal-badge__hold-term">Suggested hold-term: {holdTerm.label}</span>}
+    </div>
+  )
+}
+
 function TickerMetricsResult({ signal }: { signal: SignalResponse }) {
   const { ticker, indicators } = signal
   const asOf = new Date(indicators.asOf).toLocaleString()
@@ -59,10 +70,7 @@ function TickerMetricsResult({ signal }: { signal: SignalResponse }) {
       <p>
         {ticker.symbol} ({ticker.assetType}) · {indicators.source} · as of {asOf}
       </p>
-      <p>
-        Call: {signal.call} ({signal.matchedRule})
-        {signal.holdTerm && ` · Suggested hold-term: ${signal.holdTerm.label}`}
-      </p>
+      <SignalBadge signal={signal} />
       <div className="stat-tile-grid">
         <StatTile label="Price" value={formatOrDash(indicators.price, 4)} />
         <StatTile label="RSI (14)" value={indicators.rsi.toFixed(2)} hint="Oversold <30 · Overbought >70" />
