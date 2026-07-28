@@ -1009,6 +1009,87 @@ at any point.
 
 This closes out E3 (Dashboard/Frontend) in full. E4 (Broker Adapter Layer) is next.
 
+E4-F1-S1 (`BrokerAdapter` interface + mock implementation + shared contract
+test suite) is done, starting E4 (Broker Adapter Layer). A `Plan`-agent
+design gate fixed every method signature and DTO shape before implementation,
+grounded in the `Order` entity's existing bracket-order fields (already
+anticipated by E1-F2-S1's schema) and mirroring `MarketDataClient`'s own
+`supportedAssetType()`/`broker()` pattern. One deliberate addition beyond the
+story's literally-named four methods was flagged and kept:
+**`getOrderStatus(clientOrderId, mode)`** — F4.2-S2's "status is pollable" AC
+needs a way to poll a specific order that neither `getPosition` (can't
+distinguish "my order didn't fill" from "another order already built this
+position") nor `cancelOrder` (has side effects) can safely double as; adding
+it now avoids a breaking interface change one story later.
+
+New **top-level** `com.autotrade.dashboard.brokeradapter` package (not
+nested under `broker` — every existing concern in this codebase is a flat
+top-level package; `broker` itself stays scoped to credential storage/
+rotation). Main source: `BrokerAdapter` interface (`supportedAssetType`,
+`broker`, `placeOrder`, `getOrderStatus`, `getPosition`, `cancelOrder`,
+`getAccountStatus` — every method takes an explicit `TradingMode` so E6.1's
+paper/live switch changes which credentials/base URL an adapter uses without
+re-instantiating anything), `BrokerOrderRequest`/`BrokerOrderResult`/
+`BrokerPosition`/`BrokerAccountStatus` (records, reusing `OrderSide`/
+`EntryOrderType`/`OrderStatus`/`AssetType`/`Broker`/`TradingMode` from their
+existing packages rather than duplicating them — `brokeradapter` never
+imports the `Order` JPA entity itself, only its sibling enums), and
+`BrokerAdapterException` (unchecked, mirrors `MarketDataUnavailableException`'s
+exact shape). Expected business outcomes (broker rejected an order, an
+order/position not found) are always returned as normal result values
+(`REJECTED`/`FAILED` status, `Optional.empty()`) — never exceptions; only
+transport/infrastructure faults throw `BrokerAdapterException`. Retry/
+backoff/rate-limit handling (E4-F1-S2) and outage/duplicate-prevention
+semantics (E4-F1-S3) are deliberately not designed here — `clientOrderId`
+being the sole required identifier everywhere and `BrokerAdapterException`
+being the single seam a future retry wrapper would catch are what keep this
+interface from needing a breaking change once those stories land. No
+`BrokerAdapterRouter`/asset-type-routing service either — no second adapter
+exists yet to route between (YAGNI until F4.2 gives it one, mirroring
+`MarketDataService`'s existing routing-map precedent).
+
+Test-only source (`backend/src/test/java/.../brokeradapter/`, never ships in
+the production jar, same "test-only infrastructure" precedent as
+`com.autotrade.dashboard.backtest`): `MockBrokerAdapter` (deterministic
+in-memory implementation, never a Spring bean/`@Component` — must never be
+autodiscoverable in any profile) with an `autoFill` flag (immediately fills a
+placed order at a placeholder price — `entryLimitPrice` for LIMIT orders, the
+TP/SL midpoint for MARKET — not a market-price simulation) and three
+test-scripting hooks not part of the `BrokerAdapter` contract itself:
+`rejectNextOrderWith(reason)`, `failNextCallWith(exception)`,
+`simulateFill(clientOrderId, price)` — these exist so E4-F1-S2/S3's future
+tests, and E1-F4-S1's still-open mock-broker E2E test, have something
+concrete to script against. `placeOrder` replays the stored result unchanged
+for an already-known `clientOrderId` (idempotent, no duplicate state) —
+worth nailing down now even though full dedup semantics are E4-F1-S3's job,
+since it's cheap and gives the contract suite something concrete to assert.
+`cancelOrder` on a `FILLED` order or an already-`CANCELLED`/`REJECTED`/
+`FAILED` one is an idempotent no-op (same DELETE-idempotent convention as
+`WatchlistService.remove`); on an unknown `clientOrderId` it returns
+`FAILED`/"Unknown clientOrderId" rather than throwing. `getPosition` derives
+a net per-symbol position purely from `FILLED` transitions (BUY adds, SELL
+reduces, weighted-average entry price recomputed on BUY fills only).
+
+`BrokerAdapterContractTest` (abstract JUnit 5, no Spring context assumed) is
+the shared suite every adapter must pass — plumbing/shape correctness only
+(clientOrderId round-trips, idempotent replay, empty-`Optional` cases,
+non-throwing cancel/status paths, non-empty account balances); no rate-limit
+or outage-simulation assertions, left for E4-F1-S2/S3 to add once designed.
+`MockBrokerAdapterContractTest` supplies a concrete `MockBrokerAdapter` and
+proves the suite runs; F4.2/F4.3 add their own subclasses against the real
+Alpaca/Binance adapters later (may need to skip assertions that don't apply
+against a live paper API — that story's own call). `MockBrokerAdapterTest`
+covers mock-specific behaviors the shared suite doesn't (manual-fill vs.
+auto-fill, reject/fail scripting hooks and their one-shot reset, position
+accumulation across BUY/SELL fills).
+
+Tested via 16 new tests (`MockBrokerAdapterContractTest`: 7,
+`MockBrokerAdapterTest`: 9) — 164 backend tests total, `./mvnw verify`
+green. No frontend or database changes in this story — this is a pure
+backend interface/contract addition with no consumer wired in yet (F4.2's
+Alpaca adapter is the first real implementation; E5's order-submission flow
+is the first real caller).
+
 The original agile delivery plan for the project (drafted before any of E1-E3 above
 was implemented) lives at `docs/agile-plan.md` — an auto-trade signal dashboard
 (React frontend, Java/Spring Boot backend, Oracle Database via local Oracle XE,
