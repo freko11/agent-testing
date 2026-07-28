@@ -43,6 +43,25 @@ export class MarketDataError extends Error {
 }
 
 /**
+ * Parses the structured error body MarketDataExceptionHandler (and, as of
+ * E3-F3-S1, WatchlistController) produce on a non-2xx response, so callers
+ * across marketdata/signal/chart/watchlist all branch on the same
+ * MarketDataErrorCode instead of each re-parsing the response body.
+ */
+export async function parseMarketDataError(response: Response): Promise<MarketDataError> {
+  let code: MarketDataErrorCode | 'UNKNOWN' = 'UNKNOWN'
+  let message = `Request failed with status ${response.status}`
+  try {
+    const body = (await response.json()) as { error?: string; message?: string }
+    if (body.error) code = body.error as MarketDataErrorCode
+    if (body.message) message = body.message
+  } catch {
+    // Response body wasn't JSON (e.g. a network-level failure) — fall back to the defaults above.
+  }
+  return new MarketDataError(code, message)
+}
+
+/**
  * Throws MarketDataError with the backend's structured error code (see
  * MarketDataExceptionHandler) so callers can render a specific message per
  * failure kind instead of a single generic "something went wrong" — the
@@ -52,16 +71,7 @@ export async function fetchPriceHistory(symbol: string): Promise<PriceHistoryRes
   const response = await apiFetch(`/api/tickers/${encodeURIComponent(symbol)}/price-history`)
 
   if (!response.ok) {
-    let code: MarketDataErrorCode | 'UNKNOWN' = 'UNKNOWN'
-    let message = `Request failed with status ${response.status}`
-    try {
-      const body = (await response.json()) as { error?: string; message?: string }
-      if (body.error) code = body.error as MarketDataErrorCode
-      if (body.message) message = body.message
-    } catch {
-      // Response body wasn't JSON (e.g. a network-level failure) — fall back to the defaults above.
-    }
-    throw new MarketDataError(code, message)
+    throw await parseMarketDataError(response)
   }
 
   return (await response.json()) as PriceHistoryResponse

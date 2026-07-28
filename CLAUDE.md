@@ -929,6 +929,86 @@ same disclosure style as E3-F1-S2's un-observed BUY-badge case.
 This closes out E3 (Dashboard/Frontend) except E3-F3-S1's stretch watchlist.
 E4 (Broker Adapter Layer) is next.
 
+E3-F3-S1 (watchlist) is done, closing out F3.3 and E3 entirely. No `Plan`-agent
+design gate — the only real design question (schema shape, idempotent-add/remove
+semantics, response shape) was small enough to resolve directly against this
+codebase's own precedents rather than warranting a separate gate: a ticker must
+already be registered before it can be watchlisted, reusing the exact
+"explicit registration first" pattern market data/indicators/signal all
+already follow, including `TICKER_NOT_REGISTERED` (404) rather than a new
+error code.
+
+New `V6__add_watchlist.sql`: a single `watchlist_entries` table (`ticker_id`
+FK, `UNIQUE` — a ticker can only appear once, single-user app with no account
+table per E1-F3-S2, so no per-user scoping needed) plus `created_at`. New
+backend `com.autotrade.dashboard.watchlist` package: `WatchlistEntry` entity,
+`WatchlistEntryRepository` (`findAllByOrderByCreatedAtDesc`,
+`findByTicker_Id`/`existsByTicker_Id`), `WatchlistService` (`list`/`add`/
+`remove`, delegating ticker resolution to `TickerService.findRegistered` —
+`add` is idempotent exactly like `TickerService.resolveOrRegister`, `remove`
+is a no-op instead of an error if the ticker was never watchlisted, matching
+DELETE's idempotent-by-convention semantics), and `WatchlistController`
+(`GET`/`POST`/`DELETE /api/watchlist`, the `POST` 200-vs-201 distinction
+mirroring `TickerController`'s own existed-before check). No new error codes
+or `MarketDataExceptionHandler` changes — every failure this story can
+produce (`TICKER_NOT_REGISTERED`, `INVALID_REQUEST`) was already wired.
+`SecurityConfig`'s existing `anyRequest().authenticated()` covers the new
+routes with no config change.
+
+Frontend: new `frontend/src/watchlist/` package (`api.ts`: `fetchWatchlist`/
+`addToWatchlist`/`removeFromWatchlist`; `Watchlist.tsx`: a list of saved
+tickers, each with a clickable symbol to revisit it and a Remove button).
+While wiring this in, a third call site for the marketdata/signal/chart
+error-parsing branch appeared — past the "three similar lines" threshold this
+codebase's own `simplify` guidance flags for extraction — so
+`marketdata/api.ts` gained a shared `parseMarketDataError(response)` helper,
+and `fetchPriceHistory`/`fetchSignal`/`fetchChartData` were all refactored to
+call it instead of each re-parsing the response body inline; behavior is
+unchanged, this is pure de-duplication. `TickerMetrics.tsx` gained an
+`AddToWatchlistButton` (idle/saving/saved/error states, keyed by ticker
+symbol so switching tickers resets it) rendered under a successful lookup,
+and now accepts a `lookupRequest` prop (`{symbol, nonce}` — a fresh object
+per watchlist click, so re-selecting the same symbol still re-runs the
+lookup) plus an `onWatchlistChanged` callback. `DashboardPage` lifts just
+enough state to connect the two: a `watchlistRefreshKey` bumped whenever
+`TickerMetrics` reports a successful add (triggering `Watchlist` to refetch),
+and a `lookupRequest` set whenever `Watchlist` reports a click
+(triggering `TickerMetrics` to look that symbol up). New `index.css` rules
+(`.watchlist-list`/`.watchlist-item`) follow the existing `.stat-tile`
+`light-dark()` pattern. New tests: `WatchlistServiceTest` (H2/Oracle-mode,
+add/remove/idempotency/ordering/not-registered cases) and
+`WatchlistControllerTest` (`@WebMvcTest`, status codes and error bodies) — 13
+new backend tests, 140 backend tests total, `./mvnw verify` green;
+`mergeIndicators.test.ts` unaffected (4 tests), `npm run build`/`npm run
+lint` both pass clean (same pre-existing unrelated `AuthContext.tsx` lint
+warning as every prior story).
+
+Verified live via the `run` skill against the real running stack (Docker
+Oracle XE + real public Binance API, no mocking) — one instance of this
+file's own recurring gotcha hit again: the backend process from the prior
+session was still holding port 8080 with pre-story code, caught and killed
+via the same `netstat`/`taskkill` check this file has flagged since
+E2-F1-S3. `V6` applied cleanly against real Oracle (schema version 5 → 6).
+Exercised the full API via `curl` first (registered `BTCUSDT`/`SOLUSDT`,
+added both, confirmed idempotent re-add returns 200 not 201, confirmed
+`NOTREAL` 404s `TICKER_NOT_REGISTERED`, removed `BTCUSDT` and confirmed a
+second remove is a no-op 204 not an error), then **restarted the backend
+process entirely** and confirmed `GET /api/watchlist` still returned the
+surviving `SOLUSDT` entry from a fresh process — the AC's actual "survives
+app restart" requirement, not just "the row is in the table." Then clicked
+through the same flow in a real browser: the watchlist rendered the
+restart-surviving `SOLUSDT` entry on page load; clicking its symbol
+populated the lookup field and ran a full signal+chart fetch (the "revisit"
+path); registering and looking up `ETHUSDT` then clicking "Add to
+watchlist" showed the button flip to "Added to watchlist" and the list
+update to show both tickers, most-recently-added first; clicking "Remove" on
+`SOLUSDT` updated the list immediately to just `ETHUSDT`; a full page reload
+still showed the persisted `ETHUSDT` entry with an empty lookup field (no
+stale form state leaking across reloads). Browser console showed no errors
+at any point.
+
+This closes out E3 (Dashboard/Frontend) in full. E4 (Broker Adapter Layer) is next.
+
 The original agile delivery plan for the project (drafted before any of E1-E3 above
 was implemented) lives at `docs/agile-plan.md` — an auto-trade signal dashboard
 (React frontend, Java/Spring Boot backend, Oracle Database via local Oracle XE,

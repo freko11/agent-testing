@@ -1,5 +1,5 @@
 import { apiFetch } from '../auth/api'
-import { MarketDataError, type MarketDataErrorCode, type TickerSummary } from '../marketdata/api'
+import { parseMarketDataError, type TickerSummary } from '../marketdata/api'
 
 export type Broker = 'ALPACA' | 'BINANCE'
 
@@ -61,16 +61,7 @@ export async function fetchSignal(symbol: string): Promise<SignalResponse> {
   const response = await apiFetch(`/api/tickers/${encodeURIComponent(symbol)}/signal`)
 
   if (!response.ok) {
-    let code: MarketDataErrorCode | 'UNKNOWN' = 'UNKNOWN'
-    let message = `Request failed with status ${response.status}`
-    try {
-      const body = (await response.json()) as { error?: string; message?: string }
-      if (body.error) code = body.error as MarketDataErrorCode
-      if (body.message) message = body.message
-    } catch {
-      // Response body wasn't JSON (e.g. a network-level failure) — fall back to the defaults above.
-    }
-    throw new MarketDataError(code, message)
+    throw await parseMarketDataError(response)
   }
 
   return (await response.json()) as SignalResponse

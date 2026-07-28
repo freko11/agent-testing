@@ -1,7 +1,8 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { fetchChartData, type ChartDataResponse } from '../chart/api'
 import PriceChart from '../chart/PriceChart'
 import { MarketDataError } from '../marketdata/api'
+import { addToWatchlist } from '../watchlist/api'
 import { fetchSignal, type MovingAverageResult, type SignalResponse } from './api'
 
 const ERROR_MESSAGES: Record<string, (symbol: string, backendMessage: string) => string> = {
@@ -98,7 +99,40 @@ function TickerMetricsResult({ signal }: { signal: SignalResponse }) {
   )
 }
 
-function TickerMetrics() {
+function AddToWatchlistButton({ symbol, onAdded }: { symbol: string; onAdded?: () => void }) {
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleClick() {
+    setStatus('saving')
+    setError(null)
+    try {
+      await addToWatchlist(symbol)
+      setStatus('saved')
+      onAdded?.()
+    } catch (reason) {
+      setStatus('error')
+      setError(reason instanceof MarketDataError ? reason.message : 'Could not add to watchlist.')
+    }
+  }
+
+  return (
+    <div>
+      <button type="button" onClick={handleClick} disabled={status === 'saving' || status === 'saved'}>
+        {status === 'saved' ? 'Added to watchlist' : status === 'saving' ? 'Adding…' : 'Add to watchlist'}
+      </button>
+      {error && <p role="alert">{error}</p>}
+    </div>
+  )
+}
+
+interface TickerMetricsProps {
+  /** Set by the watchlist's "revisit" click — a fresh object (new nonce) re-triggers the lookup even for the same symbol. */
+  lookupRequest?: { symbol: string; nonce: number } | null
+  onWatchlistChanged?: () => void
+}
+
+function TickerMetrics({ lookupRequest, onWatchlistChanged }: TickerMetricsProps) {
   const [symbol, setSymbol] = useState('')
   const [result, setResult] = useState<SignalResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -106,9 +140,8 @@ function TickerMetrics() {
   const [chartError, setChartError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault()
-    const trimmed = symbol.trim()
+  async function runLookup(rawSymbol: string) {
+    const trimmed = rawSymbol.trim()
     if (!trimmed) return
 
     setLoading(true)
@@ -141,6 +174,20 @@ function TickerMetrics() {
     setLoading(false)
   }
 
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault()
+    await runLookup(symbol)
+  }
+
+  useEffect(() => {
+    if (!lookupRequest) return
+    setSymbol(lookupRequest.symbol)
+    void runLookup(lookupRequest.symbol)
+    // lookupRequest is a fresh object per watchlist click, so this intentionally re-runs on every
+    // click (including re-selecting the same symbol) rather than only when the symbol text changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lookupRequest])
+
   return (
     <section>
       <h2>Ticker lookup</h2>
@@ -159,7 +206,12 @@ function TickerMetrics() {
         </button>
       </form>
       {error && <p role="alert">{error}</p>}
-      {result && <TickerMetricsResult signal={result} />}
+      {result && (
+        <>
+          <TickerMetricsResult signal={result} />
+          <AddToWatchlistButton key={result.ticker.symbol} symbol={result.ticker.symbol} onAdded={onWatchlistChanged} />
+        </>
+      )}
       {chartError && <p role="alert">{chartError}</p>}
       {chartData && chartData.candles.length > 0 && (
         <div className="price-chart-container">
