@@ -18,7 +18,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -59,6 +58,9 @@ class IndicatorServiceTest {
         assertEquals(IndicatorTestFixtures.SMA_30_FULL, response.movingAverage().longMa());
         assertEquals(MovingAverageRelation.SHORT_ABOVE_LONG, response.movingAverage().relation());
         assertEquals(Broker.ALPACA, response.source());
+        assertEquals(IndicatorTestFixtures.ATR_PCT_DEGENERATE_FULL, response.volatility());
+        assertEquals(IndicatorTestFixtures.VOLUME_DEGENERATE_FULL, response.volume());
+        assertEquals(IndicatorTestFixtures.VOLUME_TREND_DEGENERATE_FULL, response.volumeTrend());
 
         ArgumentCaptor<IndicatorSnapshot> captor = ArgumentCaptor.forClass(IndicatorSnapshot.class);
         verify(indicatorSnapshotRepository).save(captor.capture());
@@ -66,9 +68,9 @@ class IndicatorServiceTest {
         assertEquals(IndicatorTestFixtures.RSI_14_FULL, saved.getRsi());
         assertEquals(IndicatorTestFixtures.MACD_LINE_FULL, saved.getMacdLine());
         assertEquals(IndicatorTestFixtures.SMA_10_FULL, saved.getMaShort());
-        assertNull(saved.getVolatility());
-        assertNull(saved.getVolume());
-        assertNull(saved.getVolumeTrend());
+        assertEquals(IndicatorTestFixtures.ATR_PCT_DEGENERATE_FULL, saved.getVolatility());
+        assertEquals(IndicatorTestFixtures.VOLUME_DEGENERATE_FULL, saved.getVolume());
+        assertEquals(IndicatorTestFixtures.VOLUME_TREND_DEGENERATE_FULL, saved.getVolumeTrend());
     }
 
     @Test

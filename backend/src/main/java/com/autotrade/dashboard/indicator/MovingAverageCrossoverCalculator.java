@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * Simple moving average crossover. Reports only the current short-vs-long relation,
@@ -31,8 +32,8 @@ public final class MovingAverageCrossoverCalculator {
                             + " candles, got " + candles.size());
         }
 
-        BigDecimal shortMa = sma(candles, shortPeriod).setScale(8, RoundingMode.HALF_UP);
-        BigDecimal longMa = sma(candles, longPeriod).setScale(8, RoundingMode.HALF_UP);
+        BigDecimal shortMa = sma(candles, shortPeriod, Candle::close).setScale(8, RoundingMode.HALF_UP);
+        BigDecimal longMa = sma(candles, longPeriod, Candle::close).setScale(8, RoundingMode.HALF_UP);
 
         MovingAverageRelation relation;
         int cmp = shortMa.compareTo(longMa);
@@ -47,10 +48,11 @@ public final class MovingAverageCrossoverCalculator {
         return new MovingAverageResult(shortPeriod, shortMa, longPeriod, longMa, relation);
     }
 
-    private static BigDecimal sma(List<Candle> candles, int period) {
+    /** Simple moving average of {@code valueOf(candle)} over the trailing {@code period} candles. */
+    static BigDecimal sma(List<Candle> candles, int period, Function<Candle, BigDecimal> valueOf) {
         BigDecimal sum = BigDecimal.ZERO;
         for (int i = candles.size() - period; i < candles.size(); i++) {
-            sum = sum.add(candles.get(i).close());
+            sum = sum.add(valueOf.apply(candles.get(i)));
         }
         return sum.divide(BigDecimal.valueOf(period), MC);
     }

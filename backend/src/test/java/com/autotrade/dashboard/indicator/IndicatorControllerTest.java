@@ -43,7 +43,8 @@ class IndicatorControllerTest {
                 new com.autotrade.dashboard.marketdata.Candle(Instant.parse("2026-02-09T00:00:00Z"),
                         new BigDecimal("113.10"), new BigDecimal("113.10"), new BigDecimal("113.10"),
                         new BigDecimal("113.10"), BigDecimal.valueOf(1_000_000)),
-                new IndicatorService.BigDecimalIndicators(new BigDecimal("77.8751"), macd, ma));
+                new IndicatorService.BigDecimalIndicators(new BigDecimal("77.8751"), macd, ma,
+                        new BigDecimal("0.4842"), new BigDecimal("1000000.0000"), new BigDecimal("1.0000")));
         when(indicatorService.computeIndicators(eq("AAPL"), anyInt())).thenReturn(response);
 
         mockMvc.perform(get("/api/tickers/AAPL/indicators").param("limit", "200"))
@@ -52,7 +53,10 @@ class IndicatorControllerTest {
                 .andExpect(jsonPath("$.source").value("ALPACA"))
                 .andExpect(jsonPath("$.rsi").value(77.8751))
                 .andExpect(jsonPath("$.macd.line").value(2.11694333))
-                .andExpect(jsonPath("$.movingAverage.relation").value("SHORT_ABOVE_LONG"));
+                .andExpect(jsonPath("$.movingAverage.relation").value("SHORT_ABOVE_LONG"))
+                .andExpect(jsonPath("$.volatility").value(0.4842))
+                .andExpect(jsonPath("$.volume").value(1000000.0000))
+                .andExpect(jsonPath("$.volumeTrend").value(1.0000));
     }
 
     @Test

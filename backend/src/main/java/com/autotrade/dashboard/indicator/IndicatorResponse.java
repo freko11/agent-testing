@@ -9,10 +9,12 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 public record IndicatorResponse(TickerSummary ticker, Broker source, Instant asOf, BigDecimal price, BigDecimal rsi,
-                                 MacdResult macd, MovingAverageResult movingAverage) {
+                                 MacdResult macd, MovingAverageResult movingAverage, BigDecimal volatility,
+                                 BigDecimal volume, BigDecimal volumeTrend) {
 
     static IndicatorResponse from(Ticker ticker, Broker source, Candle latest, IndicatorService.BigDecimalIndicators indicators) {
         return new IndicatorResponse(TickerSummary.from(ticker), source, latest.timestamp(), latest.close(),
-                indicators.rsi(), indicators.macd(), indicators.movingAverage());
+                indicators.rsi(), indicators.macd(), indicators.movingAverage(), indicators.volatility(),
+                indicators.volume(), indicators.volumeTrend());
     }
 }

@@ -392,7 +392,68 @@ ticker-registration/market-hours checks work through the new endpoint exactly as
 through `price-history`. No frontend changes in this story (backend-only, same
 split as E2-F1-S1/S2 — indicator consumption in the UI is a later story).
 
-Beyond E1/E2-F1/E2-F2-S1, no other source code yet. An agile delivery plan for the project has been drafted at
+E2-F2-S2 (volatility/volume-trend metric) is done, closing out F2.2. A `Plan`-agent
+design gate picked the exact formulas before implementation: **ATR-14, normalized as
+a percentage of the latest close** (`ATR% = ATR / close * 100`) for volatility —
+Wilder-smoothed, reusing RSI-14's exact seed-then-smooth recursion shape, and
+percentage-normalized (rather than raw ATR) so volatility is comparable across
+tickers of very different price scales (a stock vs. a crypto pair), matching RSI's
+own bounded-percentage precedent; and a **10/30 volume-SMA ratio**
+(`SMA(volume,10) / SMA(volume,30)`) for volume-trend — reusing the same short/long
+period pair `MovingAverageCrossoverCalculator` already established for price,
+generalized to run over `Candle.volume()` instead of `Candle.close()`. Both were
+weighed against alternatives (stddev-of-returns, which needs `BigDecimal` to
+approximate `ln()`; OBV, an unbounded cumulative running total needing a separate
+slope step) and rejected as materially more complex for no accuracy gain over data
+this codebase already has. Both fit comfortably under the existing 34-candle
+minimum (ATR-14 needs 15, volume-trend needs 30) — no change to
+`IndicatorService.MIN_CANDLES_FOR_INDICATORS`, and no new Flyway migration, since
+`indicator_snapshots.volatility`/`volume`/`volume_trend` were already added nullable
+in `V1__init_core_schema.sql` anticipating exactly this story.
+
+New `com.autotrade.dashboard.indicator.VolatilityCalculator`/`VolumeTrendCalculator`
+(pure static, `List<Candle>` in, same precondition-then-throw pattern as
+RSI/MACD/MA). `MovingAverageCrossoverCalculator`'s private `sma` helper was widened
+to package-private and generalized with a `Function<Candle, BigDecimal>` value
+extractor so `VolumeTrendCalculator` reuses it against `Candle::volume` rather than
+duplicating the loop a third time. `VolumeTrendCalculator.calculate` returns `null`
+(not an exception) when the long-period volume SMA is zero — a genuinely dead/illiquid
+ticker is valid market data this story exists to surface, not a caller error, and the
+column/DTO field was already nullable for this reason; it's the first calculator in
+this package with a legitimate null-return contract, documented in its Javadoc since
+RSI/MACD/MA never return null. `IndicatorService.compute`/`computeIndicators` and
+`IndicatorResponse` both extended with `volatility`/`volume`/`volumeTrend` fields; no
+changes needed to `IndicatorController` or `MarketDataExceptionHandler` — no new
+failure mode is introduced beyond the existing 34-candle gate.
+
+Reference values were computed the same way as E2-F2-S1: an independent Python/Decimal
+script (50-digit precision) before writing any Java. `IndicatorTestFixtures` gained an
+**OHLCV_40** dataset (`HIGHS_40`/`LOWS_40`, ~1.6% daily range around each of the
+existing degenerate `CLOSES_40` closes) plus three volume variants — a step-up (last
+10 candles 3x the first 30's volume, ratio clearly >1), a mirrored decline (ratio
+clearly <1), and an all-zero window (exercises the null-return path) — finally closing
+E1-F4-S2's one remaining gap (the RSI/MACD/MA fixture set's degenerate high=low=close
+data couldn't exercise real ATR spread). The existing degenerate `candles40()` also
+got new reference values (`ATR_PCT_DEGENERATE_FULL`, `VOLUME_TREND_DEGENERATE_FULL`,
+`VOLUME_DEGENERATE_FULL`) since it's shared with `IndicatorServiceTest`'s RSI/MACD/MA
+assertions, and that test's degenerate candle set now also produces real (non-null)
+volatility/volume/volumeTrend values instead of the nulls it asserted before this
+story. Tested via `VolatilityCalculatorTest`/`VolumeTrendCalculatorTest` (reference-value,
+boundary, degenerate-data, and null-path cases) plus updated `IndicatorServiceTest`/
+`IndicatorControllerTest` — 10 new tests, 82 backend tests total, `./mvnw verify` green.
+
+Verified live via the `run` skill against the real running stack (Docker Oracle XE +
+real public Binance API, no mocking) — `GET /api/tickers/BTCUSDT/indicators?limit=200`
+returned live 200 with real numbers (`volatility: 2.6121`, `volume: 2484.1459`,
+`volumeTrend: 0.8414`); a direct `sqlplus` query against the live Oracle XE container
+confirmed the persisted `indicator_snapshots` row matched the API response exactly.
+`GET /api/tickers/AAPL/indicators` (a stock, checked after-hours) still correctly
+409'd `MARKET_CLOSED`, confirming no regression to E2-F1-S3's market-hours check.
+No frontend changes in this story (backend-only, same split as E2-F2-S1).
+
+This closes out E2-F2 (technical indicator calculation) in full.
+
+Beyond E1/E2-F1/E2-F2, no other source code yet. An agile delivery plan for the project has been drafted at
 `docs/agile-plan.md` — an auto-trade signal dashboard (React frontend, Java/Spring
 Boot backend, Oracle Database via local Oracle XE, broker adapters starting with
 Alpaca for stocks and Binance for crypto). It covers epics/features/user stories

@@ -5,6 +5,7 @@ import com.autotrade.dashboard.marketdata.MarketDataService;
 import com.autotrade.dashboard.marketdata.PriceHistoryResult;
 import org.springframework.stereotype.Service;
 
+import java.math.RoundingMode;
 import java.util.List;
 
 @Service
@@ -42,6 +43,9 @@ public class IndicatorService {
         snapshot.setMacdHistogram(indicators.macd().histogram());
         snapshot.setMaShort(indicators.movingAverage().shortMa());
         snapshot.setMaLong(indicators.movingAverage().longMa());
+        snapshot.setVolatility(indicators.volatility());
+        snapshot.setVolume(indicators.volume());
+        snapshot.setVolumeTrend(indicators.volumeTrend());
         indicatorSnapshotRepository.save(snapshot);
 
         return IndicatorResponse.from(priceHistory.ticker(), priceHistory.source(), latest, indicators);
@@ -53,9 +57,15 @@ public class IndicatorService {
                 MacdCalculator.DEFAULT_SLOW_PERIOD, MacdCalculator.DEFAULT_SIGNAL_PERIOD);
         var movingAverage = MovingAverageCrossoverCalculator.calculate(candles,
                 MovingAverageCrossoverCalculator.DEFAULT_SHORT_PERIOD, MovingAverageCrossoverCalculator.DEFAULT_LONG_PERIOD);
-        return new BigDecimalIndicators(rsi, macd, movingAverage);
+        var volatility = VolatilityCalculator.calculate(candles, VolatilityCalculator.DEFAULT_PERIOD);
+        var volumeTrend = VolumeTrendCalculator.calculate(candles,
+                VolumeTrendCalculator.DEFAULT_SHORT_PERIOD, VolumeTrendCalculator.DEFAULT_LONG_PERIOD);
+        var volume = candles.get(candles.size() - 1).volume().setScale(4, RoundingMode.HALF_UP);
+        return new BigDecimalIndicators(rsi, macd, movingAverage, volatility, volume, volumeTrend);
     }
 
-    record BigDecimalIndicators(java.math.BigDecimal rsi, MacdResult macd, MovingAverageResult movingAverage) {
+    record BigDecimalIndicators(java.math.BigDecimal rsi, MacdResult macd, MovingAverageResult movingAverage,
+                                 java.math.BigDecimal volatility, java.math.BigDecimal volume,
+                                 java.math.BigDecimal volumeTrend) {
     }
 }
