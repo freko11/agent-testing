@@ -1,4 +1,5 @@
 import { useAuth } from '../auth/AuthContext'
+import TickerLookup from '../marketdata/TickerLookup'
 
 function DashboardPage() {
   const { username, logout } = useAuth()
@@ -12,7 +13,7 @@ function DashboardPage() {
         </button>
       </header>
       <h1>Auto-Trade Dashboard</h1>
-      <p>Placeholder route — dashboard content lands in a later story.</p>
+      <TickerLookup />
     </main>
   )
 }

@@ -251,9 +251,31 @@ this same annotation — verified live-Oracle re-read of `Ticker.createdAt` succ
 after the fix; full test suite (41 tests, H2) still green since H2's Oracle-mode
 never reproduced this in the first place.
 
-Next up: E2-F1-S2 (clear error for an unregistered ticker — much of this is already
-in place via `TICKER_NOT_REGISTERED`, so this is mostly a frontend/UX story now) or
-E2-F1-S3 (market-hours handling), per the build sequence in `docs/agile-plan.md`.
+E2-F1-S2 (clear error for an unregistered ticker) is done — as anticipated, this was
+entirely a frontend story, since S1 already produced the `TICKER_NOT_REGISTERED` 404
+this consumes. New `frontend/src/marketdata/` package: `api.ts` (`fetchPriceHistory`,
+wrapping the existing `apiFetch` helper; throws a typed `MarketDataError` carrying the
+backend's structured `error` code so callers branch on it instead of pattern-matching
+strings) and `TickerLookup.tsx` (a form wired into `DashboardPage`, mapping each of
+`MarketDataExceptionHandler`'s error codes — `TICKER_NOT_REGISTERED`, `NO_PRICE_DATA`,
+`MARKET_DATA_RATE_LIMITED`, `MARKET_DATA_UNAVAILABLE` — to a specific rendered message
+rather than one generic failure string; codes without a mapping fall back to the
+backend's own `message`). This is intentionally minimal — a symbol input, a lookup
+button, and a one-line result/error — not the full metrics display, which is E3-F1-S1's
+job. One build-time fix: `MarketDataError extends Error` couldn't use a constructor
+parameter property (`public readonly code: ...`) under this project's
+`erasableSyntaxOnly` TS setting (same class of restriction as decorators/enums —
+TS1294); rewritten as a plain field assignment in the constructor body. Verified live
+via the `run` skill against the real running stack (Oracle XE + Spring Boot + Vite dev
+server, browser click-through, not just `npm run build`): looking up an unregistered
+symbol (`NOTREAL`) rendered `"NOTREAL" isn't a registered ticker yet. Register it
+before looking up price history.`; looking up the already-registered `BTCUSDT`
+immediately after rendered `BTCUSDT: 200 candles from BINANCE.` and correctly cleared
+the prior error. No backend changes were needed for this story.
+
+Next up: E2-F1-S3 (market-hours handling — a stock ticker outside market hours should
+return a distinct "market closed" state instead of stale data), per the build sequence
+in `docs/agile-plan.md`.
 
 Beyond E1/E2-F1-S1, no other source code yet. An agile delivery plan for the project has been drafted at
 `docs/agile-plan.md` — an auto-trade signal dashboard (React frontend, Java/Spring
