@@ -16,3 +16,38 @@ body {
   min-height: 100svh;
   box-sizing: border-box;
 }
+
+.stat-tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.stat-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid light-dark(#d0d0d0, #3a3a3a);
+  border-radius: 0.5rem;
+  background: light-dark(#f7f7f7, #1e1e1e);
+}
+
+.stat-tile__label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: light-dark(#555555, #aaaaaa);
+}
+
+.stat-tile__value {
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.stat-tile__hint {
+  font-size: 0.8rem;
+  color: light-dark(#666666, #999999);
+}

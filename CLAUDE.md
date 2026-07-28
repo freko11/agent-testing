@@ -714,6 +714,55 @@ E3-F1-S1 (ticker lookup + metrics display) and E3-F1-S2 (Buy/Sell/Hold badge
 + hold-term) can both pull straight from the existing `GET
 /api/tickers/{symbol}/signal` response with no further backend plumbing.
 
+E3-F1-S1 (ticker lookup + metrics display) is done, starting E3 (Dashboard).
+No `Plan`-agent design gate was run — unlike E2's rule-table/backtest stories,
+this one had no open design question: the backend already returns everything
+the AC needs via `GET /api/tickers/{symbol}/signal`, so the only work was
+consuming it. The `dataviz` skill was consulted for stat-tile layout guidance
+per its own routing table entry for this story.
+
+New `frontend/src/signal/` package (mirrors the backend's `marketdata`/
+`indicator`/`signal` package split): `api.ts` (`fetchSignal`, typed
+`SignalResponse`/`IndicatorResponse`/`MacdResult`/`MovingAverageResult`/
+`HoldTerm` DTOs matching the backend records field-for-field, reusing
+`MarketDataError`/`MarketDataErrorCode` from the existing `marketdata/api.ts`
+rather than duplicating the error-parsing branch — `MarketDataErrorCode` grew
+one new member, `INSUFFICIENT_PRICE_HISTORY`, since `/signal` can return that
+422 and `/price-history` can't) and `TickerMetrics.tsx` (ticker input + a
+7-tile stat grid: Price, RSI, MACD, MA crossover, Volatility, Volume, Volume
+trend — each null-safe via a `formatOrDash` helper for the two indicator
+fields that can legitimately be null). This **replaces** `marketdata/
+TickerLookup.tsx` on `DashboardPage` (deleted — fully superseded, nothing
+else referenced it); `marketdata/api.ts`'s `fetchPriceHistory` and its error
+types are untouched and still live, since E3-F2-S1's price chart will need
+raw candles from that same endpoint. The call/hold-term (`"Call: SELL
+(BEARISH_MAJORITY) · Suggested hold-term: 2-7 days"`) renders as a plain
+unstyled line above the tiles — deliberately not prominent or color-coded
+yet, since that visual treatment is explicitly E3-F1-S2's job, not this
+story's.
+
+`index.css` gained `.stat-tile`/`.stat-tile-grid` rules (a responsive
+`auto-fit` grid, `light-dark()` CSS values for the border/background/text
+colors — safe to use since `:root` already declares `color-scheme: light
+dark`) — the app's first real stylesheet beyond the bare reset E1-F1-S3 left
+in place, per this story being the one the `dataviz` skill's routing table
+flags for "follow the generic skill's stat-tile guidance rather than ad hoc
+cards." No component tests — this project still has no frontend test runner
+configured (same gap as every prior frontend story since E2-F1-S2); `npm run
+build` (typecheck + Vite build) and `npm run lint` (oxlint) both pass clean,
+the only lint warning being a pre-existing unrelated one in `AuthContext.tsx`.
+
+Verified live via the `run` skill against the real running stack (Docker
+Oracle XE + real public Binance API, no mocking; logged in through E1-F3-S2's
+session-cookie auth) — clicked through in an actual browser, not just
+`npm run build`: `BTCUSDT` rendered all 7 tiles with live numbers and `Call:
+HOLD (CONFLICTING_SIGNALS)` with no hold-term text; `SOLUSDT` rendered `Call:
+SELL (BEARISH_MAJORITY) · Suggested hold-term: 2-7 days`, proving the
+holdTerm-present path; `NOTREAL` correctly rendered the existing
+`TICKER_NOT_REGISTERED` message and cleared the prior result; `AAPL` (a
+stock, checked after-hours) correctly rendered the existing `MARKET_CLOSED`
+message. No backend changes in this story.
+
 Beyond E1/E2, no other source code yet. An agile delivery plan for the project has been drafted at
 `docs/agile-plan.md` — an auto-trade signal dashboard (React frontend, Java/Spring
 Boot backend, Oracle Database via local Oracle XE, broker adapters starting with

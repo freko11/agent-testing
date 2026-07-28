@@ -1,5 +1,5 @@
 import { useAuth } from '../auth/AuthContext'
-import TickerLookup from '../marketdata/TickerLookup'
+import TickerMetrics from '../signal/TickerMetrics'
 
 function DashboardPage() {
   const { username, logout } = useAuth()
@@ -13,7 +13,7 @@ function DashboardPage() {
         </button>
       </header>
       <h1>Auto-Trade Dashboard</h1>
-      <TickerLookup />
+      <TickerMetrics />
     </main>
   )
 }

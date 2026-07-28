@@ -30,6 +30,7 @@ export type MarketDataErrorCode =
   | 'INVALID_REQUEST'
   | 'MARKET_DATA_RATE_LIMITED'
   | 'MARKET_DATA_UNAVAILABLE'
+  | 'INSUFFICIENT_PRICE_HISTORY'
 
 export class MarketDataError extends Error {
   code: MarketDataErrorCode | 'UNKNOWN'
