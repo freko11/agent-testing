@@ -530,7 +530,91 @@ UI is E3-F1-S2's job). E2-F3-S2 (hold-term) is next, and can derive its range
 from `SignalResponse.indicators().volatility()` without further plumbing
 changes.
 
-Beyond E1/E2-F1/E2-F2/E2-F3-S1, no other source code yet. An agile delivery plan for the project has been drafted at
+E2-F3-S2 (suggested hold-term alongside the call) is done, closing out F2.3
+(Buy/Sell/Hold signal & hold-term). A `Plan`-agent design gate picked the exact
+formula before implementation: a **6-branch table** cross-producting
+**trend strength** (derived from the matched `SignalRuleId` itself — UNANIMOUS
+→ `STRONG`, MAJORITY → `MODERATE` — not recomputed from raw indicator values a
+second time) against a **volatility band** (`LOW` <2.0%, `MEDIUM` <5.0%, `HIGH`
+≥5.0% ATR%, reusing the same field `SignalRuleEngine`'s extreme-volatility gate
+already reads) into a day range: STRONG/LOW 5-15, STRONG/MEDIUM 3-10,
+STRONG/HIGH 2-6, MODERATE/LOW 3-10, MODERATE/MEDIUM 2-7, MODERATE/HIGH 1-4.
+**HOLD calls get no hold-term at all** (`null`) — every HOLD reason (the three
+safety gates, `CONFLICTING_SIGNALS`, `NO_STRONG_SIGNAL`) is equivalent from
+hold-term's perspective, since there's no entry to size a horizon for. Like
+`SignalRuleEngine`'s own thresholds, this table is explicitly provisional
+engineering estimate, not yet backtest-validated — revisit once E2-F4-S1's
+backtest harness exists (it currently only reports call win/loss stats per its
+AC; extending it to check realized hold-term accuracy is a natural follow-on,
+flagged not scoped).
+
+New `com.autotrade.dashboard.signal` members: `TrendStrength`/`VolatilityBand`
+(plain enums), `HoldTermRule` (the 6-branch table, same documented-enum shape
+as `SignalRuleId`), `HoldTerm` (record: `minDays`/`maxDays`/`label`/`rationale`/
+`tableVersion`; `label` is `"3-10 days"` — ASCII hyphen, not the agile-plan
+prose example's en dash, to avoid encoding footguns across JSON/DB/frontend),
+and `HoldTermCalculator` (pure static `calculate(SignalRuleId, BigDecimal
+volatility)`, returns `null` for any non-BUY/SELL rule; its own
+`HOLD_TERM_TABLE_VERSION = "v1"`, versioned independently of
+`SignalRuleEngine.RULE_TABLE_VERSION` since a day-range revision shouldn't
+force reinterpreting historical BUY/SELL calls and vice versa). `SignalService`
+calls it right after `SignalRuleEngine.evaluate`; `SignalResponse` gained a
+`holdTerm` field (`null` when HOLD); `SignalCallEntry` gained three nullable
+columns (`hold_term_min_days`/`hold_term_max_days`/`hold_term_table_version`)
+persisted alongside the existing rule-table version, for the same reason
+`rule_table_version` itself is stored rather than recomputed — a later table
+revision must not silently reinterpret a past audit row. `V5__add_hold_term_to_signal_calls.sql`
+adds the three columns plus a check constraint (all-null-or-all-populated,
+`min_days > 0 AND min_days <= max_days`) — the same DB-level defense-in-depth
+pattern as `V1`'s stock/leverage check.
+
+A real-Oracle-only bug (H2's Oracle-compatibility mode didn't catch it) surfaced
+during `./mvnw verify`, not just live verification: a plain `Integer` field
+with no `@JdbcTypeCode` mapped to `NUMBER(4)` failed Hibernate schema
+validation (`found [numeric], but expecting [integer]`) — this codebase had no
+prior plain-`Integer`-column precedent to check against (only `Long` PK/FK
+columns, which already carry `@JdbcTypeCode(SqlTypes.NUMERIC)`). Fixed by
+adding the same `@JdbcTypeCode(SqlTypes.NUMERIC)` + `precision = 4, scale = 0`
+to `holdTermMinDays`/`holdTermMaxDays`. If a future entity adds a plain
+`Integer`/`int` column, apply this same annotation up front rather than
+discovering it at schema-validation time.
+
+Tested via `HoldTermCalculatorTest` (14 tests: one per `HoldTermRule` branch,
+volatility-band boundary values at 2.0/5.0 proving the exclusive-upper
+convention, and a null-return case for every HOLD-producing `SignalRuleId`),
+updated `SignalServiceTest` (persisted `SignalCallEntry` carries the right
+hold-term columns for a BUY/SELL fixture, all three null for a HOLD fixture),
+and updated `SignalControllerTest` (`holdTerm` JSON shape present for BUY,
+absent/null for HOLD) — 14 new tests, 123 backend tests total, `./mvnw verify`
+green. `simplify` and `signal-rule-review` skills both run clean: the table
+stayed a plain documented mapping (no generic framework), hold-term is
+genuinely derived from per-ticker volatility/trend strength (not a hardcoded
+constant), every branch has its own test, and the new table version is
+independently versioned ahead of any future revision.
+
+Verified live via the `run` skill against the real running stack (Docker
+Oracle XE + real public Binance API, no mocking; logged in through E1-F3-S2's
+session-cookie auth) — `V5` applied cleanly against real Oracle (schema
+version 4 → 5). `GET /api/tickers/BTCUSDT/signal` returned live `HOLD`/
+`CONFLICTING_SIGNALS` with `holdTerm: null`; newly registered `SOLUSDT` and
+`ADAUSDT` returned live `SELL`/`BEARISH_MAJORITY` with real, distinct
+hold-terms (`"2-7 days"` at moderate volatility, `"1-4 days"` at high
+volatility) — proving both the null-HOLD path and a real populated path work
+end-to-end, not just against mocks. A direct `sqlplus` query against the live
+container confirmed both persisted `signal_calls` rows (SOLUSDT, ADAUSDT)
+matched their API responses exactly (`hold_term_min_days`/`max_days`/
+`table_version`), and that both `BTCUSDT` HOLD rows persisted all three
+columns as `NULL`. No frontend changes in this story (backend-only, same
+split as every other E2 story — hold-term display in the UI is E3-F1-S2's
+job, which can now pull `SignalResponse.holdTerm()` with no further backend
+plumbing).
+
+This closes out F2.3 in full. E2-F4-S1 (backtest harness) is the last story in
+E2 (Signal Engine) — and, per both this story's and E2-F3-S1's own flagged
+caveats, it's now doing double duty: validating the rule-table thresholds
+*and* the hold-term day ranges, not just call win/loss.
+
+Beyond E1/E2-F1/E2-F2/E2-F3, no other source code yet. An agile delivery plan for the project has been drafted at
 `docs/agile-plan.md` — an auto-trade signal dashboard (React frontend, Java/Spring
 Boot backend, Oracle Database via local Oracle XE, broker adapters starting with
 Alpaca for stocks and Binance for crypto). It covers epics/features/user stories

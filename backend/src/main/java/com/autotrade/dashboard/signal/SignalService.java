@@ -21,10 +21,12 @@ public class SignalService {
 
         SignalRuleId matchedRule = SignalRuleEngine.evaluate(indicators.rsi(), indicators.macd(),
                 indicators.movingAverage(), indicators.volatility(), indicators.volumeTrend());
+        HoldTerm holdTerm = HoldTermCalculator.calculate(matchedRule, indicators.volatility());
 
-        SignalCallEntry entry = new SignalCallEntry(computation.snapshot().getTicker(), computation.snapshot(), matchedRule);
+        SignalCallEntry entry = new SignalCallEntry(computation.snapshot().getTicker(), computation.snapshot(),
+                matchedRule, holdTerm);
         signalCallEntryRepository.save(entry);
 
-        return SignalResponse.of(indicators, matchedRule);
+        return SignalResponse.of(indicators, matchedRule, holdTerm);
     }
 }

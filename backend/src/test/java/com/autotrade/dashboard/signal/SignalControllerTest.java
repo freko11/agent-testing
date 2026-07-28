@@ -47,7 +47,8 @@ class SignalControllerTest {
         IndicatorResponse indicators = new IndicatorResponse(TickerSummary.from(ticker), Broker.ALPACA,
                 Instant.parse("2026-02-09T00:00:00Z"), new BigDecimal("113.10"), new BigDecimal("25"), macd, ma,
                 new BigDecimal("2.0"), new BigDecimal("1000000.0000"), new BigDecimal("1.0000"));
-        SignalResponse response = SignalResponse.of(indicators, SignalRuleId.BULLISH_UNANIMOUS);
+        HoldTerm holdTerm = HoldTermCalculator.calculate(SignalRuleId.BULLISH_UNANIMOUS, indicators.volatility());
+        SignalResponse response = SignalResponse.of(indicators, SignalRuleId.BULLISH_UNANIMOUS, holdTerm);
         when(signalService.computeSignal(eq("AAPL"), anyInt())).thenReturn(response);
 
         mockMvc.perform(get("/api/tickers/AAPL/signal").param("limit", "200"))
@@ -56,7 +57,27 @@ class SignalControllerTest {
                 .andExpect(jsonPath("$.call").value("BUY"))
                 .andExpect(jsonPath("$.matchedRule").value("BULLISH_UNANIMOUS"))
                 .andExpect(jsonPath("$.ruleTableVersion").value(SignalRuleEngine.RULE_TABLE_VERSION))
+                .andExpect(jsonPath("$.holdTerm.label").value("3-10 days"))
+                .andExpect(jsonPath("$.holdTerm.tableVersion").value(HoldTermCalculator.HOLD_TERM_TABLE_VERSION))
                 .andExpect(jsonPath("$.indicators.rsi").value(25));
+    }
+
+    @Test
+    void signal_holdCall_holdTermIsNull() throws Exception {
+        Ticker ticker = new Ticker("AAPL", AssetType.STOCK, "NASDAQ");
+        MacdResult macd = new MacdResult(new BigDecimal("2.0"), new BigDecimal("1.0"), new BigDecimal("0"));
+        MovingAverageResult ma = new MovingAverageResult(10, new BigDecimal("111.0"), 30,
+                new BigDecimal("108.0"), MovingAverageRelation.EQUAL);
+        IndicatorResponse indicators = new IndicatorResponse(TickerSummary.from(ticker), Broker.ALPACA,
+                Instant.parse("2026-02-09T00:00:00Z"), new BigDecimal("113.10"), new BigDecimal("50"), macd, ma,
+                new BigDecimal("2.0"), new BigDecimal("1000000.0000"), new BigDecimal("1.0000"));
+        SignalResponse response = SignalResponse.of(indicators, SignalRuleId.NO_STRONG_SIGNAL, null);
+        when(signalService.computeSignal(eq("AAPL"), anyInt())).thenReturn(response);
+
+        mockMvc.perform(get("/api/tickers/AAPL/signal").param("limit", "200"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.call").value("HOLD"))
+                .andExpect(jsonPath("$.holdTerm").doesNotExist());
     }
 
     @Test

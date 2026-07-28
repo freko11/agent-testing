@@ -23,6 +23,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -68,6 +69,8 @@ class SignalServiceTest {
         assertEquals(SignalRuleId.BULLISH_UNANIMOUS.name(), signalResponse.matchedRule());
         assertEquals(SignalRuleEngine.RULE_TABLE_VERSION, signalResponse.ruleTableVersion());
         assertEquals(response, signalResponse.indicators());
+        assertEquals("3-10 days", signalResponse.holdTerm().label());
+        assertEquals(HoldTermCalculator.HOLD_TERM_TABLE_VERSION, signalResponse.holdTerm().tableVersion());
 
         ArgumentCaptor<SignalCallEntry> captor = ArgumentCaptor.forClass(SignalCallEntry.class);
         verify(signalCallEntryRepository).save(captor.capture());
@@ -77,6 +80,38 @@ class SignalServiceTest {
         assertEquals(SignalCall.BUY, saved.getCall());
         assertEquals(SignalRuleId.BULLISH_UNANIMOUS, saved.getMatchedRule());
         assertEquals(SignalRuleEngine.RULE_TABLE_VERSION, saved.getRuleTableVersion());
+        assertEquals(3, saved.getHoldTermMinDays());
+        assertEquals(10, saved.getHoldTermMaxDays());
+        assertEquals(HoldTermCalculator.HOLD_TERM_TABLE_VERSION, saved.getHoldTermTableVersion());
+    }
+
+    @Test
+    void holdCall_persistsNullHoldTerm() {
+        Ticker ticker = new Ticker("AAPL", AssetType.STOCK, "NASDAQ");
+        IndicatorSnapshot snapshot = new IndicatorSnapshot(ticker, Instant.parse("2026-02-09T00:00:00Z"),
+                new BigDecimal("113.10"), Broker.ALPACA);
+
+        MacdResult macd = new MacdResult(new BigDecimal("2.0"), new BigDecimal("1.0"), new BigDecimal("0"));
+        MovingAverageResult ma = new MovingAverageResult(10, new BigDecimal("111.0"), 30,
+                new BigDecimal("108.0"), MovingAverageRelation.EQUAL);
+        IndicatorResponse response = new IndicatorResponse(TickerSummary.from(ticker), Broker.ALPACA,
+                Instant.parse("2026-02-09T00:00:00Z"), new BigDecimal("113.10"), new BigDecimal("50"), macd, ma,
+                new BigDecimal("2.0"), new BigDecimal("1000000.0000"), new BigDecimal("1.0000"));
+
+        when(indicatorService.computeForSignal("AAPL", 200))
+                .thenReturn(new IndicatorService.IndicatorComputation(response, snapshot));
+
+        SignalResponse signalResponse = service.computeSignal("AAPL", 200);
+
+        assertEquals(SignalCall.HOLD, signalResponse.call());
+        assertNull(signalResponse.holdTerm());
+
+        ArgumentCaptor<SignalCallEntry> captor = ArgumentCaptor.forClass(SignalCallEntry.class);
+        verify(signalCallEntryRepository).save(captor.capture());
+        SignalCallEntry saved = captor.getValue();
+        assertNull(saved.getHoldTermMinDays());
+        assertNull(saved.getHoldTermMaxDays());
+        assertNull(saved.getHoldTermTableVersion());
     }
 
     @Test

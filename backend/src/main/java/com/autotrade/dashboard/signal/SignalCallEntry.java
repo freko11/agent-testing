@@ -58,6 +58,17 @@ public class SignalCallEntry {
     @Column(name = "matched_rule", nullable = false, length = 30)
     private SignalRuleId matchedRule;
 
+    @JdbcTypeCode(SqlTypes.NUMERIC)
+    @Column(name = "hold_term_min_days", precision = 4, scale = 0)
+    private Integer holdTermMinDays;
+
+    @JdbcTypeCode(SqlTypes.NUMERIC)
+    @Column(name = "hold_term_max_days", precision = 4, scale = 0)
+    private Integer holdTermMaxDays;
+
+    @Column(name = "hold_term_table_version", length = 20)
+    private String holdTermTableVersion;
+
     @JdbcTypeCode(SqlTypes.TIMESTAMP)
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -66,12 +77,17 @@ public class SignalCallEntry {
         // JPA
     }
 
-    public SignalCallEntry(Ticker ticker, IndicatorSnapshot indicatorSnapshot, SignalRuleId matchedRule) {
+    public SignalCallEntry(Ticker ticker, IndicatorSnapshot indicatorSnapshot, SignalRuleId matchedRule, HoldTerm holdTerm) {
         this.ticker = ticker;
         this.indicatorSnapshot = indicatorSnapshot;
         this.matchedRule = matchedRule;
         this.call = matchedRule.call();
         this.ruleTableVersion = SignalRuleEngine.RULE_TABLE_VERSION;
+        if (holdTerm != null) {
+            this.holdTermMinDays = holdTerm.minDays();
+            this.holdTermMaxDays = holdTerm.maxDays();
+            this.holdTermTableVersion = holdTerm.tableVersion();
+        }
     }
 
     @PrePersist
@@ -103,6 +119,18 @@ public class SignalCallEntry {
 
     public SignalRuleId getMatchedRule() {
         return matchedRule;
+    }
+
+    public Integer getHoldTermMinDays() {
+        return holdTermMinDays;
+    }
+
+    public Integer getHoldTermMaxDays() {
+        return holdTermMaxDays;
+    }
+
+    public String getHoldTermTableVersion() {
+        return holdTermTableVersion;
     }
 
     public Instant getCreatedAt() {
