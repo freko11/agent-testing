@@ -5,6 +5,8 @@ const ERROR_MESSAGES: Record<string, (symbol: string, backendMessage: string) =>
   TICKER_NOT_REGISTERED: (symbol) =>
     `"${symbol}" isn't a registered ticker yet. Register it before looking up price history.`,
   NO_PRICE_DATA: (symbol) => `No price data is available for "${symbol}" right now.`,
+  MARKET_CLOSED: (symbol) =>
+    `The stock market is closed right now, so "${symbol}"'s price history isn't shown as current data. Try again during regular hours (9:30am-4:00pm ET, Mon-Fri).`,
   MARKET_DATA_RATE_LIMITED: () => 'The market data provider is rate-limiting requests. Try again shortly.',
   MARKET_DATA_UNAVAILABLE: (symbol) => `Market data for "${symbol}" is temporarily unavailable. Try again later.`,
 }

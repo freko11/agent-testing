@@ -52,6 +52,12 @@ public class MarketDataExceptionHandler {
                 .body(ApiErrorResponse.of("INVALID_REQUEST", message));
     }
 
+    @ExceptionHandler(MarketClosedException.class)
+    public ResponseEntity<ApiErrorResponse> handleMarketClosed(MarketClosedException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiErrorResponse.of("MARKET_CLOSED", e.getMessage()));
+    }
+
     @ExceptionHandler(MarketDataRateLimitedException.class)
     public ResponseEntity<ApiErrorResponse> handleRateLimited(MarketDataRateLimitedException e) {
         ResponseEntity.BodyBuilder builder = ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS);

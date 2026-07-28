@@ -6,12 +6,21 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
+import java.time.Clock;
+
 @Configuration
 @EnableConfigurationProperties({AlpacaMarketDataProperties.class, BinanceMarketDataProperties.class})
 public class MarketDataClientConfig {
 
     private static final int CONNECT_TIMEOUT_MILLIS = 3_000;
     private static final int READ_TIMEOUT_MILLIS = 5_000;
+
+    // First app-wide Clock consumer (MarketHoursService); move to a dedicated config
+    // if a second, unrelated consumer shows up later.
+    @Bean
+    public Clock clock() {
+        return Clock.systemUTC();
+    }
 
     @Bean
     public RestClient alpacaRestClient(AlpacaMarketDataProperties properties) {

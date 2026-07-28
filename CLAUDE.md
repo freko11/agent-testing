@@ -273,9 +273,55 @@ before looking up price history.`; looking up the already-registered `BTCUSDT`
 immediately after rendered `BTCUSDT: 200 candles from BINANCE.` and correctly cleared
 the prior error. No backend changes were needed for this story.
 
-Next up: E2-F1-S3 (market-hours handling — a stock ticker outside market hours should
-return a distinct "market closed" state instead of stale data), per the build sequence
-in `docs/agile-plan.md`.
+E2-F1-S3 (market-hours handling) is done, closing out F2.1. A `Plan`-agent design gate
+resolved the detection approach: a new `MarketHoursService`
+(`backend/.../marketdata/`) implements a hardcoded NYSE/NASDAQ regular-hours calendar
+(09:30-16:00 `America/New_York`, Mon-Fri, both boundaries inclusive on open/exclusive
+on close) rather than calling Alpaca's separate `/v2/clock` endpoint (a new network
+dependency and outage mode for a fact that's actually deterministic) or pulling in a
+market-hours library (unnecessary dependency for ~15 lines of `java.time` logic, same
+bias as `RetryHelper`'s "deliberately not a pluggable resilience framework"). Holiday
+and early-close awareness are explicitly out of scope for v1 — flagged, not silently
+decided. `MarketHoursService` takes a constructor-injected `java.time.Clock` (new bean
+in `MarketDataClientConfig`, `Clock.systemUTC()` in production) so tests supply
+`Clock.fixed(...)` instead of depending on wall-clock time — the app's first `Clock`
+consumer. `MarketDataService.getPriceHistory` checks it only for `AssetType.STOCK`,
+after the ticker-registration check but before calling `AlpacaMarketDataClient` — so
+an unregistered stock symbol still 404s regardless of hours, Alpaca is never called
+overnight/weekends (a free reliability win), and crypto's routing path never touches
+the check at all (no bypass flag needed). New `MarketClosedException` maps to a new
+`MARKET_CLOSED` error code, HTTP 409 (`MarketDataExceptionHandler`) — 409 fits this
+codebase's existing "conflicts with current system state" precedent
+(`ASSET_TYPE_CONFLICT`), not reused 503 since that means a genuine provider outage,
+not an expected/scheduled closed state. Frontend: one new entry each in
+`api.ts`'s `MarketDataErrorCode` union and `TickerLookup.tsx`'s error-message map,
+following the exact existing pattern. Tested via new `MarketHoursServiceTest` (9 pure
+unit tests, no Spring context, fixed clocks covering open/closed boundaries, weekends,
+and both EDT/EST to prove DST is handled via `ZoneId` rules rather than a hand-rolled
+offset), updated `MarketDataServiceTest` (proves crypto never calls
+`marketHoursService`, and that an unregistered stock still short-circuits to
+`TICKER_NOT_REGISTERED` before any hours check), and a new `MarketDataControllerTest`
+case (409 + `MARKET_CLOSED` body). All 52 backend tests pass; frontend builds clean.
+
+Verified live via the `run` skill against the real running stack: at the time of
+verification (~22:23 ET, after regular hours), `GET /api/tickers/AAPL/price-history`
+correctly returned 409 `MARKET_CLOSED` (both via `curl` and clicking through
+`TickerLookup` in the browser, rendering the new message), while `BTCUSDT` was
+completely unaffected (200, live Binance candles) in both checks. One environment
+gotcha hit during this verification, not a code bug: a stale `java.exe` process from
+an earlier dev session was still holding port 8080 with pre-fix code, so the first
+verification round silently tested against old behavior (`AAPL` returned a live 503
+from a real Alpaca call instead of 409, since the old code lacked the hours check).
+Caught via `Web server failed to start. Port 8080 was already in use` in the new
+process's own log after `mvnw spring-boot:run` — worth checking for a leftover backend
+process (`netstat -ano | grep :8080`) before trusting a live verification's result if
+`/health` was already returning 200 suspiciously fast on startup.
+
+Next up: E2-F2-S1 (RSI, MACD, and moving-average crossover computed for a ticker),
+starting F2.2 (technical indicator calculation) — per the build sequence in
+`docs/agile-plan.md`, this is also where the indicator-library choice (`ta4j` vs.
+hand-rolled) deliberately left open in the "Assumptions to confirm" section gets
+resolved via the `Explore` agent.
 
 Beyond E1/E2-F1-S1, no other source code yet. An agile delivery plan for the project has been drafted at
 `docs/agile-plan.md` — an auto-trade signal dashboard (React frontend, Java/Spring

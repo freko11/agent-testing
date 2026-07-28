@@ -81,6 +81,16 @@ class MarketDataControllerTest {
     }
 
     @Test
+    void priceHistory_marketClosed_returns409() throws Exception {
+        when(marketDataService.getPriceHistory(eq("AAPL"), anyInt()))
+                .thenThrow(new MarketClosedException("AAPL"));
+
+        mockMvc.perform(get("/api/tickers/AAPL/price-history"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("MARKET_CLOSED"));
+    }
+
+    @Test
     void priceHistory_providerUnavailable_returns503() throws Exception {
         when(marketDataService.getPriceHistory(eq("AAPL"), anyInt()))
                 .thenThrow(new MarketDataUnavailableException(Broker.ALPACA, "boom"));

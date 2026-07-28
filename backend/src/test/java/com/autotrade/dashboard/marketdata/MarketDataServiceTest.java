@@ -33,6 +33,8 @@ class MarketDataServiceTest {
     @Mock
     private TickerService tickerService;
     @Mock
+    private MarketHoursService marketHoursService;
+    @Mock
     private MarketDataClient alpacaClient;
     @Mock
     private MarketDataClient binanceClient;
@@ -45,13 +47,14 @@ class MarketDataServiceTest {
         lenient().when(alpacaClient.broker()).thenReturn(Broker.ALPACA);
         lenient().when(binanceClient.supportedAssetType()).thenReturn(AssetType.CRYPTO);
         lenient().when(binanceClient.broker()).thenReturn(Broker.BINANCE);
-        service = new MarketDataService(tickerService, List.of(alpacaClient, binanceClient));
+        service = new MarketDataService(tickerService, marketHoursService, List.of(alpacaClient, binanceClient));
     }
 
     @Test
-    void stockTicker_routesToAlpaca() {
+    void stockTicker_marketOpen_routesToAlpaca() {
         Ticker ticker = new Ticker("AAPL", AssetType.STOCK, "NASDAQ");
         when(tickerService.findRegistered("AAPL")).thenReturn(Optional.of(ticker));
+        when(marketHoursService.isRegularMarketOpen()).thenReturn(true);
         List<Candle> candles = List.of(new Candle(Instant.now(), BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE,
                 BigDecimal.ONE, BigDecimal.ONE));
         when(alpacaClient.fetchRecentCandles(eq("AAPL"), eq(50))).thenReturn(candles);
@@ -64,7 +67,18 @@ class MarketDataServiceTest {
     }
 
     @Test
-    void cryptoTicker_routesToBinance() {
+    void stockTicker_marketClosed_throwsWithoutCallingAlpacaClient() {
+        Ticker ticker = new Ticker("AAPL", AssetType.STOCK, "NASDAQ");
+        when(tickerService.findRegistered("AAPL")).thenReturn(Optional.of(ticker));
+        when(marketHoursService.isRegularMarketOpen()).thenReturn(false);
+
+        assertThrows(MarketClosedException.class, () -> service.getPriceHistory("AAPL", 50));
+
+        verify(alpacaClient, never()).fetchRecentCandles(any(), anyInt());
+    }
+
+    @Test
+    void cryptoTicker_routesToBinance_neverChecksMarketHours() {
         Ticker ticker = new Ticker("BTCUSDT", AssetType.CRYPTO, null);
         when(tickerService.findRegistered("BTCUSDT")).thenReturn(Optional.of(ticker));
         List<Candle> candles = List.of(new Candle(Instant.now(), BigDecimal.TEN, BigDecimal.TEN, BigDecimal.TEN,
@@ -76,15 +90,17 @@ class MarketDataServiceTest {
         assertEquals(Broker.BINANCE, result.source());
         assertEquals(candles, result.candles());
         verify(alpacaClient, never()).fetchRecentCandles(any(), anyInt());
+        verify(marketHoursService, never()).isRegularMarketOpen();
     }
 
     @Test
-    void unregisteredTicker_throwsWithoutCallingAnyClient() {
+    void unregisteredTicker_throwsWithoutCallingAnyClientOrCheckingMarketHours() {
         when(tickerService.findRegistered("ZZZ")).thenReturn(Optional.empty());
 
         assertThrows(TickerNotRegisteredException.class, () -> service.getPriceHistory("ZZZ", 50));
 
         verify(alpacaClient, never()).fetchRecentCandles(any(), anyInt());
         verify(binanceClient, never()).fetchRecentCandles(any(), anyInt());
+        verify(marketHoursService, never()).isRegularMarketOpen();
     }
 }

@@ -14,10 +14,13 @@ import java.util.Map;
 public class MarketDataService {
 
     private final TickerService tickerService;
+    private final MarketHoursService marketHoursService;
     private final Map<AssetType, MarketDataClient> clientsByAssetType;
 
-    public MarketDataService(TickerService tickerService, List<MarketDataClient> clients) {
+    public MarketDataService(TickerService tickerService, MarketHoursService marketHoursService,
+            List<MarketDataClient> clients) {
         this.tickerService = tickerService;
+        this.marketHoursService = marketHoursService;
         this.clientsByAssetType = new EnumMap<>(AssetType.class);
         for (MarketDataClient client : clients) {
             clientsByAssetType.put(client.supportedAssetType(), client);
@@ -27,6 +30,10 @@ public class MarketDataService {
     public PriceHistoryResult getPriceHistory(String symbol, int limit) {
         Ticker ticker = tickerService.findRegistered(symbol)
                 .orElseThrow(() -> new TickerNotRegisteredException(symbol));
+
+        if (ticker.getAssetType() == AssetType.STOCK && !marketHoursService.isRegularMarketOpen()) {
+            throw new MarketClosedException(ticker.getSymbol());
+        }
 
         MarketDataClient client = clientsByAssetType.get(ticker.getAssetType());
         if (client == null) {
