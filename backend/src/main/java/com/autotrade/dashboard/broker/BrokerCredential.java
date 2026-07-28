@@ -56,9 +56,11 @@ public class BrokerCredential {
     @Column(name = "is_active", nullable = false)
     private boolean isActive = true;
 
+    @JdbcTypeCode(SqlTypes.TIMESTAMP)
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @JdbcTypeCode(SqlTypes.TIMESTAMP)
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 

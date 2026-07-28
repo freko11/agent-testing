@@ -36,6 +36,7 @@ public class Ticker {
     @Column(name = "exchange", length = 20)
     private String exchange;
 
+    @JdbcTypeCode(SqlTypes.TIMESTAMP)
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

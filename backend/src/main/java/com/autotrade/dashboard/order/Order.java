@@ -114,15 +114,19 @@ public class Order {
     @Column(name = "rejection_reason", length = 500)
     private String rejectionReason;
 
+    @JdbcTypeCode(SqlTypes.TIMESTAMP)
     @Column(name = "submitted_at")
     private Instant submittedAt;
 
+    @JdbcTypeCode(SqlTypes.TIMESTAMP)
     @Column(name = "filled_at")
     private Instant filledAt;
 
+    @JdbcTypeCode(SqlTypes.TIMESTAMP)
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @JdbcTypeCode(SqlTypes.TIMESTAMP)
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 

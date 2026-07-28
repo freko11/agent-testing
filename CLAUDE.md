@@ -183,10 +183,79 @@ callers of `readDecrypted()`.
 This closes out F1.3 (secrets & config management) and E1-F1 through E1-F4 except
 E1-F4 itself (testing strategy — E1-F4-S1's mock-broker E2E test and E1-F4-S2's
 indicator fixtures are still open, deferred since they're more naturally written once
-E2's signal engine and E4.1's mock adapter exist to exercise). Next up: E2 (Signal
-Engine), per the build sequence in `docs/agile-plan.md`.
+E2's signal engine and E4.1's mock adapter exist to exercise).
 
-Beyond that, no other source code yet. An agile delivery plan for the project has been drafted at
+E2-F1-S1 (ticker price-history ingestion) is done, starting E2 (Signal Engine). A
+`Plan`-agent design gate resolved the two assumptions `docs/agile-plan.md` had
+deliberately left open for this story: **a ticker must be explicitly registered with
+its asset type via `POST /api/tickers` before price history can be fetched for it**
+(no symbol-shape heuristic — `Ticker.assetType` is already a mandatory schema column,
+and this app favors deterministic rules over fuzzy inference everywhere else); and
+Alpaca market-data credentials are simple env-var config (`ALPACA_API_KEY`/
+`ALPACA_API_SECRET`, new in `.env.example`), deliberately *not* routed through
+`BrokerCredentialService` — that service is scoped to E4's trading credentials, tied
+to a "connect my account" flow that doesn't exist yet.
+
+New `com.autotrade.dashboard.marketdata` package: `MarketDataClient` interface
+(intentionally separate from E4's future `BrokerAdapter` — reading public candles and
+placing money-moving orders don't share enough concerns to justify one interface),
+`AlpacaMarketDataClient` (`GET /v2/stocks/bars`, auth required even for read-only
+data) and `BinanceMarketDataClient` (`GET /api/v3/klines`, fully public) implement it;
+`MarketDataService` routes by `Ticker.assetType` to the right client; `RetryHelper`
+gives both clients one bounded retry (I/O errors, 5xx, 429) — deliberately not a
+pluggable resilience framework, since E4-F1-S2 owns the trading-path retry/backoff
+contract with different requirements (idempotency). `GET
+/api/tickers/{symbol}/price-history?limit=N` (default 200, bounded 1–1000, daily
+candles only for v1) returns `{ticker, source, candles}`; `MarketDataExceptionHandler`
+(the app's first `@RestControllerAdvice`) maps ticker/market-data failures to
+structured JSON errors: 404 `TICKER_NOT_REGISTERED`/`NO_PRICE_DATA`, 409
+`ASSET_TYPE_CONFLICT`, 429 `MARKET_DATA_RATE_LIMITED` (echoes `Retry-After`), 503
+`MARKET_DATA_UNAVAILABLE`. New `com.autotrade.dashboard.ticker.TickerService`/
+`TickerController` handle registration (idempotent re-registration, 409 on asset-type
+conflict, symbols normalized to uppercase). Every profile (`local`/`paper`/`prod`/
+test) got `marketdata.alpaca.*`/`marketdata.binance.*` properties — `paper` uses the
+real public Binance API (not testnet) for indicator accuracy, an intentional,
+flagged divergence from E4/E5's Binance *testnet* trading prices. Tested via
+`AlpacaMarketDataClientTest`/`BinanceMarketDataClientTest` (`MockRestServiceServer`
+against checked-in fixture JSON, no live HTTP in CI), `MarketDataServiceTest`
+(Mockito, asset-type routing), `TickerServiceTest` (H2, find-or-register/conflict),
+and `MarketDataControllerTest`/`TickerControllerTest` (`@WebMvcTest`+`MockMvc`,
+status codes and error bodies) — 41 backend tests total, `./mvnw verify` green.
+
+Verified live end-to-end via the `run` skill against the real Docker Oracle XE
+container and the real public Binance API (no mocking): registered `AAPL`
+(STOCK) and `BTCUSDT` (CRYPTO) via `POST /api/tickers`, then `GET
+.../price-history` — `BTCUSDT` returned real live daily candles from Binance
+(200), `AAPL` correctly 503'd with `MARKET_DATA_UNAVAILABLE` since no real
+`ALPACA_API_KEY` is configured on this dev machine (expected — Alpaca can't be
+verified live without real paper-trading credentials), and an unregistered
+symbol correctly 404'd with `TICKER_NOT_REGISTERED`.
+
+A real-Oracle-only bug surfaced during that live verification, affecting every
+`Instant`-typed column in the schema, not just this story's new code: Hibernate 7
+maps `java.time.Instant` fields to a JDBC type that requests `OffsetDateTime` from
+the driver, but every timestamp column in `V1__init_core_schema.sql` is a plain
+`TIMESTAMP(6)` with **no** timezone — Oracle's JDBC driver (ojdbc11) refused with
+`ORA-18716: {0} not in any time zone` the moment anything actually read such a
+column back (H2's Oracle-compatibility mode never caught this, since this is the
+first story to read an `Instant` column back through a live query in normal app
+flow — earlier live-Oracle checks only exercised `/health` and the login flow, never
+a repository read touching one of these columns). Fixed by adding
+`@JdbcTypeCode(SqlTypes.TIMESTAMP)` to all nine affected fields across four entities
+(`Ticker.createdAt`; `IndicatorSnapshot.snapshotAt`/`createdAt`;
+`BrokerCredential.createdAt`/`updatedAt`; `Order.submittedAt`/`filledAt`/
+`createdAt`/`updatedAt`), which tells Hibernate to read them as plain
+non-timezone-aware timestamps instead. If a future entity adds an `Instant` column
+mapped to a plain `TIMESTAMP` (not `TIMESTAMP WITH [LOCAL] TIME ZONE`), it needs
+this same annotation — verified live-Oracle re-read of `Ticker.createdAt` succeeds
+after the fix; full test suite (41 tests, H2) still green since H2's Oracle-mode
+never reproduced this in the first place.
+
+Next up: E2-F1-S2 (clear error for an unregistered ticker — much of this is already
+in place via `TICKER_NOT_REGISTERED`, so this is mostly a frontend/UX story now) or
+E2-F1-S3 (market-hours handling), per the build sequence in `docs/agile-plan.md`.
+
+Beyond E1/E2-F1-S1, no other source code yet. An agile delivery plan for the project has been drafted at
 `docs/agile-plan.md` — an auto-trade signal dashboard (React frontend, Java/Spring
 Boot backend, Oracle Database via local Oracle XE, broker adapters starting with
 Alpaca for stocks and Binance for crypto). It covers epics/features/user stories

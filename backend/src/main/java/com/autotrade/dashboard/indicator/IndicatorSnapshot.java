@@ -43,6 +43,7 @@ public class IndicatorSnapshot {
     @JoinColumn(name = "ticker_id", nullable = false)
     private Ticker ticker;
 
+    @JdbcTypeCode(SqlTypes.TIMESTAMP)
     @Column(name = "snapshot_at", nullable = false)
     private Instant snapshotAt;
 
@@ -80,6 +81,7 @@ public class IndicatorSnapshot {
     @Column(name = "market_data_source", nullable = false, length = 20)
     private Broker marketDataSource;
 
+    @JdbcTypeCode(SqlTypes.TIMESTAMP)
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
