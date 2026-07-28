@@ -104,4 +104,68 @@ class IndicatorServiceTest {
 
         verify(indicatorSnapshotRepository, never()).save(any());
     }
+
+    @Test
+    void chartData_sufficientCandles_returnsOneAlignedPointPerIndexFromMinCandles_withoutPersisting() {
+        Ticker ticker = new Ticker("AAPL", AssetType.STOCK, "NASDAQ");
+        List<Candle> candles = IndicatorTestFixtures.candles40();
+        when(marketDataService.getPriceHistory("AAPL", 200))
+                .thenReturn(new PriceHistoryResult(ticker, Broker.ALPACA, candles));
+
+        ChartDataResponse response = service.getChartData("AAPL", 200);
+
+        assertEquals(candles, response.candles());
+        assertEquals(candles.size() - IndicatorService.MIN_CANDLES_FOR_INDICATORS + 1, response.indicators().size());
+
+        ChartIndicatorPoint first = response.indicators().get(0);
+        List<Candle> firstWindow = candles.subList(0, IndicatorService.MIN_CANDLES_FOR_INDICATORS);
+        assertEquals(candles.get(IndicatorService.MIN_CANDLES_FOR_INDICATORS - 1).timestamp(), first.timestamp());
+        assertEquals(RsiCalculator.calculate(firstWindow, RsiCalculator.DEFAULT_PERIOD), first.rsi());
+        MovingAverageResult firstMa = MovingAverageCrossoverCalculator.calculate(firstWindow,
+                MovingAverageCrossoverCalculator.DEFAULT_SHORT_PERIOD, MovingAverageCrossoverCalculator.DEFAULT_LONG_PERIOD);
+        assertEquals(firstMa.shortMa(), first.maShort());
+        assertEquals(firstMa.longMa(), first.maLong());
+
+        ChartIndicatorPoint last = response.indicators().get(response.indicators().size() - 1);
+        assertEquals(candles.get(candles.size() - 1).timestamp(), last.timestamp());
+        assertEquals(IndicatorTestFixtures.RSI_14_FULL, last.rsi());
+        assertEquals(IndicatorTestFixtures.SMA_10_FULL, last.maShort());
+        assertEquals(IndicatorTestFixtures.SMA_30_FULL, last.maLong());
+
+        verify(indicatorSnapshotRepository, never()).save(any());
+    }
+
+    @Test
+    void chartData_fewerThan34Candles_returnsCandlesWithEmptyIndicatorSeries() {
+        Ticker ticker = new Ticker("AAPL", AssetType.STOCK, "NASDAQ");
+        List<Candle> candles = IndicatorTestFixtures.candlesFirst(33);
+        when(marketDataService.getPriceHistory("AAPL", 200))
+                .thenReturn(new PriceHistoryResult(ticker, Broker.ALPACA, candles));
+
+        ChartDataResponse response = service.getChartData("AAPL", 200);
+
+        assertEquals(33, response.candles().size());
+        assertEquals(List.of(), response.indicators());
+        verify(indicatorSnapshotRepository, never()).save(any());
+    }
+
+    @Test
+    void chartData_unregisteredTicker_propagates() {
+        when(marketDataService.getPriceHistory(eq("ZZZ"), eq(200)))
+                .thenThrow(new TickerNotRegisteredException("ZZZ"));
+
+        assertThrows(TickerNotRegisteredException.class, () -> service.getChartData("ZZZ", 200));
+
+        verify(indicatorSnapshotRepository, never()).save(any());
+    }
+
+    @Test
+    void chartData_marketClosed_propagates() {
+        when(marketDataService.getPriceHistory(eq("AAPL"), eq(200)))
+                .thenThrow(new MarketClosedException("AAPL"));
+
+        assertThrows(MarketClosedException.class, () -> service.getChartData("AAPL", 200));
+
+        verify(indicatorSnapshotRepository, never()).save(any());
+    }
 }

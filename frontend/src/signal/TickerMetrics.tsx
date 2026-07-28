@@ -1,4 +1,6 @@
 import { useState, type FormEvent } from 'react'
+import { fetchChartData, type ChartDataResponse } from '../chart/api'
+import PriceChart from '../chart/PriceChart'
 import { MarketDataError } from '../marketdata/api'
 import { fetchSignal, type MovingAverageResult, type SignalResponse } from './api'
 
@@ -100,6 +102,8 @@ function TickerMetrics() {
   const [symbol, setSymbol] = useState('')
   const [result, setResult] = useState<SignalResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [chartData, setChartData] = useState<ChartDataResponse | null>(null)
+  const [chartError, setChartError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(event: FormEvent) {
@@ -110,13 +114,31 @@ function TickerMetrics() {
     setLoading(true)
     setError(null)
     setResult(null)
-    try {
-      setResult(await fetchSignal(trimmed))
-    } catch (err) {
-      setError(err instanceof MarketDataError ? describeError(trimmed, err) : 'Something went wrong. Please try again.')
-    } finally {
-      setLoading(false)
+    setChartError(null)
+    setChartData(null)
+
+    // allSettled, not all: the chart and the signal/stat-tiles are two independent fetches
+    // (chart-data never 422s INSUFFICIENT_PRICE_HISTORY, unlike /signal), so one failing
+    // must not blank out the other.
+    const [signalOutcome, chartOutcome] = await Promise.allSettled([fetchSignal(trimmed), fetchChartData(trimmed)])
+
+    if (signalOutcome.status === 'fulfilled') {
+      setResult(signalOutcome.value)
+    } else {
+      const reason = signalOutcome.reason
+      setError(reason instanceof MarketDataError ? describeError(trimmed, reason) : 'Something went wrong. Please try again.')
     }
+
+    if (chartOutcome.status === 'fulfilled') {
+      setChartData(chartOutcome.value)
+    } else {
+      const reason = chartOutcome.reason
+      setChartError(
+        reason instanceof MarketDataError ? describeError(trimmed, reason) : 'Something went wrong loading the chart.',
+      )
+    }
+
+    setLoading(false)
   }
 
   return (
@@ -138,6 +160,15 @@ function TickerMetrics() {
       </form>
       {error && <p role="alert">{error}</p>}
       {result && <TickerMetricsResult signal={result} />}
+      {chartError && <p role="alert">{chartError}</p>}
+      {chartData && chartData.candles.length > 0 && (
+        <div className="price-chart-container">
+          <PriceChart candles={chartData.candles} indicators={chartData.indicators} />
+          {chartData.indicators.length === 0 && (
+            <p className="chart-note">Showing price only — not enough history yet for indicator overlays.</p>
+          )}
+        </div>
+      )}
     </section>
   )
 }

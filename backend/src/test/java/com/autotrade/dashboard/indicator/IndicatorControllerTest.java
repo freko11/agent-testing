@@ -1,7 +1,9 @@
 package com.autotrade.dashboard.indicator;
 
 import com.autotrade.dashboard.broker.Broker;
+import com.autotrade.dashboard.marketdata.Candle;
 import com.autotrade.dashboard.marketdata.MarketClosedException;
+import com.autotrade.dashboard.marketdata.TickerSummary;
 import com.autotrade.dashboard.ticker.AssetType;
 import com.autotrade.dashboard.ticker.Ticker;
 import com.autotrade.dashboard.ticker.TickerNotRegisteredException;
@@ -14,6 +16,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
@@ -105,5 +108,64 @@ class IndicatorControllerTest {
         mockMvc.perform(get("/api/tickers/NEWCO/indicators"))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.error").value("INSUFFICIENT_PRICE_HISTORY"));
+    }
+
+    @Test
+    void chartData_registeredTicker_returns200WithCandlesAndIndicators() throws Exception {
+        Ticker ticker = new Ticker("AAPL", AssetType.STOCK, "NASDAQ");
+        Candle candle = new Candle(Instant.parse("2026-02-09T00:00:00Z"), new BigDecimal("113.10"),
+                new BigDecimal("113.10"), new BigDecimal("113.10"), new BigDecimal("113.10"), BigDecimal.valueOf(1_000_000));
+        ChartIndicatorPoint point = new ChartIndicatorPoint(candle.timestamp(), new BigDecimal("77.8751"),
+                new BigDecimal("111.92000000"), new BigDecimal("108.94000000"));
+        ChartDataResponse response = new ChartDataResponse(TickerSummary.from(ticker), Broker.ALPACA,
+                List.of(candle), List.of(point));
+        when(indicatorService.getChartData(eq("AAPL"), anyInt())).thenReturn(response);
+
+        mockMvc.perform(get("/api/tickers/AAPL/chart-data").param("limit", "200"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ticker.symbol").value("AAPL"))
+                .andExpect(jsonPath("$.source").value("ALPACA"))
+                .andExpect(jsonPath("$.candles[0].close").value(113.10))
+                .andExpect(jsonPath("$.indicators[0].rsi").value(77.8751))
+                .andExpect(jsonPath("$.indicators[0].maShort").value(111.92000000))
+                .andExpect(jsonPath("$.indicators[0].maLong").value(108.94000000));
+    }
+
+    @Test
+    void chartData_limitBelowMinimum_returns400WithoutCallingService() throws Exception {
+        mockMvc.perform(get("/api/tickers/AAPL/chart-data").param("limit", "0"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("INVALID_REQUEST"));
+
+        verifyNoInteractions(indicatorService);
+    }
+
+    @Test
+    void chartData_limitAboveMaximum_returns400WithoutCallingService() throws Exception {
+        mockMvc.perform(get("/api/tickers/AAPL/chart-data").param("limit", "5000"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("INVALID_REQUEST"));
+
+        verifyNoInteractions(indicatorService);
+    }
+
+    @Test
+    void chartData_unregisteredTicker_returns404() throws Exception {
+        when(indicatorService.getChartData(eq("ZZZ"), anyInt()))
+                .thenThrow(new TickerNotRegisteredException("ZZZ"));
+
+        mockMvc.perform(get("/api/tickers/ZZZ/chart-data"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("TICKER_NOT_REGISTERED"));
+    }
+
+    @Test
+    void chartData_marketClosed_returns409() throws Exception {
+        when(indicatorService.getChartData(eq("AAPL"), anyInt()))
+                .thenThrow(new MarketClosedException("AAPL"));
+
+        mockMvc.perform(get("/api/tickers/AAPL/chart-data"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("MARKET_CLOSED"));
     }
 }

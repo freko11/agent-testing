@@ -802,24 +802,148 @@ reachable by construction) — the `signal-badge--buy` CSS class and the
 verified `SELL` path, just parameterized on `call`, so this is a structural
 rather than a live-observed gap; flagged rather than silently assumed.
 
-This closes out F3.1 in full. E3-F2-S1 (price chart with MA/RSI overlays) is
-next — the last story before E3-F3-S1's stretch watchlist and E4's broker
-adapter layer.
+This closes out F3.1 in full.
 
-Beyond E1/E2, no other source code yet. An agile delivery plan for the project has been drafted at
-`docs/agile-plan.md` — an auto-trade signal dashboard (React frontend, Java/Spring
-Boot backend, Oracle Database via local Oracle XE, broker adapters starting with
-Alpaca for stocks and Binance for crypto). It covers epics/features/user stories
-(INVEST format) and the recommended subagent/skill usage for solo-driven
-implementation. The plan was expanded with stories closing gaps found in a review:
-CI pipeline, DB migrations, app auth, a testing strategy, market-hours handling,
-backtesting, adapter rate-limit/retry/outage handling, trade export, notifications,
-a live-mode consent step, a portfolio-level exposure cap, rule-versioned audit
-entries, and DB backup/restore. A consistency pass then fixed a stale story count,
-extended the Plan-agent/`code-review` gates to cover E6's guardrail logic (not just
-E4/E5), and flagged that E5's notification story softly depends on the stretch
-watchlist feature. There are no build, lint, or test commands yet since no code has
-been written.
+E3-F2-S1 (price chart with MA/RSI overlays) is done, closing out F3.2 — the
+last story before E3-F3-S1's stretch watchlist and E4's broker adapter layer.
+An Explore agent first compared charting options (`lightweight-charts` v5 vs.
+`recharts` vs. `visx` vs. hand-rolled SVG): `recharts` has no real candlestick
+support (would need a hacked custom shape renderer) and no synced multi-pane
+layout; `visx`/hand-rolled SVG would mean re-deriving scale/axis/resize logic
+this codebase has no reason to reinvent, unlike the genuinely-simple
+`RetryHelper`/`MarketHoursService`/hand-rolled-indicator precedents — a full
+candlestick-plus-subplot chart crosses into real reinvented-wheel territory.
+`lightweight-charts` v5 won: native multi-pane support (`chart.addPane()`)
+covers the RSI-subplot-with-its-own-axis requirement directly, smallest
+bundle cost of the real alternatives, and no React wrapper dependency needed
+since its imperative API drives cleanly from a plain `useRef`/`useEffect`
+component. A `Plan`-agent design gate then resolved the story's real crux:
+where do historical MA/RSI *series* come from, given `/indicators`/`/signal`
+only ever return the latest snapshot. Decision: a new backend endpoint
+(`GET /api/tickers/{symbol}/chart-data`), not client-side reimplementation of
+Wilder RSI/SMA in TypeScript (would risk the chart silently disagreeing with
+the stat tiles directly above it) and not three independent frontend fetches
+(real rate-limit exposure per E4-F1-S2's concern, plus a race between two
+independently-timed candle fetches).
+
+New backend: `IndicatorService.getChartData(symbol, limit)` calls
+`MarketDataService.getPriceHistory` once, returns **all** fetched candles
+always (unlike `/indicators`/`/signal`, this never throws
+`InsufficientPriceHistoryException` — a candles-only chart is still a
+meaningful render), and walks forward from index 33 computing
+`RsiCalculator`/`MovingAverageCrossoverCalculator` over each growing
+`candles.subList(0, i+1)` window (the same anchored-at-index-0 pattern
+`BacktestHarness`, E2-F4-S1, already established/validated at ~1000-candle
+scale) to build one `ChartIndicatorPoint(timestamp, rsi, maShort, maLong)`
+per index — empty below 34 candles. **No persistence** — this is a read-only
+diagnostic view, not the audited signal-computation path, matching
+`BacktestHarness`'s precedent of never touching the real audit trail. New
+`ChartDataResponse`/`ChartIndicatorPoint` records; `IndicatorController`'s
+new route validates `limit` 1-1000 (not `/indicators`' 34-1000 floor) — no
+Flyway migration, no `MarketDataExceptionHandler` changes (chart-data can
+only ever surface the same `TICKER_NOT_REGISTERED`/`MARKET_CLOSED`/
+`NO_PRICE_DATA`/rate-limit/unavailable failures every other endpoint does).
+MACD/volatility/volume were deliberately excluded from this endpoint — the
+AC says "MA lines, RSI subplot" only, and adding more would be unrequested
+scope creep.
+
+New frontend `frontend/src/chart/` package (mirrors the `marketdata`/
+`indicator`/`signal` split): `api.ts` (`fetchChartData`, reusing
+`MarketDataError`/`MarketDataErrorCode` rather than duplicating the
+error-parsing branch — chart-data can never throw `INSUFFICIENT_PRICE_HISTORY`
+so no new error code was needed), `mergeIndicators.ts` (pure functions
+converting candles/indicator points into `lightweight-charts`' `{time, value}`/
+OHLC shapes — `time` as a business-day string sliced from the midnight-UTC ISO
+timestamp, since daily bars need no truer time-of-day resolution), `palette.ts`
+(plain hex constants for light/dark, since `lightweight-charts` needs concrete
+JS colors and can't consume the app's `light-dark()` CSS — candle up/down
+colors intentionally match the existing `--buy`/`--sell` badge hues, plus two
+new colorblind-safe blue/violet hues for the non-directional MA-10/MA-30
+overlay lines, picked via `window.matchMedia('(prefers-color-scheme: dark)')`),
+and `PriceChart.tsx` (the `useRef`/`useEffect` wrapper: candlestick + 2 line
+series on the price pane, `chart.addPane()` for RSI with 30/70 dashed
+reference price-lines, `autoSize: true` for width-responsiveness against a
+CSS-fixed-height container — deliberately width-responsive/height-fixed, since
+squeezing the RSI pane arbitrarily short on a narrow window would make it
+illegible; full teardown-and-rebuild via `chart.remove()` on every prop
+change, acceptable since a new ticker lookup has no zoom/pan state worth
+preserving). `TickerMetrics.tsx` now fires `fetchSignal` and `fetchChartData`
+concurrently via `Promise.allSettled` (not `Promise.all`) so the chart and the
+badge/stat-tiles fail independently — a chart-data-specific transient failure
+(rate-limited/unavailable) doesn't blank out a working signal call and vice
+versa; a supplementary "Showing price only — not enough history yet for
+indicator overlays" note renders under the chart when `indicators` comes back
+empty. `index.css` gained `.price-chart-container`/`.price-chart` (fixed
+420px height, `light-dark()` border matching `.stat-tile`)/`.chart-note`
+rules. `layout.attributionLogo` was left at its default (enabled) to satisfy
+`lightweight-charts`' Apache-2.0-plus-attribution license clause the Explore
+agent flagged, at zero extra UI cost.
+
+This story also introduced **Vitest** as the frontend's first test runner
+(`vitest.config.ts`, `npm test`) — a small, narrowly-scoped addition the Plan
+agent flagged as a recommendation rather than a silent scope add: this is the
+first genuinely non-trivial, non-DOM frontend logic in the app (unlike
+`TickerMetrics`' straightforward fetch+render), and a real canvas-rendering
+chart can't be regression-tested without a real browser (jsdom doesn't fully
+implement the 2D canvas context) — the `run` skill's live browser click-through
+remains the verification method for the chart's actual visual rendering, same
+as every prior E3 story. `mergeIndicators.test.ts` (4 tests) covers the OHLC
+string-to-number conversion, business-day timestamp formatting, and the
+empty-indicator-series edge case. Backend: `IndicatorServiceTest`/
+`IndicatorControllerTest` gained 8 new tests (aligned-series correctness
+against the exact indices `IndicatorService.MIN_CANDLES_FOR_INDICATORS`
+implies, empty-series-below-34-candles, no-persistence assertion, and
+inherited-error-propagation cases) — 133 backend tests total, `./mvnw verify`
+green; `npm run build`/`npm run lint`/`npm test` all pass clean, same
+pre-existing unrelated `AuthContext.tsx` lint warning as every prior story.
+
+Verified live via the `run` skill against the real running stack (Docker
+Oracle XE + real public Binance API, no mocking; logged in through E1-F3-S2's
+session-cookie auth) — one gotcha hit before verification, a repeat of the
+pattern this file has flagged since E2-F1-S3/E2-F2-S1: **two** stale `java.exe`
+processes in a row were still holding port 8080 from earlier sessions (the
+first `netstat`/`taskkill` cleared one, but a second had also bound the port —
+likely from an earlier improperly-backgrounded `nohup` attempt in this same
+session whose child process outlived the shell it was launched from); both
+killed and the backend restarted clean before trusting `/health`. `BTCUSDT`
+rendered the HOLD badge alongside a chart showing real live candles, both MA
+lines (10-day blue, 30-day violet), and the RSI subplot with its own 0-100
+axis and dashed 30/70 reference lines — all internally consistent with the
+stat tiles above it. `SOLUSDT` rendered the SELL/orange badge with a
+matching orange-down-candle chart, proving the palette-sync between badge
+and chart. `NOTREAL` and after-hours `AAPL` both correctly rendered the
+*same* error message twice (once from the signal fetch, once from the
+independent chart fetch) rather than a blank chart area — a minor visual
+redundancy from the two-independent-fetches design, flagged as acceptable
+rather than a bug, since each fetch failing identically for the same
+underlying reason is expected, not a fault. Browser console showed no
+errors, confirming the chart's create/cleanup `useEffect` cycle is idempotent
+under React 19 `StrictMode`'s dev-mode double-invoke. The narrow-viewport
+`autoSize` resize behavior could not be independently observed in this
+session's browser-automation environment (window resize didn't visibly
+affect the captured viewport) — relies on `lightweight-charts`' own
+documented `ResizeObserver`-backed `autoSize` behavior plus the container's
+`width: 100%` CSS, flagged as a structural rather than live-observed check,
+same disclosure style as E3-F1-S2's un-observed BUY-badge case.
+
+This closes out E3 (Dashboard/Frontend) except E3-F3-S1's stretch watchlist.
+E4 (Broker Adapter Layer) is next.
+
+The original agile delivery plan for the project (drafted before any of E1-E3 above
+was implemented) lives at `docs/agile-plan.md` — an auto-trade signal dashboard
+(React frontend, Java/Spring Boot backend, Oracle Database via local Oracle XE,
+broker adapters starting with Alpaca for stocks and Binance for crypto). It covers
+epics/features/user stories (INVEST format) and the recommended subagent/skill usage
+for solo-driven implementation. The plan was expanded with stories closing gaps found
+in a review: CI pipeline, DB migrations, app auth, a testing strategy, market-hours
+handling, backtesting, adapter rate-limit/retry/outage handling, trade export,
+notifications, a live-mode consent step, a portfolio-level exposure cap,
+rule-versioned audit entries, and DB backup/restore. A consistency pass then fixed a
+stale story count, extended the Plan-agent/`code-review` gates to cover E6's
+guardrail logic (not just E4/E5), and flagged that E5's notification story softly
+depends on the stretch watchlist feature. See the per-story entries above for actual
+build/lint/test commands and architecture — this paragraph describes the plan
+document only, not current repo state.
 
 Project-specific subagent definitions now live in `.claude/agents/` — `Plan.md`,
 `Explore.md`, and `general-purpose.md` — customizing the three subagent roles the
