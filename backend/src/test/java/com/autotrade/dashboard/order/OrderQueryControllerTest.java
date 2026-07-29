@@ -12,12 +12,16 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -89,5 +93,37 @@ class OrderQueryControllerTest {
         mockMvc.perform(post("/api/orders/9/refresh"))
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.error").value("ORDER_REFRESH_UNAVAILABLE"));
+    }
+
+    @Test
+    void exportOrders_success_returnsCsvWithAttachmentHeader() throws Exception {
+        when(orderService.exportOrdersCsv(eq(LocalDate.parse("2026-07-01")), eq(LocalDate.parse("2026-07-10")), isNull()))
+                .thenReturn("Order ID,Created At (UTC)\r\n1,2026-07-05T00:00:00Z\r\n");
+
+        mockMvc.perform(get("/api/orders/export").param("start", "2026-07-01").param("end", "2026-07-10"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "text/csv;charset=UTF-8"))
+                .andExpect(header().string("Content-Disposition", "attachment; filename=\"trade-history-2026-07-01-to-2026-07-10.csv\""))
+                .andExpect(content().string("Order ID,Created At (UTC)\r\n1,2026-07-05T00:00:00Z\r\n"));
+    }
+
+    @Test
+    void exportOrders_withMode_passesModeThrough() throws Exception {
+        when(orderService.exportOrdersCsv(eq(LocalDate.parse("2026-07-01")), eq(LocalDate.parse("2026-07-10")), eq(TradingMode.PAPER)))
+                .thenReturn("Order ID,Created At (UTC)\r\n");
+
+        mockMvc.perform(get("/api/orders/export")
+                        .param("start", "2026-07-01").param("end", "2026-07-10").param("mode", "PAPER"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void exportOrders_startAfterEnd_returns400() throws Exception {
+        when(orderService.exportOrdersCsv(eq(LocalDate.parse("2026-07-10")), eq(LocalDate.parse("2026-07-01")), isNull()))
+                .thenThrow(new InvalidTradeRequestException("start date must not be after end date."));
+
+        mockMvc.perform(get("/api/orders/export").param("start", "2026-07-10").param("end", "2026-07-01"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("INVALID_REQUEST"));
     }
 }

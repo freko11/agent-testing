@@ -13,6 +13,8 @@ import com.autotrade.dashboard.brokeradapter.BrokerOrderRequest;
 import com.autotrade.dashboard.brokeradapter.BrokerOrderResult;
 import com.autotrade.dashboard.common.TradingMode;
 import com.autotrade.dashboard.signal.SignalCall;
+import com.autotrade.dashboard.signal.SignalCallEntry;
+import com.autotrade.dashboard.signal.SignalCallEntryRepository;
 import com.autotrade.dashboard.signal.SignalResponse;
 import com.autotrade.dashboard.signal.SignalService;
 import com.autotrade.dashboard.ticker.AssetType;
@@ -23,9 +25,14 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Turns a validated "click Trade" request into a real bracket order
@@ -71,13 +78,16 @@ public class OrderService {
     private final BrokerAdapterRouter router;
     private final BrokerCredentialService brokerCredentialService;
     private final OrderRepository orderRepository;
+    private final SignalCallEntryRepository signalCallEntryRepository;
 
     public OrderService(SignalService signalService, BrokerAdapterRouter router,
-                         BrokerCredentialService brokerCredentialService, OrderRepository orderRepository) {
+                         BrokerCredentialService brokerCredentialService, OrderRepository orderRepository,
+                         SignalCallEntryRepository signalCallEntryRepository) {
         this.signalService = signalService;
         this.router = router;
         this.brokerCredentialService = brokerCredentialService;
         this.orderRepository = orderRepository;
+        this.signalCallEntryRepository = signalCallEntryRepository;
     }
 
     public TradeOrderResponse submitOrder(String symbol, PlaceOrderRequest request) {
@@ -169,6 +179,40 @@ public class OrderService {
                 .orElseGet(() -> applyOutcome(orderId, OrderStatus.FAILED,
                         "Broker confirmed no record of this order — safe to retry.", null));
         return OrderResponse.from(updated);
+    }
+
+    /**
+     * Renders order history for a date range as CSV (E5-F3-S2). {@code start}/{@code end} are treated as UTC
+     * calendar days (inclusive both ends) — this codebase has no established "user local time" concept anywhere
+     * else (every timestamp is UTC {@code Instant}; the one existing timezone, {@code MarketHoursService}'s
+     * {@code America/New_York}, is NYSE-specific, not user-local), so introducing one here would be out of
+     * proportion for this story. {@code mode} is optional and, when omitted, exports every mode — matching {@link
+     * #listOrders}'s own no-filter default — since only {@code PAPER} is reachable until E6 seeds {@code LIVE}
+     * credentials.
+     */
+    public String exportOrdersCsv(LocalDate start, LocalDate end, TradingMode mode) {
+        if (start.isAfter(end)) {
+            throw new InvalidTradeRequestException("start date must not be after end date.");
+        }
+        Instant startInstant = start.atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant endInstant = end.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant().minusNanos(1);
+
+        List<Order> orders = mode != null
+                ? orderRepository.findByOrderModeAndCreatedAtBetweenOrderByCreatedAtAsc(mode, startInstant, endInstant)
+                : orderRepository.findByCreatedAtBetweenOrderByCreatedAtAsc(startInstant, endInstant);
+
+        List<Long> snapshotIds = orders.stream()
+                .filter(order -> order.getIndicatorSnapshot() != null)
+                .map(order -> order.getIndicatorSnapshot().getId())
+                .distinct()
+                .toList();
+        Map<Long, SignalCallEntry> signalCallsBySnapshotId = snapshotIds.isEmpty()
+                ? Map.of()
+                : signalCallEntryRepository.findByIndicatorSnapshot_IdIn(snapshotIds).stream()
+                        .collect(Collectors.toMap(entry -> entry.getIndicatorSnapshot().getId(), Function.identity(),
+                                (first, second) -> second.getId() > first.getId() ? second : first));
+
+        return OrderCsvExporter.export(orders, signalCallsBySnapshotId);
     }
 
     private void validate(PlaceOrderRequest request, AssetType assetType, OrderSide side, BigDecimal price) {

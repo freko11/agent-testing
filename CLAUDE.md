@@ -2091,9 +2091,116 @@ story before it, since creating a real `Order` row on this dev machine needs
 broker credentials that don't exist; flagged, not silently assumed, and
 covered instead by `OrderServiceTest`'s mocked-adapter cases above.
 
-E5-F3-S2 (CSV export of trade history) is next, closing out F5.3 — it can
-reuse `OrderRepository.findByOrderModeAndCreatedAtBetween` (added ahead of
-need back in E5-F2-S1 specifically for this) rather than needing a new query.
+E5-F3-S2 (CSV export of trade history) is done, closing out F5.3 and E5
+(Auto-Trade Execution) in full. A `Plan`-agent design gate resolved the
+open questions before implementation: **date-range semantics** — `start`/
+`end` are `LocalDate` query params treated as **UTC calendar days**
+(inclusive both ends), since this codebase has no established "user local
+time" concept anywhere (every timestamp is UTC `Instant`; the one existing
+timezone, `MarketHoursService`'s `America/New_York`, is NYSE-specific, not
+user-local) — flagged, not silently assumed, as a real (if narrow)
+discrepancy for a Singapore-local user, not worth a first local-time concept
+for a 2-point story; **mode filter** — an optional `mode` param, defaulting
+to *all* modes when omitted (matching `GET /api/orders`'s own no-filter
+default), not defaulting to `PAPER` even though that's the only reachable
+mode today, so the export stays consistent with the list endpoint rather
+than needing a silent behavior change once E6 seeds `LIVE` credentials; and
+**signal-snapshot reference** — resolved as human-readable `SignalCallEntry`
+fields (call, matched rule, rule table version, hold-term), not a bare
+`indicator_snapshot_id`, since a numeric FK alone isn't a useful "record for
+my own tracking" when `SignalRuleId` is already surfaced everywhere else in
+this app as "the documented threshold table."
+
+`OrderRepository.findByOrderModeAndCreatedAtBetween` (added ahead of need
+back in E5-F2-S1 anticipating this story) gained an explicit sort —
+renamed to `findByOrderModeAndCreatedAtBetweenOrderByCreatedAtAsc` — since
+an export reads naturally chronologically (oldest first), the opposite of
+the on-screen table's newest-first order; a new mode-agnostic sibling,
+`findByCreatedAtBetweenOrderByCreatedAtAsc`, backs the no-mode-filter
+default. New `SignalCallEntryRepository.findByIndicatorSnapshot_IdIn`
+(batched, avoiding N+1 across however many orders land in the range) feeds
+a `Map<Long, SignalCallEntry>` that `OrderService.exportOrdersCsv` builds
+once per request and hands to the new `OrderCsvExporter` (pure static,
+package-private, mirrors `RsiCalculator`'s static-utility shape) — hand-
+rolled CSV generation rather than a library, consistent with this
+codebase's stated bias against a dependency for a small, deterministic task
+(`RetryHelper`, `MarketHoursService`, hand-rolled indicators); RFC 4180
+escaping (quote-wrap on comma/quote/CR/LF, embedded quotes doubled, CRLF
+line endings) covers the one genuinely free-text column, `rejectionReason`.
+25 columns, identity → trade economics → execution/status → timestamps →
+signal provenance last. `GET /api/orders/export?start=...&end=...[&mode=...]`
+(new route on the existing `OrderQueryController`) returns
+`text/csv;charset=UTF-8` with a `Content-Disposition: attachment` header
+carrying a `trade-history-<start>-to-<end>.csv` filename — a real file
+download, not JSON-wrapped, the app's first deliberate content-type switch.
+`start` after `end` reuses the existing `InvalidTradeRequestException` → 400
+`INVALID_REQUEST` (no new exception type); an empty range returns 200 with
+just the header row, matching `GET /api/orders`'s own empty-list-is-valid
+precedent. No Flyway migration — every CSV column already existed on
+`Order`/`IndicatorSnapshot`/`SignalCallEntry`.
+
+Frontend: new `frontend/src/order/OrderExport.tsx` (rendered inside
+`OrderHistory.tsx` right after its heading — independent of whatever page
+of orders the table has loaded, so no `refreshKey` coupling needed), two
+plain `<input type="date">` fields plus a button, with client-side
+empty-date and start-after-end checks before any network call (fail fast,
+mirroring `TradeForm.tsx`'s own validate-before-submit shape).
+`order/api.ts` gained `exportOrdersCsv`, which fetches (not a plain
+`<a href>` navigation) so a validation failure renders through this app's
+existing typed `MarketDataError` handling instead of landing on raw JSON;
+on success it parses the filename back out of `Content-Disposition` (a
+plain regex, not a full RFC 6266 parser, since this app only ever generates
+its own simple `filename="..."` form), then downloads via
+`URL.createObjectURL` + a synthesized hidden `<a download>` click +
+`URL.revokeObjectURL`. New `.order-export`/`.order-export__error` CSS rules
+follow the existing `light-dark()` pattern. No new Vitest cases — same gap
+already accepted for `Watchlist.tsx`/`OrderHistory.tsx` (view-only DOM
+components with no pure logic to unit test); `npm run build`/`lint`/`test`
+all pass clean (13 tests, unchanged, same pre-existing unrelated
+`AuthContext.tsx` lint warning as every prior story).
+
+Tested via 9 new `OrderCsvExporterTest` cases (empty list → header-only,
+no-signal-snapshot → blank signal columns, a populated snapshot → matched
+rule/call/rule-table-version/hold-term rendered correctly, and both RFC
+4180 escaping cases — comma and embedded quote), 3 new `OrderServiceTest`
+cases (start-after-end throws, no-mode-param uses the mode-agnostic query
+and resolves the signal reference, an explicit mode uses the mode-filtered
+query), and 3 new `OrderQueryControllerTest` cases (success with the
+attachment header and CSV body, mode passed through, start-after-end →
+400) — 15 new tests, 315 backend tests total, `./mvnw verify` green.
+
+Verified live via the `run` skill against the real running stack (Docker
+Oracle XE + real public Binance API, no mocking; logged in through E1-F3-S2's
+session-cookie auth) — stale `java`/`node` processes from an earlier
+session were again holding 8080/5173 (this file's own recurring gotcha),
+killed and both restarted clean before trusting `/health`. Exercised the
+endpoint via `curl` against real Oracle first: start-after-end correctly
+400'd `INVALID_REQUEST`; a wide empty-range export correctly returned 200
+with just the header row (`Content-Length: 343`, matching a bare header);
+a `mode=PAPER` export returned the identical empty result, confirming the
+mode-filtered query path runs without error. Then clicked through the real
+UI: the "Order history" section now shows the new Start date/End date/
+"Export to CSV" row; clicking Export with both dates empty rendered "Choose
+both a start and end date." with no network call; setting start after end
+and clicking Export rendered "Start date must not be after end date.",
+also with no network call; a valid wide range (2020-01-01 to 2026-07-29)
+fired exactly one `GET /api/orders/export?...` (confirmed via
+`read_network_requests`, status 200) and produced a real file download —
+confirmed on disk at `~/Downloads/trade-history-2020-01-01-to-2026-07-29.csv`,
+343 bytes, correct filename parsed from `Content-Disposition`, header row
+matching the API response exactly with real CRLF line endings (verified via
+`cat -A`). A populated CSV row with a real signal-snapshot reference (matched
+rule, call, hold-term) was **not** observed live in this session — same
+structural gap as every E4-F2/F3/E5-F2/F3 story before it, since no real
+order has ever been created on this dev machine (no real
+`BINANCE_TRADING_API_KEY`/`BINANCE_TRADING_API_SECRET` exist here); flagged,
+not silently assumed, and covered instead by `OrderCsvExporterTest`'s
+populated-snapshot case above. Browser console showed no errors throughout.
+
+This closes out F5.3 (order status & history) and E5 (Auto-Trade Execution)
+in full. E5-F4-S1 (notifications) is next — the one story flagged in
+`docs/agile-plan.md` as softly depending on the E3-F3-S1 watchlist stretch
+feature, which is already done.
 
 The original agile delivery plan for the project (drafted before any of E1-E3 above
 was implemented) lives at `docs/agile-plan.md` — an auto-trade signal dashboard

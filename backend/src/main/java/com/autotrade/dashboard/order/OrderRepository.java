@@ -12,7 +12,9 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     Optional<Order> findByClientOrderId(String clientOrderId);
 
-    List<Order> findByOrderModeAndCreatedAtBetween(TradingMode orderMode, Instant start, Instant end);
+    List<Order> findByOrderModeAndCreatedAtBetweenOrderByCreatedAtAsc(TradingMode orderMode, Instant start, Instant end);
+
+    List<Order> findByCreatedAtBetweenOrderByCreatedAtAsc(Instant start, Instant end);
 
     List<Order> findAllByOrderByCreatedAtDesc(Pageable pageable);
 }

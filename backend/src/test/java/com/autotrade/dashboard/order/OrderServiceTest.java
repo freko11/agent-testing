@@ -19,7 +19,10 @@ import com.autotrade.dashboard.indicator.MovingAverageRelation;
 import com.autotrade.dashboard.indicator.MovingAverageResult;
 import com.autotrade.dashboard.marketdata.TickerSummary;
 import com.autotrade.dashboard.signal.SignalCall;
+import com.autotrade.dashboard.signal.SignalCallEntry;
+import com.autotrade.dashboard.signal.SignalCallEntryRepository;
 import com.autotrade.dashboard.signal.SignalResponse;
+import com.autotrade.dashboard.signal.SignalRuleId;
 import com.autotrade.dashboard.signal.SignalService;
 import com.autotrade.dashboard.ticker.AssetType;
 import com.autotrade.dashboard.ticker.Ticker;
@@ -34,6 +37,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
@@ -41,6 +45,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
@@ -61,6 +66,8 @@ class OrderServiceTest {
     @Mock
     private OrderRepository orderRepository;
     @Mock
+    private SignalCallEntryRepository signalCallEntryRepository;
+    @Mock
     private BrokerAdapter adapter;
 
     private OrderService service;
@@ -68,7 +75,8 @@ class OrderServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new OrderService(signalService, router, brokerCredentialService, orderRepository);
+        service = new OrderService(signalService, router, brokerCredentialService, orderRepository,
+                signalCallEntryRepository);
         lenient().when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
             Order order = invocation.getArgument(0);
             if (order.getId() == null) {
@@ -394,5 +402,51 @@ class OrderServiceTest {
         assertEquals(OrderStatus.PARTIALLY_PROTECTED, order.getStatus());
         assertEquals("Missing stop-loss leg", order.getRejectionReason());
         verify(orderRepository, never()).save(any());
+    }
+
+    @Test
+    void exportOrdersCsv_startAfterEnd_throwsInvalidTradeRequest() {
+        LocalDate start = LocalDate.parse("2026-07-10");
+        LocalDate end = LocalDate.parse("2026-07-01");
+
+        assertThrows(InvalidTradeRequestException.class, () -> service.exportOrdersCsv(start, end, null));
+    }
+
+    @Test
+    void exportOrdersCsv_noMode_usesModeAgnosticQueryAndIncludesSignalReference() {
+        Ticker ticker = cryptoTicker();
+        IndicatorSnapshot snapshot = new IndicatorSnapshot(ticker, Instant.parse("2026-07-05T00:00:00Z"),
+                new BigDecimal("100"), Broker.BINANCE);
+        ReflectionTestUtils.setField(snapshot, "id", 42L);
+        Order order = persistedOrder(11L, ticker, "client-11");
+        order.setIndicatorSnapshot(snapshot);
+        SignalCallEntry signalCallEntry = new SignalCallEntry(ticker, snapshot, SignalRuleId.BULLISH_MAJORITY, null);
+
+        LocalDate start = LocalDate.parse("2026-07-01");
+        LocalDate end = LocalDate.parse("2026-07-10");
+        when(orderRepository.findByCreatedAtBetweenOrderByCreatedAtAsc(any(Instant.class), any(Instant.class)))
+                .thenReturn(List.of(order));
+        when(signalCallEntryRepository.findByIndicatorSnapshot_IdIn(List.of(42L))).thenReturn(List.of(signalCallEntry));
+
+        String csv = service.exportOrdersCsv(start, end, null);
+
+        assertTrue(csv.contains("Order ID,Created At (UTC)"));
+        assertTrue(csv.contains("client-11"));
+        assertTrue(csv.contains("BULLISH_MAJORITY"));
+        verify(orderRepository, never())
+                .findByOrderModeAndCreatedAtBetweenOrderByCreatedAtAsc(any(), any(), any());
+    }
+
+    @Test
+    void exportOrdersCsv_withMode_usesModeFilteredQuery() {
+        LocalDate start = LocalDate.parse("2026-07-01");
+        LocalDate end = LocalDate.parse("2026-07-10");
+        when(orderRepository.findByOrderModeAndCreatedAtBetweenOrderByCreatedAtAsc(
+                eq(TradingMode.PAPER), any(Instant.class), any(Instant.class))).thenReturn(List.of());
+
+        String csv = service.exportOrdersCsv(start, end, TradingMode.PAPER);
+
+        assertTrue(csv.startsWith("Order ID,Created At (UTC)"));
+        verify(orderRepository, never()).findByCreatedAtBetweenOrderByCreatedAtAsc(any(), any());
     }
 }

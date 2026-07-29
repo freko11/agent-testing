@@ -243,6 +243,28 @@ body {
   gap: 0.5rem;
 }
 
+.order-export {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0.5rem 0 1rem;
+}
+
+.order-export label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.85rem;
+}
+
+.order-export__error {
+  margin: 0;
+  flex-basis: 100%;
+  font-size: 0.85rem;
+  color: light-dark(#c2410c, #fb923c);
+}
+
 .order-history-table-wrap {
   overflow-x: auto;
 }

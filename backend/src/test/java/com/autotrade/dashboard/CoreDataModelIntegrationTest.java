@@ -159,7 +159,7 @@ class CoreDataModelIntegrationTest {
                 orderRepository.findByClientOrderId(clientOrderId).map(Order::getId));
 
         Long orderId = order.getId();
-        List<Order> byModeAndWindow = orderRepository.findByOrderModeAndCreatedAtBetween(
+        List<Order> byModeAndWindow = orderRepository.findByOrderModeAndCreatedAtBetweenOrderByCreatedAtAsc(
                 TradingMode.PAPER, order.getCreatedAt().minusSeconds(60), order.getCreatedAt().plusSeconds(60));
         assertTrue(byModeAndWindow.stream().anyMatch(o -> o.getId().equals(orderId)));
 

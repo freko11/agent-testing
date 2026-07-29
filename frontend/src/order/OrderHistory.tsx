@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { MarketDataError } from '../marketdata/api'
 import { fetchOrders, refreshOrder, type OrderSummary } from './api'
+import OrderExport from './OrderExport'
 
 interface OrderHistoryProps {
   refreshKey: number
@@ -79,6 +80,7 @@ function OrderHistory({ refreshKey }: OrderHistoryProps) {
   return (
     <section>
       <h2>Order history</h2>
+      <OrderExport />
       {error && <p role="alert">{error}</p>}
       {orders === null && !error && <p>Loading…</p>}
       {orders !== null && orders.length === 0 && <p>No orders placed yet.</p>}
