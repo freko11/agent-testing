@@ -1407,9 +1407,38 @@ unconfirmed beyond the fetched API docs and `FakeAlpacaTradingServer`'s
 fixtures. `.env.example` documents `ALPACA_TRADING_API_KEY`/
 `ALPACA_TRADING_API_SECRET` alongside the existing market-data keys. No
 frontend changes — same backend-only scope as every other E4 story.
-E4-F2-S2 (place a market order via Alpaca) is next, and can now inject the
-`BrokerAdapter` bean this story wired up with no further adapter-layer
-plumbing.
+
+E4-F2-S2 (place a market order via Alpaca; order ID returned, status
+pollable) is done, closing out F4.2. No new code was needed: E4-F2-S1
+already built `AlpacaTradingAdapter.placeOrder`/`getOrderStatus` ahead of its
+own narrow AC (flagged explicitly in that story's own entry above —
+"needs placeOrder/getOrderStatus/getPosition/cancelOrder immediately next"),
+and both were written and tested against `EntryOrderType.MARKET` requests
+from the start (`AlpacaTradingAdapterTest.sampleBuyRequest`,
+`AlpacaTradingAdapterContractTest.sampleBuyOrderRequest`) — this story's AC
+was a proper subset of what S1 already covered, not new scope. Re-ran the
+targeted suite to confirm before closing the story rather than trusting the
+prior session's summary: `AlpacaTradingAdapterTest` (19, including
+`placeOrder_success_sendsBracketBodyAndAuthHeaders` with `"type":"market"`),
+`AlpacaTradingAdapterContractTest`/`RetryingAlpacaTradingAdapterContractTest`
+(7 each, `placeOrderReturnsResultMatchingRequestedClientOrderId` and
+`getOrderStatusForAnUnknownClientOrderIdReturnsEmpty` — bare and
+`RetryingBrokerAdapter`-wrapped) — 33 tests, all green, no code changes.
+The AC's "dashboard button" framing is narrative, not literal: no HTTP
+endpoint or controller exists yet for placing an order, and none was needed
+here — the trade-input form/submit endpoint is E5's job (E5-F1-S1 onward),
+which can now call the already-wired `BrokerAdapter` bean directly.
+
+Same live-verification gap as E4-F2-S1, unchanged: no real
+`ALPACA_TRADING_API_KEY`/`ALPACA_TRADING_API_SECRET` exist on this dev
+machine, so a market order has not been placed against Alpaca's real paper
+API in this session — only against `FakeAlpacaTradingServer` and
+`MockRestServiceServer` fixtures. Flagged, not silently assumed; revisit
+once real paper-trading credentials are available.
+
+This closes out F4.2 (Alpaca adapter) in full. F4.3 (Binance adapter,
+crypto) is next — E4-F3-S1 (Binance testnet account connected,
+`getAccountStatus` returns balances).
 
 The original agile delivery plan for the project (drafted before any of E1-E3 above
 was implemented) lives at `docs/agile-plan.md` — an auto-trade signal dashboard
