@@ -30,6 +30,14 @@ import java.util.Optional;
  * — with no change to this interface, since {@code clientOrderId} being the
  * sole required identifier everywhere is what keeps reconciliation possible
  * without a breaking change.
+ *
+ * <p>{@code getOrderStatus}/{@code cancelOrder} also take an explicit {@code
+ * symbol}, alongside {@code clientOrderId} (E4-F3-S1) — Binance's per-order
+ * endpoints require it (no global client-order-id lookup exists the way
+ * Alpaca's {@code /v2/orders:by_client_order_id} does), and every real
+ * caller (an order-service, {@code RetryingBrokerAdapter}'s own
+ * reconciliation) already has the symbol in hand from the order it's asking
+ * about. Adapters that don't need it (Alpaca) simply ignore the parameter.
  */
 public interface BrokerAdapter {
 
@@ -39,11 +47,11 @@ public interface BrokerAdapter {
 
     BrokerOrderResult placeOrder(BrokerOrderRequest request, TradingMode mode);
 
-    Optional<BrokerOrderResult> getOrderStatus(String clientOrderId, TradingMode mode);
+    Optional<BrokerOrderResult> getOrderStatus(String symbol, String clientOrderId, TradingMode mode);
 
     Optional<BrokerPosition> getPosition(String symbol, TradingMode mode);
 
-    BrokerOrderResult cancelOrder(String clientOrderId, TradingMode mode);
+    BrokerOrderResult cancelOrder(String symbol, String clientOrderId, TradingMode mode);
 
     BrokerAccountStatus getAccountStatus(TradingMode mode);
 }

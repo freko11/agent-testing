@@ -70,14 +70,15 @@ public class RetryingBrokerAdapter implements BrokerAdapter {
         try {
             return withRetry(() -> delegate.placeOrder(request, mode), false);
         } catch (BrokerAdapterUnavailableException unavailable) {
-            return reconcile(request.clientOrderId(), mode, unavailable);
+            return reconcile(request.symbol(), request.clientOrderId(), mode, unavailable);
         }
     }
 
-    private BrokerOrderResult reconcile(String clientOrderId, TradingMode mode, BrokerAdapterUnavailableException original) {
+    private BrokerOrderResult reconcile(String symbol, String clientOrderId, TradingMode mode,
+                                         BrokerAdapterUnavailableException original) {
         Optional<BrokerOrderResult> actual;
         try {
-            actual = getOrderStatus(clientOrderId, mode);
+            actual = getOrderStatus(symbol, clientOrderId, mode);
         } catch (BrokerAdapterException reconciliationFailure) {
             BrokerAdapterAmbiguousOrderException ambiguous =
                     new BrokerAdapterAmbiguousOrderException(delegate.broker(), clientOrderId, original);
@@ -91,8 +92,8 @@ public class RetryingBrokerAdapter implements BrokerAdapter {
     }
 
     @Override
-    public Optional<BrokerOrderResult> getOrderStatus(String clientOrderId, TradingMode mode) {
-        return withRetry(() -> delegate.getOrderStatus(clientOrderId, mode), true);
+    public Optional<BrokerOrderResult> getOrderStatus(String symbol, String clientOrderId, TradingMode mode) {
+        return withRetry(() -> delegate.getOrderStatus(symbol, clientOrderId, mode), true);
     }
 
     @Override
@@ -101,8 +102,8 @@ public class RetryingBrokerAdapter implements BrokerAdapter {
     }
 
     @Override
-    public BrokerOrderResult cancelOrder(String clientOrderId, TradingMode mode) {
-        return withRetry(() -> delegate.cancelOrder(clientOrderId, mode), true);
+    public BrokerOrderResult cancelOrder(String symbol, String clientOrderId, TradingMode mode) {
+        return withRetry(() -> delegate.cancelOrder(symbol, clientOrderId, mode), true);
     }
 
     @Override

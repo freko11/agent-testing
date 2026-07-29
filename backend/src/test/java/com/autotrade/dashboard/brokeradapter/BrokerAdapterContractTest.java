@@ -60,7 +60,7 @@ public abstract class BrokerAdapterContractTest {
 
     @Test
     void getOrderStatusForAnUnknownClientOrderIdReturnsEmpty() {
-        Optional<BrokerOrderResult> result = adapter().getOrderStatus(newClientOrderId(), tradingMode());
+        Optional<BrokerOrderResult> result = adapter().getOrderStatus(tradableSymbol(), newClientOrderId(), tradingMode());
 
         assertTrue(result.isEmpty());
     }
@@ -77,12 +77,12 @@ public abstract class BrokerAdapterContractTest {
         String clientOrderId = newClientOrderId();
         adapter().placeOrder(sampleBuyOrderRequest(clientOrderId), tradingMode());
 
-        assertDoesNotThrow(() -> adapter().cancelOrder(clientOrderId, tradingMode()));
+        assertDoesNotThrow(() -> adapter().cancelOrder(tradableSymbol(), clientOrderId, tradingMode()));
     }
 
     @Test
     void cancelOrderOnAnUnknownClientOrderIdReturnsAResultRatherThanThrowing() {
-        BrokerOrderResult result = adapter().cancelOrder(newClientOrderId(), tradingMode());
+        BrokerOrderResult result = adapter().cancelOrder(tradableSymbol(), newClientOrderId(), tradingMode());
 
         assertEquals(OrderStatus.FAILED, result.status());
     }

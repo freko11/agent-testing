@@ -1440,6 +1440,136 @@ This closes out F4.2 (Alpaca adapter) in full. F4.3 (Binance adapter,
 crypto) is next — E4-F3-S1 (Binance testnet account connected,
 `getAccountStatus` returns balances).
 
+E4-F3-S1 (Binance testnet account connected; `getAccountStatus` returns
+balances) is done, starting F4.3. A `Plan`-agent design gate resolved the
+two open design questions before implementation, both then confirmed
+directly with the user per this epic's money-safety-adjacent-decision
+precedent (mirroring E4-F2-S1's credential-source confirmation): (1) this
+adapter targets Binance's **USDⓈ-M Futures Testnet**
+(`testnet.binancefuture.com`), not Spot Testnet — Spot has no reliable
+leverage support, and E4-F3-S2 (leveraged orders, next) needs real margin,
+so building S1 against Spot would have forced a base-API change one story
+later; this intentionally diverges from `marketdata.BinanceMarketDataClient`
+reading real spot prices, the same accepted paper/live price divergence
+`application-paper.properties` already documents for Alpaca, extended one
+step further to trading itself. (2) `BrokerAdapter.getOrderStatus`/
+`cancelOrder` gained a mandatory `symbol` parameter (`(String symbol, String
+clientOrderId, TradingMode mode)`) — a real breaking interface change,
+confirmed before implementation — because Binance's per-order endpoints
+require `symbol` (no global client-order-id lookup exists the way Alpaca's
+`/v2/orders:by_client_order_id` does). The ripple was small and mechanical:
+`AlpacaTradingAdapter` and the test-only `MockBrokerAdapter` both simply
+ignore the new parameter (their own lookups stay global/keyed-by-id), and
+`RetryingBrokerAdapter`'s reconciliation flow threads `request.symbol()`
+through automatically. (3) Also confirmed: S1 implements only
+`getAccountStatus`/`getPosition` for real — `placeOrder`/`getOrderStatus`/
+`cancelOrder` throw a clear, documented `BrokerAdapterException` pointing at
+E4-F3-S2, a deliberately narrower scope than Alpaca's S1 (which built the
+full interface ahead of need). Binance Futures has no single-call bracket
+order the way Alpaca does; building `placeOrder` now would have meant either
+rushing E4-F3-S2's leverage/TP-SL design or risking an order with no
+protective stop-loss attached.
+
+Before implementation, an `Explore` agent verified the exact Binance Futures
+Testnet API details live (docs fetch plus real authenticated-with-garbage-key
+requests against the actual testnet) rather than trusting training-data
+recall: `GET /fapi/v3/account` and `GET /fapi/v3/positionRisk` (both SIGNED,
+HMAC-SHA256 over the query string, `X-MBX-APIKEY` header) are the endpoints
+used; `-2014`/`-2015` (bad/invalid API key) empirically confirmed as HTTP 401
+(not documented anywhere in Binance's own docs — a real, non-obvious finding);
+429/418 (IP auto-ban after repeated 429s) both need rate-limit handling, and
+`Retry-After` is **not guaranteed** on Futures endpoints (unlike Alpaca) —
+Binance instead exposes `X-MBX-USED-WEIGHT-*` headers this codebase doesn't
+yet track, flagged not implemented; and the unrealized-PnL field is spelled
+`unRealizedProfit` (capital R) on `/positionRisk` but `unrealizedProfit`
+(lowercase r) on `/account` — a real, historically-confirmed Binance
+inconsistency between the two endpoint families, defended against via
+`@JsonAlias` accepting both.
+
+New `com.autotrade.dashboard.brokeradapter.BinanceFuturesTradingAdapter`
+implements `BrokerAdapter` (`supportedAssetType() = CRYPTO`,
+`broker() = BINANCE`), plain non-`@Component` class matching
+`AlpacaTradingAdapter`'s positioning. Every signed request builds a
+canonical `key=value&...` query string (including `timestamp`/`recvWindow`),
+HMAC-SHA256-signs it with the API secret, and appends the hex signature —
+sent via `RestClient`'s literal-string `uri(String)` overload, **never**
+rebuilt through a `UriBuilder`/`UriComponentsBuilder` lambda, since
+re-encoding an already-signed query string (so the signed string no longer
+matches what's actually sent) is the single most common real-world
+Binance-signing bug; this is safe here specifically because every param
+value this adapter sends (symbols, timestamps, the hex signature itself) is
+plain alphanumeric, nothing that would ever need percent-encoding. Error
+classification mirrors Alpaca's three-way split (business outcome / `BrokerAdapterTransientException`
+/ `BrokerAdapterRateLimitedException`): 429 and 418 both throw
+`BrokerAdapterRateLimitedException` (418 treated the same as 429 for retry
+purposes); 5xx/connectivity throws `BrokerAdapterTransientException`;
+everything else (401 key errors, 400 signature/timestamp errors) is a fatal,
+non-retried `BrokerAdapterException`. `getPosition` treats Binance's
+`positionAmt: "0"` row as "no position" (`Optional.empty()`) rather than
+relying on an absent row, since Binance always reports a row per symbol.
+New `BinanceFuturesTradingProperties` (base URLs only, no credential fields,
+same posture as `AlpacaTradingProperties`) and `BinanceFuturesAdapterConfig`
+(sibling to `BrokerAdapterConfig`, wraps the adapter in
+`RetryingBrokerAdapter` the same way) — both configs' `Map<TradingMode,
+RestClient>` beans are now disambiguated via `@Qualifier` on the *consuming*
+constructor parameter only (the producing `@Bean` method's own name already
+serves as its bean name, so annotating the producer too would have been
+redundant — caught and fixed during this story's own `simplify` pass),
+since a second bean of that same generic type now exists.
+
+New `com.autotrade.dashboard.broker.BinanceTradingCredentialBootstrap`
+(`ApplicationRunner`) mirrors `AlpacaTradingCredentialBootstrap` exactly:
+seeds `(BINANCE, PAPER)` into `BrokerCredentialService` from
+`BINANCE_TRADING_API_KEY`/`BINANCE_TRADING_API_SECRET` at startup, only if no
+credential already exists (idempotent, never fights the audited rotation
+flow), `PAPER`-only (no `LIVE` seeding). These must be a **Futures Testnet**
+key pair generated at `testnet.binancefuture.com` — a completely separate
+testnet-only account from any real Binance.com login, and distinct from any
+future Binance market-data credential (`marketdata.BinanceMarketDataClient`
+needs no credentials at all today, since it only reads Binance's public
+klines endpoint). `.env.example` and all three profile property files
+(`application-{local,paper,prod}.properties`) updated accordingly —
+`broker.binance.paper-base-url=https://testnet.binancefuture.com`,
+`broker.binance.live-base-url=https://fapi.binance.com`.
+
+Tested via `BinanceFuturesTradingAdapterTest` (12 tests: HMAC-SHA256 signing
+verified against independently-computed reference signatures — Python's
+`hmac`/`hashlib`, not copied from adapter output, same "compute reference
+values independently" discipline as E2's indicator tests — plus JSON↔DTO
+mapping, every error-classification branch including the 401/`-2015` and
+400/`-1022` cases, the zero-`positionAmt` empty-Optional path, the
+no-credential fatal path, and all three deferred methods' exception
+messages), `FakeBinanceFuturesTradingServer` (test-only, `MockRestServiceServer`
+custom-`ResponseCreator`, asserts every request carries `X-MBX-APIKEY` and a
+`signature` query param), `BinanceFuturesTradingAdapterContractTest`/
+`RetryingBinanceFuturesTradingAdapterContractTest` (7 shared tests each, 5
+`@Disabled` with explicit reasons pointing at E4-F3-S2 — this codebase's own
+checklist of exactly which tests to re-enable once `placeOrder`/
+`getOrderStatus`/`cancelOrder` are real — leaving only
+`getAccountStatusReturnsNonEmptyBalances`/
+`getPositionForASymbolWithNoActivityReturnsEmpty` actually exercised, per
+`BrokerAdapterContractTest`'s own documented allowance for a real-adapter
+subclass to skip inapplicable assertions), and
+`BinanceTradingCredentialBootstrapTest` (3 tests, mirrors
+`AlpacaTradingCredentialBootstrapTest`) — 22 new tests, 255 backend tests
+total, `./mvnw verify` green. `simplify` skill run clean after one fix (the
+redundant producer-side `@Qualifier` noted above).
+
+Not live-verified against a real Binance Futures Testnet account in this
+session — no real `BINANCE_TRADING_API_KEY`/`BINANCE_TRADING_API_SECRET`
+exist on this dev machine, so this adapter has only been tested against
+`FakeBinanceFuturesTradingServer`/`MockRestServiceServer` fixtures, not a
+live testnet call. The `Explore` agent's live (non-authenticated) probes
+against the real testnet confirmed the base URL and 401 behavior are
+correct, but the exact live shape of a real authenticated `/account`/
+`/positionRisk` response — including the `unRealizedProfit` casing
+ambiguity noted above — remains unconfirmed beyond docs/secondary sources;
+flagged, not silently assumed, same gap pattern as E4-F2-S1/S2's Alpaca
+adapter. No frontend changes — same backend-only scope as every other E4
+story. E4-F3-S2 (place a leveraged order via Binance testnet) is next, and
+can now build `placeOrder`/`getOrderStatus`/`cancelOrder` on top of this
+story's signing/error-classification/config plumbing.
+
 The original agile delivery plan for the project (drafted before any of E1-E3 above
 was implemented) lives at `docs/agile-plan.md` — an auto-trade signal dashboard
 (React frontend, Java/Spring Boot backend, Oracle Database via local Oracle XE,

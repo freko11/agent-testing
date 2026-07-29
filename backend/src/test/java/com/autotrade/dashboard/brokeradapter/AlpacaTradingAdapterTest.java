@@ -222,7 +222,7 @@ class AlpacaTradingAdapterTest {
                         "{\"id\":\"alpaca-order-1\",\"client_order_id\":\"co-1\",\"status\":\"partially_filled\",\"filled_avg_price\":\"199.9\"}",
                         MediaType.APPLICATION_JSON));
 
-        Optional<BrokerOrderResult> result = adapter.getOrderStatus("co-1", TradingMode.PAPER);
+        Optional<BrokerOrderResult> result = adapter.getOrderStatus("AAPL", "co-1", TradingMode.PAPER);
 
         assertTrue(result.isPresent());
         assertEquals(OrderStatus.PARTIALLY_FILLED, result.get().status());
@@ -233,7 +233,7 @@ class AlpacaTradingAdapterTest {
         server.expect(requestTo(BASE_URL + "/v2/orders:by_client_order_id?client_order_id=missing"))
                 .andRespond(withStatus(HttpStatus.NOT_FOUND));
 
-        assertTrue(adapter.getOrderStatus("missing", TradingMode.PAPER).isEmpty());
+        assertTrue(adapter.getOrderStatus("AAPL", "missing", TradingMode.PAPER).isEmpty());
     }
 
     @Test
@@ -262,7 +262,7 @@ class AlpacaTradingAdapterTest {
         server.expect(requestTo(BASE_URL + "/v2/orders:by_client_order_id?client_order_id=missing"))
                 .andRespond(withStatus(HttpStatus.NOT_FOUND));
 
-        BrokerOrderResult result = adapter.cancelOrder("missing", TradingMode.PAPER);
+        BrokerOrderResult result = adapter.cancelOrder("AAPL", "missing", TradingMode.PAPER);
 
         assertEquals(OrderStatus.FAILED, result.status());
         assertEquals("Unknown clientOrderId", result.rejectionReason());
@@ -283,7 +283,7 @@ class AlpacaTradingAdapterTest {
                         "{\"id\":\"alpaca-order-1\",\"client_order_id\":\"co-1\",\"status\":\"canceled\"}",
                         MediaType.APPLICATION_JSON));
 
-        BrokerOrderResult result = adapter.cancelOrder("co-1", TradingMode.PAPER);
+        BrokerOrderResult result = adapter.cancelOrder("AAPL", "co-1", TradingMode.PAPER);
 
         assertEquals(OrderStatus.CANCELLED, result.status());
         server.verify();
@@ -296,7 +296,7 @@ class AlpacaTradingAdapterTest {
                         "{\"id\":\"alpaca-order-1\",\"client_order_id\":\"co-1\",\"status\":\"filled\",\"filled_avg_price\":\"200\"}",
                         MediaType.APPLICATION_JSON));
 
-        BrokerOrderResult result = adapter.cancelOrder("co-1", TradingMode.PAPER);
+        BrokerOrderResult result = adapter.cancelOrder("AAPL", "co-1", TradingMode.PAPER);
 
         assertEquals(OrderStatus.FILLED, result.status());
         server.verify();

@@ -108,7 +108,8 @@ public class MockBrokerAdapter implements BrokerAdapter {
     }
 
     @Override
-    public Optional<BrokerOrderResult> getOrderStatus(String clientOrderId, TradingMode mode) {
+    public Optional<BrokerOrderResult> getOrderStatus(String symbol, String clientOrderId, TradingMode mode) {
+        // Keyed on clientOrderId only, same as the real Alpaca adapter's global lookup — symbol is unused.
         maybeThrowScripted();
         return Optional.ofNullable(orders.get(clientOrderId)).map(state -> state.toResult(clock.instant()));
     }
@@ -125,7 +126,7 @@ public class MockBrokerAdapter implements BrokerAdapter {
     }
 
     @Override
-    public BrokerOrderResult cancelOrder(String clientOrderId, TradingMode mode) {
+    public BrokerOrderResult cancelOrder(String symbol, String clientOrderId, TradingMode mode) {
         maybeThrowScripted();
 
         MockOrderState existing = orders.get(clientOrderId);

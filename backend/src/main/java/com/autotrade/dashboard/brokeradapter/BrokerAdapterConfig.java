@@ -2,6 +2,7 @@ package com.autotrade.dashboard.brokeradapter;
 
 import com.autotrade.dashboard.broker.BrokerCredentialService;
 import com.autotrade.dashboard.common.TradingMode;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -37,10 +38,13 @@ public class BrokerAdapterConfig {
      * itself is a plain, non-{@code @Component} class, wrapped here in {@link
      * RetryingBrokerAdapter} so every call gets uniform retry/backoff/outage
      * handling (E4-F1-S2/S3), the same "wrap your adapter" template {@code
-     * RetryingMockBrokerAdapterContractTest} already documents.
+     * RetryingMockBrokerAdapterContractTest} already documents. {@code
+     * @Qualifier} is explicit rather than relying on parameter-name matching,
+     * since {@code BinanceFuturesAdapterConfig} (E4-F3-S1) added a second bean
+     * of this same generic {@code Map<TradingMode, RestClient>} type.
      */
     @Bean
-    public BrokerAdapter alpacaBrokerAdapter(Map<TradingMode, RestClient> alpacaTradingRestClients,
+    public BrokerAdapter alpacaBrokerAdapter(@Qualifier("alpacaTradingRestClients") Map<TradingMode, RestClient> alpacaTradingRestClients,
                                               BrokerCredentialService credentialService,
                                               Clock clock) {
         AlpacaTradingAdapter delegate = new AlpacaTradingAdapter(alpacaTradingRestClients, credentialService, clock);

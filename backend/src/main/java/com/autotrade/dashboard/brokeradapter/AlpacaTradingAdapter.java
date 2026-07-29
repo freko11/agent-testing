@@ -101,7 +101,7 @@ public class AlpacaTradingAdapter implements BrokerAdapter {
             return rejectedResult(request.clientOrderId(), errorMessage(e, "Rejected by Alpaca"));
         } catch (HttpClientErrorException.UnprocessableEntity e) {
             if (isDuplicateClientOrderId(e)) {
-                return getOrderStatus(request.clientOrderId(), mode)
+                return getOrderStatus(request.symbol(), request.clientOrderId(), mode)
                         .orElseThrow(() -> new BrokerAdapterException(Broker.ALPACA,
                                 "Alpaca reported client_order_id '" + request.clientOrderId()
                                         + "' as a duplicate, but no matching order was found on replay"));
@@ -116,7 +116,8 @@ public class AlpacaTradingAdapter implements BrokerAdapter {
     }
 
     @Override
-    public Optional<BrokerOrderResult> getOrderStatus(String clientOrderId, TradingMode mode) {
+    public Optional<BrokerOrderResult> getOrderStatus(String symbol, String clientOrderId, TradingMode mode) {
+        // Alpaca resolves an order by client_order_id globally — symbol is unused here.
         Credentials creds = resolveCredential(mode);
         RestClient restClient = restClientFor(mode);
 
@@ -163,8 +164,8 @@ public class AlpacaTradingAdapter implements BrokerAdapter {
     }
 
     @Override
-    public BrokerOrderResult cancelOrder(String clientOrderId, TradingMode mode) {
-        Optional<BrokerOrderResult> existing = getOrderStatus(clientOrderId, mode);
+    public BrokerOrderResult cancelOrder(String symbol, String clientOrderId, TradingMode mode) {
+        Optional<BrokerOrderResult> existing = getOrderStatus(symbol, clientOrderId, mode);
         if (existing.isEmpty()) {
             return new BrokerOrderResult(clientOrderId, null, OrderStatus.FAILED, null, "Unknown clientOrderId", clock.instant());
         }
@@ -192,7 +193,7 @@ public class AlpacaTradingAdapter implements BrokerAdapter {
         }
 
         // A 204 from DELETE means "cancellation accepted," not "done" — re-fetch for the authoritative status.
-        return getOrderStatus(clientOrderId, mode).orElse(current);
+        return getOrderStatus(symbol, clientOrderId, mode).orElse(current);
     }
 
     @Override

@@ -41,12 +41,12 @@ class MockBrokerAdapterTest {
     void manualFillLeavesAPlacedOrderSubmittedUntilSimulateFillIsCalled() {
         manualFillAdapter.placeOrder(buyRequest("order-2"), TradingMode.PAPER);
 
-        Optional<BrokerOrderResult> beforeFill = manualFillAdapter.getOrderStatus("order-2", TradingMode.PAPER);
+        Optional<BrokerOrderResult> beforeFill = manualFillAdapter.getOrderStatus("AAPL", "order-2", TradingMode.PAPER);
         assertEquals(OrderStatus.SUBMITTED, beforeFill.orElseThrow().status());
 
         manualFillAdapter.simulateFill("order-2", new BigDecimal("205"));
 
-        Optional<BrokerOrderResult> afterFill = manualFillAdapter.getOrderStatus("order-2", TradingMode.PAPER);
+        Optional<BrokerOrderResult> afterFill = manualFillAdapter.getOrderStatus("AAPL", "order-2", TradingMode.PAPER);
         assertEquals(OrderStatus.FILLED, afterFill.orElseThrow().status());
         assertEquals(new BigDecimal("205"), afterFill.orElseThrow().filledPrice());
     }
@@ -90,7 +90,7 @@ class MockBrokerAdapterTest {
         assertThrows(BrokerAdapterTransientException.class,
                 () -> autoFillAdapter.placeOrder(buyRequest("order-11"), TradingMode.PAPER));
 
-        Optional<BrokerOrderResult> recorded = autoFillAdapter.getOrderStatus("order-11", TradingMode.PAPER);
+        Optional<BrokerOrderResult> recorded = autoFillAdapter.getOrderStatus("AAPL", "order-11", TradingMode.PAPER);
         assertTrue(recorded.isPresent());
         assertEquals(OrderStatus.FILLED, recorded.orElseThrow().status());
     }
@@ -110,7 +110,7 @@ class MockBrokerAdapterTest {
     void cancelOrderOnAFilledOrderIsANoOp() {
         autoFillAdapter.placeOrder(buyRequest("order-6"), TradingMode.PAPER);
 
-        BrokerOrderResult result = autoFillAdapter.cancelOrder("order-6", TradingMode.PAPER);
+        BrokerOrderResult result = autoFillAdapter.cancelOrder("AAPL", "order-6", TradingMode.PAPER);
 
         assertEquals(OrderStatus.FILLED, result.status());
     }
@@ -119,8 +119,8 @@ class MockBrokerAdapterTest {
     void cancelOrderTwiceOnAnOpenOrderIsIdempotent() {
         manualFillAdapter.placeOrder(buyRequest("order-7"), TradingMode.PAPER);
 
-        BrokerOrderResult firstCancel = manualFillAdapter.cancelOrder("order-7", TradingMode.PAPER);
-        BrokerOrderResult secondCancel = manualFillAdapter.cancelOrder("order-7", TradingMode.PAPER);
+        BrokerOrderResult firstCancel = manualFillAdapter.cancelOrder("AAPL", "order-7", TradingMode.PAPER);
+        BrokerOrderResult secondCancel = manualFillAdapter.cancelOrder("AAPL", "order-7", TradingMode.PAPER);
 
         assertEquals(OrderStatus.CANCELLED, firstCancel.status());
         assertEquals(OrderStatus.CANCELLED, secondCancel.status());
