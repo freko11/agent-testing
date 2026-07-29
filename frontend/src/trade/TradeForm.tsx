@@ -1,7 +1,7 @@
-import { useState, type ChangeEvent, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { MarketDataError } from '../marketdata/api'
 import type { SignalResponse } from '../signal/api'
-import { placeOrder, type TradeOrderResponse } from './api'
+import { placeOrder, type PlaceOrderPayload, type TradeOrderResponse } from './api'
 import { MAX_CRYPTO_LEVERAGE, validateTradeForm, type TradeFormValues } from './validation'
 
 const DEFAULT_VALUES: TradeFormValues = {
@@ -19,6 +19,7 @@ const SUBMIT_ERROR_MESSAGES: Partial<Record<string, string>> = {
 
 type SubmitState =
   | { kind: 'idle' }
+  | { kind: 'confirming'; payload: PlaceOrderPayload }
   | { kind: 'submitting' }
   | { kind: 'result'; response: TradeOrderResponse }
   | { kind: 'error'; message: string }
@@ -63,17 +64,30 @@ interface TradeFormProps {
  * "Trade" is enabled (E5-F1-S1). Leverage is only shown for crypto, bounded to
  * 1x-MAX_CRYPTO_LEVERAGE; stock orders hide the field entirely and stay at the
  * hardcoded 1x default (E5-F1-S2). Only rendered for a BUY/SELL call — a HOLD has no
- * direction to size an entry for. Submitting fires the real bracket order immediately
- * (E5-F2-S1) — no confirmation step yet, that's E5-F2-S2's job. The backend always
- * re-derives direction/price from a fresh signal computation rather than trusting this
- * form's (possibly stale) snapshot, so a submission can still fail with
- * SIGNAL_NOT_ACTIONABLE if the call flipped to HOLD between lookup and click.
+ * direction to size an entry for. Submitting a valid form opens a confirmation dialog
+ * with the order summary (E5-F2-S2) rather than firing the order immediately — only
+ * the dialog's own "Confirm trade" button calls placeOrder; Cancel or dismissing the
+ * dialog (Esc) returns to the form with no API call. The backend always re-derives
+ * direction/price from a fresh signal computation rather than trusting this form's
+ * (possibly stale) snapshot, so a submission can still fail with SIGNAL_NOT_ACTIONABLE
+ * if the call flipped to HOLD between lookup and confirm.
  */
 function TradeForm({ signal }: TradeFormProps) {
   const [values, setValues] = useState<TradeFormValues>(DEFAULT_VALUES)
   const [submitState, setSubmitState] = useState<SubmitState>({ kind: 'idle' })
+  const dialogRef = useRef<HTMLDialogElement>(null)
 
   const { call, ticker, indicators } = signal
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    if (!dialog) return
+    if (submitState.kind === 'confirming') {
+      if (!dialog.open) dialog.showModal()
+    } else if (dialog.open) {
+      dialog.close()
+    }
+  }, [submitState.kind])
 
   if (call === 'HOLD') return null
 
@@ -87,18 +101,32 @@ function TradeForm({ signal }: TradeFormProps) {
     }
   }
 
-  async function handleSubmit(event: FormEvent) {
+  function handleSubmit(event: FormEvent) {
     event.preventDefault()
     if (!isValid) return
 
-    setSubmitState({ kind: 'submitting' })
-    try {
-      const response = await placeOrder(ticker.symbol, {
+    setSubmitState({
+      kind: 'confirming',
+      payload: {
         amountUsd: Number(values.amountUsd),
         leverage: Number(values.leverage),
         takeProfitPrice: Number(values.takeProfitPrice),
         stopLossPrice: Number(values.stopLossPrice),
-      })
+      },
+    })
+  }
+
+  function handleCancelConfirm() {
+    setSubmitState({ kind: 'idle' })
+  }
+
+  async function handleConfirm() {
+    if (submitState.kind !== 'confirming') return
+    const { payload } = submitState
+
+    setSubmitState({ kind: 'submitting' })
+    try {
+      const response = await placeOrder(ticker.symbol, payload)
       setSubmitState({ kind: 'result', response })
     } catch (reason) {
       const message =
@@ -165,7 +193,7 @@ function TradeForm({ signal }: TradeFormProps) {
         </p>
       )}
 
-      <button type="submit" disabled={!isValid || submitState.kind === 'submitting'}>
+      <button type="submit" disabled={!isValid || submitState.kind === 'submitting' || submitState.kind === 'confirming'}>
         {submitState.kind === 'submitting' ? 'Submitting…' : 'Trade'}
       </button>
       {submitState.kind === 'result' && (
@@ -178,6 +206,38 @@ function TradeForm({ signal }: TradeFormProps) {
           {submitState.message}
         </p>
       )}
+
+      <dialog ref={dialogRef} className="trade-confirm-dialog" onCancel={handleCancelConfirm}>
+        {submitState.kind === 'confirming' && (
+          <div className="trade-confirm-dialog__content">
+            <h4>
+              Confirm {call} order — {ticker.symbol}
+            </h4>
+            <dl className="trade-confirm-dialog__summary">
+              <dt>Amount</dt>
+              <dd>${submitState.payload.amountUsd}</dd>
+              {ticker.assetType === 'CRYPTO' && (
+                <>
+                  <dt>Leverage</dt>
+                  <dd>{submitState.payload.leverage}x</dd>
+                </>
+              )}
+              <dt>Take-profit</dt>
+              <dd>{submitState.payload.takeProfitPrice}</dd>
+              <dt>Stop-loss</dt>
+              <dd>{submitState.payload.stopLossPrice}</dd>
+            </dl>
+            <div className="trade-confirm-dialog__actions">
+              <button type="button" onClick={handleCancelConfirm}>
+                Cancel
+              </button>
+              <button type="button" onClick={handleConfirm} autoFocus>
+                Confirm trade
+              </button>
+            </div>
+          </div>
+        )}
+      </dialog>
     </form>
   )
 }

@@ -203,3 +203,42 @@ body {
   background: light-dark(#fdf0e6, #3a2410);
   color: light-dark(#c2410c, #fdba74);
 }
+
+.trade-confirm-dialog {
+  border: 1px solid light-dark(#d0d0d0, #3a3a3a);
+  border-radius: 0.5rem;
+  padding: 1.25rem 1.5rem;
+  max-width: 22rem;
+  background: light-dark(#ffffff, #1e1e1e);
+  color: light-dark(#1a1a1a, #e6e6e6);
+}
+
+.trade-confirm-dialog::backdrop {
+  background: light-dark(rgb(0 0 0 / 35%), rgb(0 0 0 / 60%));
+}
+
+.trade-confirm-dialog__content h4 {
+  margin: 0 0 0.75rem;
+}
+
+.trade-confirm-dialog__summary {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 0.75rem;
+  margin: 0 0 1rem;
+}
+
+.trade-confirm-dialog__summary dt {
+  color: light-dark(#666666, #999999);
+}
+
+.trade-confirm-dialog__summary dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.trade-confirm-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}

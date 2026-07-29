@@ -1918,8 +1918,68 @@ former needs real broker credentials this dev machine doesn't have, the
 latter needs a live signal flip during a manual click, neither
 practically reproducible here; flagged, not silently assumed, same
 disclosure style as this file's other un-observed paths (e.g. E3-F1-S2's
-BUY badge, E3-F2-S1's `autoSize` resize). E5-F2-S2 (explicit confirmation
-step before the order fires) is next.
+BUY badge, E3-F2-S1's `autoSize` resize).
+
+E5-F2-S2 (explicit confirmation step before the order fires) is done,
+closing out F5.2. No `Plan`-agent design gate — frontend-only, no open
+design question, same reasoning as every other small E3/E5 frontend story.
+`TradeForm.tsx`'s `SubmitState` union gained a `confirming` variant carrying
+a snapshotted `PlaceOrderPayload`; `handleSubmit` (the form's `onSubmit`)
+now only validates and transitions to `confirming` — it no longer calls
+`placeOrder` directly. A native `<dialog>` element (`useRef`+`useEffect`
+opening it via `showModal()`/closing via `close()` whenever
+`submitState.kind` toggles in/out of `confirming`) renders the order
+summary (amount, leverage — only for crypto, matching the field's own
+asset-type-conditional visibility from E5-F1-S2 — take-profit, stop-loss)
+with two buttons: "Cancel" (`handleCancelConfirm`, resets straight to
+`idle`) and "Confirm trade" (`handleConfirm`, the only path that now calls
+`placeOrder`, using the snapshotted payload rather than re-reading the
+form's live values). Dismissing via Esc fires the dialog's native `cancel`
+event, wired to the same `handleCancelConfirm` — so every dismissal path
+(button or Esc) is one function with no API call. Deliberately no `onClose`
+handler: the dialog is only ever closed by the effect reacting to
+`submitState.kind`, so listening for the browser's own `close` event would
+double-fire the same reset and risk clobbering a `submitting`/`result`
+state the effect had just transitioned to. New `.trade-confirm-dialog`
+CSS rules (border/background/`::backdrop` dimming, a `dl`-based summary
+grid, right-aligned actions) follow the same `light-dark()` pattern as
+`.trade-form`/`.stat-tile`/`.signal-badge`.
+
+No backend changes — this story only inserts a client-side gate in front
+of the existing `POST /api/tickers/{symbol}/orders` call E5-F2-S1 already
+built; the backend still re-derives direction/price from a fresh signal
+computation regardless of what the confirmation dialog displayed, so a
+`SIGNAL_NOT_ACTIONABLE` race is still possible if the call flips between
+opening the dialog and confirming — unchanged, pre-existing behavior. No
+new Vitest cases — `vitest.config.ts` runs in a plain `node` environment
+(no jsdom), so this project has no DOM-testing infrastructure to exercise
+`<dialog>`'s `showModal`/`close`/`cancel` behavior; `npm run
+build`/`lint`/`test` all pass clean (13 tests, unchanged), and the dialog's
+actual behavior was verified live instead, per this story's own real
+money-safety stakes.
+
+Verified live via the `run` skill against the real running stack (Docker
+Oracle XE + real public Binance API, no mocking; logged in through E1-F3-S2's
+session-cookie auth) — stale `java`/`node` processes from an earlier
+session were again holding 8080/5173 (this file's own recurring gotcha),
+killed and both restarted clean before trusting `/health`. Looked up the
+live `SOLUSDT` SELL signal, filled a valid amount/TP/SL, and clicked
+"Trade": the confirmation dialog rendered with the exact summary values
+entered, the page dimmed via `::backdrop`, and — confirmed via
+`read_network_requests` — **zero** requests fired while the dialog was
+open. Clicking "Cancel" closed the dialog with the form values still
+intact and the Trade button re-enabled, still zero requests. Reopening and
+pressing **Escape** produced the identical result (dialog closed, zero
+requests) — proving the native `cancel` event path behaves the same as the
+explicit Cancel button. Reopening a third time and clicking "Confirm
+trade" fired exactly one `POST /api/tickers/SOLUSDT/orders`
+(`read_network_requests` showed a single matching entry), which correctly
+503'd `BROKER_CREDENTIAL_NOT_CONFIGURED` — the same reachable terminus
+E5-F2-S1 already hit live, since no real `BINANCE_TRADING_API_KEY`/
+`BINANCE_TRADING_API_SECRET` exist on this dev machine — and the dialog
+closed back to the form with that error rendered. Browser console showed
+no errors at any point. This closes out F5.2 (order construction &
+submission) in full. E5-F3-S1 (order status/history) is next.
 
 The original agile delivery plan for the project (drafted before any of E1-E3 above
 was implemented) lives at `docs/agile-plan.md` — an auto-trade signal dashboard
