@@ -19,12 +19,15 @@ import java.util.Optional;
  * re-instantiating anything. Expected business outcomes (broker rejected an
  * order, an order/position wasn't found) are returned as normal result
  * values, never exceptions; only transport/infrastructure faults throw
- * {@link BrokerAdapterException}. Retry/backoff/rate-limit handling (E4-F1-S2)
- * and outage/duplicate-prevention semantics (E4-F1-S3) are deliberately not
- * part of this contract yet — {@code clientOrderId} being the sole required
- * identifier everywhere, and {@link BrokerAdapterException} being the single
- * seam a future retry wrapper would catch, are what keep this interface from
- * needing a breaking change once those stories land.
+ * {@link BrokerAdapterException} — its two subtypes, {@link
+ * BrokerAdapterTransientException} and {@link BrokerAdapterRateLimitedException},
+ * are what a concrete adapter throws to get uniform retry/backoff via {@link
+ * RetryingBrokerAdapter} (E4-F1-S2), which wraps any {@code BrokerAdapter}
+ * rather than requiring each implementation to reimplement retry itself.
+ * Outage/duplicate-prevention semantics (E4-F1-S3) are still not part of this
+ * contract — {@code clientOrderId} being the sole required identifier
+ * everywhere keeps this interface from needing a breaking change once that
+ * story lands.
  */
 public interface BrokerAdapter {
 

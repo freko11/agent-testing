@@ -1090,6 +1090,83 @@ backend interface/contract addition with no consumer wired in yet (F4.2's
 Alpaca adapter is the first real implementation; E5's order-submission flow
 is the first real caller).
 
+E4-F1-S2 (rate-limit/retry/backoff built into the adapter contract) is done.
+A `Plan`-agent design gate resolved the story's central question — since no
+real Alpaca/Binance adapter exists yet (F4.2/F4.3 are still future stories),
+there was nothing to attach a per-adapter retry helper to (the read-only
+`marketdata.RetryHelper` pattern), so the plan chose a **decorator** instead:
+`RetryingBrokerAdapter implements BrokerAdapter`, wraps any delegate adapter,
+and applies retry/backoff uniformly around every interface method — this
+means retry code is written exactly once, never duplicated per future
+adapter, and it's fully testable today by wrapping `MockBrokerAdapter`. This
+is explicitly not the adapter-router E4-F1-S1 deliberately deferred (YAGNI)
+— it wraps a single adapter instance, no asset-type routing involved.
+
+Two new exception subtypes classify *why* a `BrokerAdapter` call failed
+(`BrokerAdapterException` itself stays the fatal, non-retryable base — same
+as before, so nothing about E4-F1-S1's existing usage changed):
+`BrokerAdapterTransientException` (ambiguous transport fault — timeout,
+connection reset, 5xx) and `BrokerAdapterRateLimitedException` (broker
+explicitly rejected the call for throttling; carries a nullable
+`retryAfterSeconds`, mirroring `MarketDataRateLimitedException`'s shape). A
+concrete future adapter's only retry-related responsibility is to throw the
+right subtype.
+
+The one decision flagged for explicit sign-off (money-safety implications,
+not silently assumed) was confirmed directly with the user before
+implementation: **`placeOrder` retries a rate-limit failure but never a
+generic transient one** — a rate-limit response is unambiguous (the broker
+definitely rejected the call, and `clientOrderId` replay is already
+idempotent per E4-F1-S1), but a transient failure is ambiguous (the broker
+may have already received the order before the connection dropped), and
+guaranteeing no duplicate submission under that ambiguity is **E4-F1-S3's**
+explicit scope, not this story's. `getOrderStatus`/`getPosition`/
+`getAccountStatus`/`cancelOrder` retry both transient and rate-limited
+failures freely, since none of them submit money-moving state. A plain
+(non-subtype) `BrokerAdapterException` is never retried on any method.
+Backoff is exponential (`baseDelay * 2^(attempt-1)`, capped at `maxDelay`);
+`BrokerAdapterRetryPolicy.defaultPolicy()` is 3 attempts/250ms base/2s cap —
+provisional engineering defaults, not sourced from Alpaca's/Binance's actual
+rate-limit windows, flagged to revisit once F4.2/F4.3 research those. A
+rate-limited failure's `retryAfterSeconds`, when present, overrides the
+computed backoff — but if it would exceed `maxDelay`, the wrapper stops
+retrying immediately rather than blocking the calling thread for minutes
+(no async job queue exists yet to defer to). An `InterruptedException`
+during a backoff sleep sets the interrupt flag and rethrows the last-caught
+failure immediately, rather than looping again — a deliberate deviation from
+`RetryHelper`'s swallow-and-continue, since this loop can span several
+attempts where that one was a single retry.
+
+`MockBrokerAdapter` (test-only) gained `failNextCallsWith(exception, times)`
+— its existing `failNextCallWith` is now a one-time convenience wrapper over
+it — so tests can script retry-exhaustion (N failures in a row), not just a
+single fail-then-succeed case. New `RetryingBrokerAdapterTest` (8 tests):
+transient retry-then-succeed on a read, transient exhausted on a read,
+rate-limit retry-then-succeed on both a read and `placeOrder`, rate-limit
+exhausted (asserts the exact exception type and preserved
+`retryAfterSeconds`), a rate-limit whose `retryAfterSeconds` exceeds
+`maxDelay` stopping immediately, `placeOrder` *not* retrying a transient
+failure (proven by scripting only one failure — if it had retried, the
+unscripted second call would have silently succeeded instead of the test
+observing a thrown exception), and a fatal exception never being retried on
+a read (same one-shot-failure proof technique). New
+`RetryingMockBrokerAdapterContractTest` runs the existing shared
+`BrokerAdapterContractTest` suite against a `MockBrokerAdapter` wrapped in
+`RetryingBrokerAdapter`, proving the decorator is fully transparent on the
+happy path — and giving F4.2/F4.3 a ready template ("wrap your adapter and
+run the shared suite against the wrapped instance too"), which
+`BrokerAdapterContractTest`'s own Javadoc now recommends explicitly.
+`BrokerAdapter`/`BrokerAdapterException`'s Javadoc were updated to point at
+`RetryingBrokerAdapter` and its two exception subtypes instead of describing
+retry/backoff as "not part of the contract yet."
+
+Tested via 15 new tests (`RetryingBrokerAdapterTest`: 8,
+`RetryingMockBrokerAdapterContractTest`: 7 inherited) — 179 backend tests
+total, `./mvnw verify` green. No frontend or database changes — same
+backend-only scope as E4-F1-S1. Outage handling and duplicate-order
+prevention under an ambiguous transient failure remain E4-F1-S3's explicit,
+not-yet-built scope.
+
 The original agile delivery plan for the project (drafted before any of E1-E3 above
 was implemented) lives at `docs/agile-plan.md` — an auto-trade signal dashboard
 (React frontend, Java/Spring Boot backend, Oracle Database via local Oracle XE,

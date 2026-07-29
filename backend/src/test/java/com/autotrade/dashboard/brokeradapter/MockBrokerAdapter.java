@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * A deterministic, in-memory {@link BrokerAdapter} for tests — never a
@@ -26,9 +27,10 @@ import java.util.concurrent.atomic.AtomicLong;
  * via {@link #simulateFill}.
  *
  * <p>The scripting hooks ({@link #rejectNextOrderWith}, {@link
- * #failNextCallWith}, {@link #simulateFill}) exist so future tests for
- * retry/outage handling (E4-F1-S2/S3) and the still-open mock-broker E2E
- * test (E1-F4-S1) have something concrete to script against — this class
+ * #failNextCallWith}, {@link #failNextCallsWith}, {@link #simulateFill})
+ * exist so tests for retry/outage handling (E4-F1-S2/S3, see {@link
+ * RetryingBrokerAdapter}) and the still-open mock-broker E2E test
+ * (E1-F4-S1) have something concrete to script against — this class
  * doesn't itself implement retry or outage logic.
  */
 public class MockBrokerAdapter implements BrokerAdapter {
@@ -44,6 +46,7 @@ public class MockBrokerAdapter implements BrokerAdapter {
 
     private volatile String pendingRejectionReason;
     private volatile RuntimeException pendingFailure;
+    private final AtomicInteger pendingFailureCount = new AtomicInteger(0);
 
     public MockBrokerAdapter(Broker broker, AssetType assetType) {
         this(broker, assetType, true, Clock.systemUTC());
@@ -143,7 +146,13 @@ public class MockBrokerAdapter implements BrokerAdapter {
 
     /** Next call to any method throws this instead of executing normally, then resets. */
     public void failNextCallWith(RuntimeException exception) {
+        failNextCallsWith(exception, 1);
+    }
+
+    /** Next {@code times} calls to any method throw this instead of executing normally, then reset. */
+    public void failNextCallsWith(RuntimeException exception, int times) {
         this.pendingFailure = exception;
+        this.pendingFailureCount.set(times);
     }
 
     /** Next {@link #placeOrder} returns REJECTED with this reason instead of the normal path, then resets. */
@@ -196,10 +205,13 @@ public class MockBrokerAdapter implements BrokerAdapter {
 
     private void maybeThrowScripted() {
         RuntimeException failure = pendingFailure;
-        pendingFailure = null;
-        if (failure != null) {
-            throw failure;
+        if (failure == null) {
+            return;
         }
+        if (pendingFailureCount.decrementAndGet() <= 0) {
+            pendingFailure = null;
+        }
+        throw failure;
     }
 
     private record PositionState(AssetType assetType, BigDecimal quantity, BigDecimal averageEntryPrice) {
