@@ -1167,6 +1167,80 @@ backend-only scope as E4-F1-S1. Outage handling and duplicate-order
 prevention under an ambiguous transient failure remain E4-F1-S3's explicit,
 not-yet-built scope.
 
+E4-F1-S3 (broker/data-provider outage fails visibly and safely; retries never
+duplicate an already-submitted order) is done, closing out F4.1. A
+`Plan`-agent design gate fixed the approach before implementation: two new
+exception types, both synthesized exclusively by `RetryingBrokerAdapter` —
+never thrown directly by a concrete adapter, since doing so would bypass
+reconciliation entirely. **`BrokerAdapterUnavailableException`** replaces the
+raw `BrokerAdapterTransientException` whenever retries are exhausted on any
+method (or immediately on `placeOrder`, which never auto-retries a transient
+failure) — this is the AC's distinct "broker unavailable" state, mirroring
+`MarketDataUnavailableException`'s existing precedent, for a future
+order-submission controller to map to a UI state. **`BrokerAdapterAmbiguousOrderException`**
+is thrown only from `placeOrder`, only when reconciliation itself also fails
+— genuinely ambiguous whether the order reached the broker — carrying the
+`clientOrderId` and an explicit message telling the caller to retry with the
+*same* id (idempotent) rather than resubmit under a new one.
+
+The actual duplicate-prevention mechanism: `RetryingBrokerAdapter.placeOrder`
+now catches its own `BrokerAdapterUnavailableException` and reconciles via a
+single call to **its own `getOrderStatus`** (not the delegate's — so the
+reconciliation probe itself gets the same retry/backoff) keyed on the same
+`clientOrderId`. If the broker confirms the order was actually recorded, that
+real `BrokerOrderResult` is returned normally (no exception, no duplicate —
+same identity resolves to the same order); if the broker confirms nothing
+exists, `BrokerAdapterUnavailableException` propagates (confirmed-not-submitted,
+safe to retry later); if the reconciliation call itself throws, that's
+genuine ambiguity → `BrokerAdapterAmbiguousOrderException` (original failure
+as cause, reconciliation failure attached via `addSuppressed`). Rate-limit
+exhaustion is deliberately untouched — still throws the raw
+`BrokerAdapterRateLimitedException`, since that's an unambiguous rejection,
+a different concept from unreachability that this story doesn't conflate.
+No `BrokerAdapter` interface change — `clientOrderId` already being the sole
+required identifier is what keeps reconciliation possible without a breaking
+change, per E4-F1-S1's own design note.
+
+`MockBrokerAdapter` (test-only) gained one new scripting hook,
+`simulateLostResponseOnNextPlaceOrder` — models "the broker actually
+processed the order but the response back was lost" (state recorded,
+auto-fill applied if enabled, *then* throws) — distinct from the existing
+`failNextCallWith`/`failNextCallsWith` hooks, which throw before any state
+mutation and could therefore only ever model "never reached the broker."
+`BrokerAdapterContractTest` (the shared cross-adapter suite) needed no
+changes — both new exception types are decorator-only, never part of what a
+bare adapter must satisfy. Two existing `RetryingBrokerAdapterTest` cases
+were updated to assert the new wrapping behavior instead of the old raw
+exception type. New `RetryingBrokerAdapterOutageTest` (6 tests) covers:
+read-call transient exhaustion wrapping with cause preserved, `placeOrder`
+confirmed-not-submitted via reconciliation, `placeOrder` where the broker
+actually succeeded (real result returned, exactly one position recorded —
+the concrete no-duplicate proof), genuine reconciliation-failure ambiguity,
+a same-`clientOrderId` retry after an ambiguous outcome resolving
+idempotently with no duplicate order, and a regression guard proving
+rate-limit exhaustion is never wrapped into either new type. Two new
+`MockBrokerAdapterTest` cases cover the new hook directly. 187 backend tests
+total, `./mvnw verify` green. `adapter-contract-check` skill run: interface
+conformance and retry/backoff unaffected (full suite green); outage handling
+now has a concrete, tested dedup mechanism (clientOrderId-keyed idempotent
+replay plus reconciliation), not just "retry carefully"; leverage-bounds and
+paper-vs-live-key checklist items remain out of scope until F4.2/F4.3 build
+real adapters, same deferred status as E4-F1-S1/S2.
+
+No frontend or database changes — same backend-only scope as E4-F1-S1/S2.
+"The UI shows a clear broker unavailable state" remains a flagged, deferred
+consumer requirement: no order-submission flow or UI exists yet (E5 hasn't
+been built), so there's nothing to wire a real UI state into today. This
+story provides the two distinct exception types a future order-submission
+controller needs to satisfy that half of the AC without further adapter-layer
+plumbing — `BrokerAdapterUnavailableException` for a "broker unavailable,
+try again" state and `BrokerAdapterAmbiguousOrderException` for a stronger
+"status unknown, do not resubmit" state — which HTTP status/error codes they
+map to is E5's decision when that controller is actually built.
+
+This closes out F4.1 (adapter interface) and E4-F1 in full. F4.2 (Alpaca
+adapter) is next.
+
 The original agile delivery plan for the project (drafted before any of E1-E3 above
 was implemented) lives at `docs/agile-plan.md` — an auto-trade signal dashboard
 (React frontend, Java/Spring Boot backend, Oracle Database via local Oracle XE,

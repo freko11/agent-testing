@@ -22,11 +22,24 @@ import java.util.function.Supplier;
  * response is unambiguous (the broker definitely rejected the call, and
  * {@code clientOrderId} replay is already idempotent per E4-F1-S1), but a
  * generic transient failure is ambiguous: the broker may have already
- * received the order before the connection dropped. Guaranteeing no
- * duplicate submission under that ambiguity is E4-F1-S3's explicit scope,
- * not this story's — so {@code placeOrder} never auto-retries a transient
- * failure. A plain (non-subtype) {@link BrokerAdapterException} is always
- * fatal and never retried on any method.
+ * received the order before the connection dropped. A plain (non-subtype)
+ * {@link BrokerAdapterException} is always fatal and never retried on any
+ * method.
+ *
+ * <p>When a {@link BrokerAdapterTransientException} is not retried further
+ * (attempts exhausted on any method, or immediately on {@code placeOrder}),
+ * it is wrapped into {@link BrokerAdapterUnavailableException} — a distinct
+ * "broker unavailable" state, per E4-F1-S3. For {@code placeOrder}
+ * specifically, that wrapping is deferred until a single reconciliation
+ * call to {@link #getOrderStatus} (this decorator's own, so it benefits from
+ * the same retry/backoff) confirms whether the order actually reached the
+ * broker despite the failure: if it did, that real result is returned
+ * normally (no exception, no duplicate — same {@code clientOrderId}); if
+ * the broker confirms no such order, {@link BrokerAdapterUnavailableException}
+ * is thrown (safe to retry later with the same {@code clientOrderId}); if
+ * reconciliation itself fails, {@link BrokerAdapterAmbiguousOrderException}
+ * is thrown instead, since we then genuinely cannot tell whether the order
+ * was submitted.
  */
 public class RetryingBrokerAdapter implements BrokerAdapter {
 
@@ -54,7 +67,27 @@ public class RetryingBrokerAdapter implements BrokerAdapter {
 
     @Override
     public BrokerOrderResult placeOrder(BrokerOrderRequest request, TradingMode mode) {
-        return withRetry(() -> delegate.placeOrder(request, mode), false);
+        try {
+            return withRetry(() -> delegate.placeOrder(request, mode), false);
+        } catch (BrokerAdapterUnavailableException unavailable) {
+            return reconcile(request.clientOrderId(), mode, unavailable);
+        }
+    }
+
+    private BrokerOrderResult reconcile(String clientOrderId, TradingMode mode, BrokerAdapterUnavailableException original) {
+        Optional<BrokerOrderResult> actual;
+        try {
+            actual = getOrderStatus(clientOrderId, mode);
+        } catch (BrokerAdapterException reconciliationFailure) {
+            BrokerAdapterAmbiguousOrderException ambiguous =
+                    new BrokerAdapterAmbiguousOrderException(delegate.broker(), clientOrderId, original);
+            ambiguous.addSuppressed(reconciliationFailure);
+            throw ambiguous;
+        }
+        if (actual.isPresent()) {
+            return actual.get();
+        }
+        throw original;
     }
 
     @Override
@@ -91,7 +124,7 @@ public class RetryingBrokerAdapter implements BrokerAdapter {
                 attempt++;
             } catch (BrokerAdapterTransientException transientFailure) {
                 if (!retryTransient || attempt >= policy.maxAttempts()) {
-                    throw transientFailure;
+                    throw new BrokerAdapterUnavailableException(delegate.broker(), transientFailure);
                 }
                 sleepOrRethrow(backoffFor(attempt), transientFailure);
                 attempt++;

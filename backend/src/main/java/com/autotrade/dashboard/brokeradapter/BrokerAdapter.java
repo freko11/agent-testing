@@ -24,10 +24,12 @@ import java.util.Optional;
  * are what a concrete adapter throws to get uniform retry/backoff via {@link
  * RetryingBrokerAdapter} (E4-F1-S2), which wraps any {@code BrokerAdapter}
  * rather than requiring each implementation to reimplement retry itself.
- * Outage/duplicate-prevention semantics (E4-F1-S3) are still not part of this
- * contract — {@code clientOrderId} being the sole required identifier
- * everywhere keeps this interface from needing a breaking change once that
- * story lands.
+ * Outage handling and duplicate-order prevention (E4-F1-S3) are likewise
+ * layered entirely inside {@code RetryingBrokerAdapter} — see {@link
+ * BrokerAdapterUnavailableException} and {@link BrokerAdapterAmbiguousOrderException}
+ * — with no change to this interface, since {@code clientOrderId} being the
+ * sole required identifier everywhere is what keeps reconciliation possible
+ * without a breaking change.
  */
 public interface BrokerAdapter {
 

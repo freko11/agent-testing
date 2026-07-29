@@ -27,8 +27,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * via {@link #simulateFill}.
  *
  * <p>The scripting hooks ({@link #rejectNextOrderWith}, {@link
- * #failNextCallWith}, {@link #failNextCallsWith}, {@link #simulateFill})
- * exist so tests for retry/outage handling (E4-F1-S2/S3, see {@link
+ * #failNextCallWith}, {@link #failNextCallsWith}, {@link
+ * #simulateLostResponseOnNextPlaceOrder}, {@link #simulateFill}) exist so
+ * tests for retry/outage handling (E4-F1-S2/S3, see {@link
  * RetryingBrokerAdapter}) and the still-open mock-broker E2E test
  * (E1-F4-S1) have something concrete to script against — this class
  * doesn't itself implement retry or outage logic.
@@ -47,6 +48,7 @@ public class MockBrokerAdapter implements BrokerAdapter {
     private volatile String pendingRejectionReason;
     private volatile RuntimeException pendingFailure;
     private final AtomicInteger pendingFailureCount = new AtomicInteger(0);
+    private volatile RuntimeException pendingResponseLoss;
 
     public MockBrokerAdapter(Broker broker, AssetType assetType) {
         this(broker, assetType, true, Clock.systemUTC());
@@ -94,6 +96,12 @@ public class MockBrokerAdapter implements BrokerAdapter {
 
         if (autoFill) {
             fill(request.clientOrderId(), placeholderFillPrice(request));
+        }
+
+        RuntimeException responseLoss = pendingResponseLoss;
+        pendingResponseLoss = null;
+        if (responseLoss != null) {
+            throw responseLoss;
         }
 
         return orders.get(request.clientOrderId()).toResult(clock.instant());
@@ -158,6 +166,17 @@ public class MockBrokerAdapter implements BrokerAdapter {
     /** Next {@link #placeOrder} returns REJECTED with this reason instead of the normal path, then resets. */
     public void rejectNextOrderWith(String reason) {
         this.pendingRejectionReason = reason;
+    }
+
+    /**
+     * Next {@link #placeOrder} for a genuinely new {@code clientOrderId} records the order
+     * (and auto-fills, if enabled) exactly as normal, then throws this instead of returning
+     * the result to the caller — modeling the broker having actually processed the order
+     * while the response back was lost. A subsequent {@code getOrderStatus}/{@code
+     * getPosition} call sees the real recorded state. One-shot, then resets.
+     */
+    public void simulateLostResponseOnNextPlaceOrder(RuntimeException exceptionToThrowInstead) {
+        this.pendingResponseLoss = exceptionToThrowInstead;
     }
 
     /** Manually transitions a SUBMITTED order to FILLED — for use when {@code autoFill} is false. */

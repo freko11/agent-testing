@@ -36,10 +36,12 @@ class RetryingBrokerAdapterTest {
     }
 
     @Test
-    void transientFailureExhaustingAllAttemptsPropagatesOnARead() {
+    void transientFailureExhaustingAllAttemptsWrapsIntoUnavailableOnARead() {
         mock.failNextCallsWith(new BrokerAdapterTransientException(Broker.ALPACA, "timeout"), FAST_POLICY.maxAttempts());
 
-        assertThrows(BrokerAdapterTransientException.class, () -> retrying.getPosition("AAPL", TradingMode.PAPER));
+        BrokerAdapterUnavailableException thrown = assertThrows(BrokerAdapterUnavailableException.class,
+                () -> retrying.getPosition("AAPL", TradingMode.PAPER));
+        assertEquals(BrokerAdapterTransientException.class, thrown.getCause().getClass());
     }
 
     @Test
@@ -61,6 +63,8 @@ class RetryingBrokerAdapterTest {
     }
 
     @Test
+    // Rate-limit exhaustion is deliberately untouched by E4-F1-S3 — it's an unambiguous
+    // rejection, unlike a transient failure, so it still throws the raw exception.
     void rateLimitedFailureExhaustingAllAttemptsPropagatesWithRetryAfterSecondsPreserved() {
         mock.failNextCallsWith(new BrokerAdapterRateLimitedException(Broker.ALPACA, 1L), FAST_POLICY.maxAttempts());
 
@@ -77,10 +81,16 @@ class RetryingBrokerAdapterTest {
     }
 
     @Test
-    void placeOrderDoesNotRetryATransientFailure() {
+    void placeOrderReconciliationConfirmsOrderNeverReachedBroker() {
+        // placeOrder itself never retries a transient failure, but RetryingBrokerAdapter
+        // then reconciles via getOrderStatus (which the mock never scripted to fail) —
+        // confirming the order was never recorded, so BrokerAdapterUnavailableException
+        // (not the raw transient failure) is what the caller sees.
         mock.failNextCallWith(new BrokerAdapterTransientException(Broker.ALPACA, "timeout"));
 
-        assertThrows(BrokerAdapterTransientException.class, () -> retrying.placeOrder(buyRequest("order-2"), TradingMode.PAPER));
+        BrokerAdapterUnavailableException thrown = assertThrows(BrokerAdapterUnavailableException.class,
+                () -> retrying.placeOrder(buyRequest("order-2"), TradingMode.PAPER));
+        assertEquals(BrokerAdapterTransientException.class, thrown.getCause().getClass());
     }
 
     @Test

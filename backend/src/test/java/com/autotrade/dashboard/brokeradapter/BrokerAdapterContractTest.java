@@ -17,9 +17,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Shared contract every {@link BrokerAdapter} implementation must satisfy —
  * plumbing/shape correctness only. Retry/backoff behavior is covered
  * separately by {@code RetryingBrokerAdapterTest} and {@code
- * RetryingMockBrokerAdapterContractTest} (E4-F1-S2); outage-simulation
- * behavior is still not tested here (E4-F1-S3's job to add once designed).
- * Subclasses supply a concrete adapter and enough request-building detail to
+ * RetryingMockBrokerAdapterContractTest} (E4-F1-S2); outage/reconciliation
+ * behavior is covered by {@code RetryingBrokerAdapterOutageTest} (E4-F1-S3)
+ * — not here, since {@link BrokerAdapterUnavailableException}/{@link
+ * BrokerAdapterAmbiguousOrderException} are synthesized exclusively by
+ * {@code RetryingBrokerAdapter}, never by a bare adapter this suite runs
+ * against directly. Subclasses supply a concrete adapter and enough
+ * request-building detail to
  * run these assertions against it; a real-adapter subclass (F4.2/F4.3) may
  * need to skip assertions that don't apply against a live paper API, and
  * should also run this same suite wrapped in {@code RetryingBrokerAdapter}

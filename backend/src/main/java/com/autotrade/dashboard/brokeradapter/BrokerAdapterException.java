@@ -11,6 +11,14 @@ import com.autotrade.dashboard.broker.Broker;
  * base type — throw one of its subtypes, {@link BrokerAdapterTransientException}
  * or {@link BrokerAdapterRateLimitedException}, when a failure is actually
  * retryable.
+ *
+ * <p>Concrete adapters must only ever throw the plain type, {@link
+ * BrokerAdapterTransientException}, or {@link BrokerAdapterRateLimitedException}.
+ * {@link BrokerAdapterUnavailableException} and {@link
+ * BrokerAdapterAmbiguousOrderException} are synthesized exclusively by
+ * {@link RetryingBrokerAdapter} (E4-F1-S3) — an adapter throwing either
+ * directly would bypass reconciliation entirely and be treated as an
+ * immediately-fatal, non-retried failure.
  */
 public class BrokerAdapterException extends RuntimeException {
 

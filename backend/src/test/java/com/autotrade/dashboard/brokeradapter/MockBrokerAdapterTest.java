@@ -84,6 +84,29 @@ class MockBrokerAdapterTest {
     }
 
     @Test
+    void simulateLostResponseOnNextPlaceOrderRecordsTheOrderThenThrows() {
+        autoFillAdapter.simulateLostResponseOnNextPlaceOrder(new BrokerAdapterTransientException(Broker.ALPACA, "response lost"));
+
+        assertThrows(BrokerAdapterTransientException.class,
+                () -> autoFillAdapter.placeOrder(buyRequest("order-11"), TradingMode.PAPER));
+
+        Optional<BrokerOrderResult> recorded = autoFillAdapter.getOrderStatus("order-11", TradingMode.PAPER);
+        assertTrue(recorded.isPresent());
+        assertEquals(OrderStatus.FILLED, recorded.orElseThrow().status());
+    }
+
+    @Test
+    void simulateLostResponseOnNextPlaceOrderOnlyAppliesOnce() {
+        autoFillAdapter.simulateLostResponseOnNextPlaceOrder(new BrokerAdapterTransientException(Broker.ALPACA, "response lost"));
+        assertThrows(BrokerAdapterTransientException.class,
+                () -> autoFillAdapter.placeOrder(buyRequest("order-12"), TradingMode.PAPER));
+
+        BrokerOrderResult secondOrder = autoFillAdapter.placeOrder(buyRequest("order-13"), TradingMode.PAPER);
+
+        assertEquals(OrderStatus.FILLED, secondOrder.status());
+    }
+
+    @Test
     void cancelOrderOnAFilledOrderIsANoOp() {
         autoFillAdapter.placeOrder(buyRequest("order-6"), TradingMode.PAPER);
 
