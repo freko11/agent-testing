@@ -15,7 +15,9 @@ interface TradeFormProps {
 
 /**
  * Amount/leverage/take-profit/stop-loss input, validated against broker limits before
- * "Trade" is enabled (E5-F1-S1). Only rendered for a BUY/SELL call — a HOLD has no
+ * "Trade" is enabled (E5-F1-S1). Leverage is only shown for crypto, bounded to
+ * 1x-MAX_CRYPTO_LEVERAGE; stock orders hide the field entirely and stay at the
+ * hardcoded 1x default (E5-F1-S2). Only rendered for a BUY/SELL call — a HOLD has no
  * direction to size an entry for. Submitting doesn't call a broker yet: bracket-order
  * construction and adapter routing are E5-F2-S1's scope, so this only proves the
  * validated payload is ready to hand off once that wiring lands.
@@ -59,14 +61,25 @@ function TradeForm({ signal }: TradeFormProps) {
         </p>
       )}
 
-      <label>
-        Leverage {ticker.assetType === 'CRYPTO' ? `(1x-${MAX_CRYPTO_LEVERAGE}x)` : '(stocks: 1x only)'}
-        <input inputMode="numeric" value={values.leverage} onChange={updateField('leverage')} />
-      </label>
-      {errors.leverage && (
-        <p className="trade-form__error" role="alert">
-          {errors.leverage}
-        </p>
+      {ticker.assetType === 'CRYPTO' && (
+        <>
+          <label>
+            Leverage (1x-{MAX_CRYPTO_LEVERAGE}x)
+            <input
+              type="number"
+              min={1}
+              max={MAX_CRYPTO_LEVERAGE}
+              step={1}
+              value={values.leverage}
+              onChange={updateField('leverage')}
+            />
+          </label>
+          {errors.leverage && (
+            <p className="trade-form__error" role="alert">
+              {errors.leverage}
+            </p>
+          )}
+        </>
       )}
 
       <label>

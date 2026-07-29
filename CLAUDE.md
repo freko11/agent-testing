@@ -1752,9 +1752,44 @@ in this session (no stock ticker had a live BUY/SELL signal available
 during market-closed hours); flagged, not silently assumed, same disclosure
 style as prior stories' un-observed paths (e.g. E3-F1-S2's BUY badge).
 
-E5-F1-S2 (hide/default fields by asset type) is next, followed by E5-F2-S1
-(actual bracket-order construction and submission through the `BrokerAdapter`
-layer this form's payload is now shaped for).
+E5-F1-S2 (hide/default fields by asset type) is done, closing out F5.1. No
+`Plan`-agent design gate — frontend-only, no open design question, same
+reasoning as every other small E3/E5 frontend story. The AC's two halves were
+already partially true after E5-F1-S1: leverage was always numerically
+validated per asset type, just not conditionally rendered. This story is the
+rendering half only — `TradeForm.tsx`'s leverage `<label>`/`<input>` block
+now renders only when `ticker.assetType === 'CRYPTO'` (a plain-number
+`<input type="number" min={1} max={MAX_CRYPTO_LEVERAGE} step={1}>`, replacing
+the prior freeform text input that only complained after the fact); for a
+stock, the field is omitted entirely and `values.leverage` simply never
+leaves its `DEFAULT_VALUES` default of `'1'`, still checked defense-in-depth
+by the unchanged `validateTradeForm` stock branch. No changes to
+`validation.ts`'s logic — only its doc-comment, since asset-type-aware
+visibility now genuinely lives in `TradeForm.tsx` rather than being a
+still-open TODO the comment had flagged since E5-F1-S1.
+
+Tested via the existing `validation.test.ts` (13 tests, unchanged — the
+validation function's signature/behavior didn't change, only what
+`TradeForm.tsx` chooses to render) — `npm run build`/`npm run lint`/`npm
+test` all pass clean, same pre-existing unrelated `AuthContext.tsx` lint
+warning as every prior story. No backend changes.
+
+Verified live via the `run` skill against the real running stack (Docker
+Oracle XE + real public Binance API, no mocking; already running from a
+prior session, backend/frontend both confirmed healthy on their expected
+ports before reuse) — `ETHUSDT` (a live BUY) rendered the trade form with a
+bounded `Leverage (1x-20x)` number-spinner input (spinner arrows visible,
+defaulted to `1`); typing `25` correctly rendered "Leverage must be between
+1x and 20x." live, matching the crypto validation path. `AAPL` (checked
+outside market hours) still correctly 409'd `MARKET_CLOSED`, confirming no
+regression to E2-F1-S3 — this also means the stock-hides-leverage-entirely
+render path could only be confirmed by reading the conditional (`ticker.assetType
+=== 'CRYPTO'`) plus `validation.test.ts`'s existing stock-1x-only case, not
+observed live in this session, same gap E5-F1-S1 itself already flagged for
+this exact path.
+
+E5-F2-S1 (bracket-order construction and submission through the
+`BrokerAdapter` layer) is next.
 
 The original agile delivery plan for the project (drafted before any of E1-E3 above
 was implemented) lives at `docs/agile-plan.md` — an auto-trade signal dashboard

@@ -26,8 +26,9 @@ export interface TradeFormErrors {
 
 /**
  * Pure numeric-range validation for the trade input form (E5-F1-S1). Asset-type-aware
- * field visibility (hiding leverage entirely for stocks) is E5-F1-S2's job — this only
- * decides whether the values entered are within broker-enforceable bounds.
+ * field visibility (hiding leverage entirely for stocks, E5-F1-S2) lives in TradeForm.tsx —
+ * this still validates a stock's leverage value defense-in-depth even though the form never
+ * lets a user edit it away from the hardcoded default of 1.
  */
 export function validateTradeForm(
   values: TradeFormValues,
