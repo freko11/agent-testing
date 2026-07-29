@@ -17,11 +17,14 @@ import com.autotrade.dashboard.signal.SignalResponse;
 import com.autotrade.dashboard.signal.SignalService;
 import com.autotrade.dashboard.ticker.AssetType;
 import com.autotrade.dashboard.ticker.Ticker;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -45,6 +48,15 @@ import java.util.UUID;
  * written onto that row as a normal value; only pre-flight failures (bad
  * ticker/request, no actionable signal, no credential configured) skip
  * creating an {@code Order} row at all.
+ *
+ * <p>Also serves order status/history (E5-F3-S1): {@link #listOrders} reads
+ * straight from the DB (every order already reflects its final synchronous
+ * outcome from {@code submitOrder}, so there's no background "still pending"
+ * state to poll for) and {@link #refreshOrder} is a manual, explicit
+ * per-order re-poll of the broker — no scheduled/background polling exists,
+ * matching this codebase's bias against automated background action on
+ * money-moving state (E5-F2-S2's explicit confirm step, E4-F3-S2's
+ * no-auto-flatten decision).
  */
 @Service
 public class OrderService {
@@ -123,6 +135,40 @@ public class OrderService {
         } catch (BrokerAdapterException e) {
             return TradeOrderResponse.from(applyOutcome(orderId, OrderStatus.FAILED, e.getMessage(), null));
         }
+    }
+
+    public List<OrderResponse> listOrders(int limit) {
+        return orderRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(0, limit)).stream()
+                .map(OrderResponse::from)
+                .toList();
+    }
+
+    /**
+     * Re-polls the broker for one order's current status and persists whatever it reports — the only way an
+     * ambiguous {@code SUBMISSION_UNKNOWN}/{@code PARTIALLY_PROTECTED} row (or a {@code PENDING} row orphaned by an
+     * app crash mid-submission) ever gets resolved, since nothing polls automatically. If the broker has no record of
+     * this {@code clientOrderId}, that's treated the same as {@code OrderService}'s own outage-reconciliation
+     * wording elsewhere: confirmed not submitted, safe to retry. If the broker call itself throws, the stored row is
+     * left completely untouched — overwriting a known status with a failed-read guess would be the actual bug here.
+     */
+    public OrderResponse refreshOrder(Long orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new OrderNotFoundException(orderId));
+        Ticker ticker = order.getTicker();
+        BrokerAdapter adapter = router.forAssetType(ticker.getAssetType());
+
+        Optional<BrokerOrderResult> result;
+        try {
+            result = adapter.getOrderStatus(ticker.getSymbol(), order.getClientOrderId(), order.getOrderMode());
+        } catch (BrokerAdapterException e) {
+            throw new OrderRefreshUnavailableException(
+                    "Could not refresh order status from " + order.getBroker() + ": " + e.getMessage());
+        }
+
+        Order updated = result.map(r -> applyResult(orderId, r))
+                .orElseGet(() -> applyOutcome(orderId, OrderStatus.FAILED,
+                        "Broker confirmed no record of this order — safe to retry.", null));
+        return OrderResponse.from(updated);
     }
 
     private void validate(PlaceOrderRequest request, AssetType assetType, OrderSide side, BigDecimal price) {

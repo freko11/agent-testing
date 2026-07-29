@@ -35,4 +35,16 @@ public class OrderExceptionHandler {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(new ApiErrorResponse("BROKER_CREDENTIAL_NOT_CONFIGURED", e.getMessage(), null));
     }
+
+    @ExceptionHandler(OrderNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleOrderNotFound(OrderNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ApiErrorResponse("ORDER_NOT_FOUND", e.getMessage(), null));
+    }
+
+    @ExceptionHandler(OrderRefreshUnavailableException.class)
+    public ResponseEntity<ApiErrorResponse> handleOrderRefreshUnavailable(OrderRefreshUnavailableException e) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new ApiErrorResponse("ORDER_REFRESH_UNAVAILABLE", e.getMessage(), null));
+    }
 }

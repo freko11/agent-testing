@@ -242,3 +242,49 @@ body {
   justify-content: flex-end;
   gap: 0.5rem;
 }
+
+.order-history-table-wrap {
+  overflow-x: auto;
+}
+
+.order-history-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+}
+
+.order-history-table th,
+.order-history-table td {
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+  border-bottom: 1px solid light-dark(#d0d0d0, #3a3a3a);
+  white-space: nowrap;
+}
+
+.order-status {
+  font-weight: 600;
+}
+
+/* Same success/warning/error tone split as .trade-form__result. */
+.order-status--success {
+  color: light-dark(#0f766e, #5eead4);
+}
+
+.order-status--warning {
+  color: light-dark(#92700c, #fde68a);
+}
+
+.order-status--error {
+  color: light-dark(#c2410c, #fdba74);
+}
+
+.order-status--neutral {
+  color: light-dark(#475569, #94a3b8);
+}
+
+.order-history-table__row-error {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+  color: light-dark(#c2410c, #fb923c);
+}

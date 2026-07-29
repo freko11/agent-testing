@@ -1981,6 +1981,120 @@ closed back to the form with that error rendered. Browser console showed
 no errors at any point. This closes out F5.2 (order construction &
 submission) in full. E5-F3-S1 (order status/history) is next.
 
+E5-F3-S1 (order status/history) is done, starting F5.3. A `Plan`-agent design
+gate resolved the story's real question: given `OrderService.submitOrder`
+(E5-F2-S1) already writes every order's final synchronous outcome to the row
+before returning, is there ongoing "pending" state worth polling for? Decision:
+**no automatic/background polling anywhere** — only `SUBMISSION_UNKNOWN` and
+`PARTIALLY_PROTECTED` (plus, in principle, a `PENDING` row orphaned by an app
+crash mid-submission) can ever go stale after that write, and those are
+resolved by an explicit, manual per-order **"Refresh" button**, not a
+scheduler or `setInterval` — matching this codebase's established bias
+against automated background action on money-moving state (E5-F2-S2's
+explicit confirm step, E4-F3-S2's no-auto-flatten decision). One decision
+had real money-safety implications and was confirmed with the user before
+implementation: when a refresh's `getOrderStatus` call returns
+`Optional.empty()` (broker has no record of the `clientOrderId`), the row is
+marked `FAILED` with *"Broker confirmed no record of this order — safe to
+retry."* — mirroring `OrderService`'s existing outage-reconciliation wording
+elsewhere. If the refresh call instead **throws**, the stored row is left
+completely untouched (no status overwrite on a failed read) and a distinct
+503 is surfaced instead.
+
+New `OrderService.listOrders(limit)` (reads straight from
+`OrderRepository.findAllByOrderByCreatedAtDesc`, a new derived query using
+`PageRequest` — this codebase's first use of Spring Data `Pageable`) and
+`OrderService.refreshOrder(orderId)` (loads the order, resolves the adapter
+via the existing `BrokerAdapterRouter`, calls `adapter.getOrderStatus(...)`
+with no open transaction — same short-write discipline `submitOrder` already
+documents — and reuses the existing private `applyOutcome` helper for the
+persisted update). New `OrderResponse` record (deliberately separate from
+`TradeOrderResponse`, which is scoped to "the result of a click-Trade
+submission" and is missing fields — ticker symbol, TP/SL, leverage — a status
+page needs; same DTO shape serves both the list and the refresh response).
+New `OrderNotFoundException` (404 `ORDER_NOT_FOUND`) and
+`OrderRefreshUnavailableException` (503 `ORDER_REFRESH_UNAVAILABLE`), wired
+into the existing `OrderExceptionHandler`. New `OrderQueryController`
+(`GET /api/orders?limit=N` default 50/max 500, `POST /api/orders/{id}/refresh`)
+— a separate top-level `/api/orders` resource mirroring `/api/watchlist`'s
+precedent, kept apart from the existing submission-only `OrderController`
+(`/api/tickers/{symbol}/orders`). No Flyway migration — every field
+`OrderResponse` needs already exists on `Order` from E1-F2-S1/E5-F2-S1;
+`updatedAt` (already bumped by `@PreUpdate` on every save) doubles as "last
+confirmed against broker at" with no new column.
+
+New `frontend/src/order/` package (mirrors `chart`/`signal`/`watchlist`):
+`api.ts` (`OrderSummary`, `fetchOrders`, `refreshOrder` — reusing
+`Broker`/`OrderSide`/`OrderStatus` from `trade/api.ts` and
+`parseMarketDataError` from `marketdata/api.ts` rather than duplicating
+either) and `OrderHistory.tsx` (a `<table>` — genuinely tabular data,
+appropriate departure from `Watchlist.tsx`'s `<ul>` — one row per order with
+a per-row "Refresh" button, disabling just that row and patching just that
+row's data on success, with a per-row inline error on failure so one broker
+hiccup doesn't blank the rest of the table; no `setInterval` anywhere, per
+the design gate). Two new `MarketDataErrorCode` members
+(`ORDER_NOT_FOUND`/`ORDER_REFRESH_UNAVAILABLE`). `TradeForm.tsx` gained an
+`onOrderPlaced?: () => void` prop, called right after a `placeOrder` call
+resolves (regardless of the resulting status — even a REJECTED/FAILED order
+is a real row worth showing; pre-flight failures that never create an
+`Order` row correctly don't trigger it, since `placeOrder` throws for those
+instead of resolving), threaded through `TickerMetrics.tsx` the same way
+`onWatchlistChanged` already is. `DashboardPage.tsx` gained an
+`orderHistoryRefreshKey` bumped on that callback, rendering `<OrderHistory
+refreshKey={orderHistoryRefreshKey} />` below `TickerMetrics`. New
+`index.css` rules (`.order-history-table`, `.order-status--{success,warning,
+error,neutral}` reusing the same tone split `TradeForm.tsx`'s
+`describeResult` already established for `OrderStatus`) inside a
+`.order-history-table-wrap` (`overflow-x: auto`, since a wide table must
+scroll in its own container rather than the page).
+
+Tested via 11 new backend tests (`OrderServiceTest`: `listOrders` mapping,
+unknown-id 404, broker-confirms-a-status refresh, broker-has-no-record →
+`FAILED`/safe-to-retry, and broker-throws → row left completely untouched
+(asserted via the same mutable `Order` object, plus `verify(orderRepository,
+never()).save(any())`); `OrderQueryControllerTest`: limit bounds, refresh
+success/404/503) — 301 backend tests total, `./mvnw verify` green. No new
+frontend Vitest cases — `OrderHistory.tsx` is a view-only DOM component with
+no pure logic to unit test, the same gap already accepted for
+`Watchlist.tsx`; `npm run build`/`lint`/`test` all pass clean (13 tests,
+unchanged, same pre-existing unrelated `AuthContext.tsx` lint warning as
+every prior story). `simplify` skill run clean — no new abstraction beyond
+what the story needed (limit validation reuses the existing
+`InvalidTradeRequestException`/`INVALID_REQUEST` code rather than adding a
+parallel exception type just for a bounds check).
+
+Verified live via the `run` skill against the real running stack — Docker
+Desktop wasn't running at the start of this session and had to be launched
+first, then Oracle XE brought up fresh and polled healthy (schema version
+confirmed at 8, no migration needed, matching this story's own no-migration
+design) before the backend would connect; logged in through E1-F3-S2's
+session-cookie auth. Exercised the new endpoints via `curl` against real
+Oracle first: `GET /api/orders` on a fresh container returned `200 []`;
+`limit=0`/`limit=501` both correctly 400'd `INVALID_REQUEST`; `POST
+/api/orders/999999/refresh` correctly 404'd `ORDER_NOT_FOUND` against a real
+repository lookup. Then clicked through the real UI: `DashboardPage`
+rendered a new "Order history" section reading "No orders placed yet." on
+load; looked up the live `SOLUSDT` SELL signal, filled a valid amount/TP/SL,
+confirmed the trade through the E5-F2-S2 dialog, and the attempt correctly
+503'd `BROKER_CREDENTIAL_NOT_CONFIGURED` (same reachable terminus every
+E4-F2/F3/E5-F2 story has hit on this dev machine, since no real
+`BINANCE_TRADING_API_KEY`/`BINANCE_TRADING_API_SECRET` exist here) — and,
+critically, the Order History section still read "No orders placed yet."
+afterward, confirming `onOrderPlaced` is correctly *not* fired for a
+pre-flight failure that never created a row. A direct `sqlplus` query
+against the live container confirmed `orders` held exactly 0 rows throughout,
+matching the UI. A real order actually appearing in the history table, and
+the Refresh button's own re-poll of an existing row (both the
+broker-confirms-a-new-status and the broker-has-no-record paths), were **not**
+observed live in this session — same structural gap as every E4-F2/F3/E5-F2
+story before it, since creating a real `Order` row on this dev machine needs
+broker credentials that don't exist; flagged, not silently assumed, and
+covered instead by `OrderServiceTest`'s mocked-adapter cases above.
+
+E5-F3-S2 (CSV export of trade history) is next, closing out F5.3 — it can
+reuse `OrderRepository.findByOrderModeAndCreatedAtBetween` (added ahead of
+need back in E5-F2-S1 specifically for this) rather than needing a new query.
+
 The original agile delivery plan for the project (drafted before any of E1-E3 above
 was implemented) lives at `docs/agile-plan.md` — an auto-trade signal dashboard
 (React frontend, Java/Spring Boot backend, Oracle Database via local Oracle XE,

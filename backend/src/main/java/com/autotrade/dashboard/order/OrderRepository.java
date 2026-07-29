@@ -1,6 +1,7 @@
 package com.autotrade.dashboard.order;
 
 import com.autotrade.dashboard.common.TradingMode;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.Instant;
@@ -12,4 +13,6 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     Optional<Order> findByClientOrderId(String clientOrderId);
 
     List<Order> findByOrderModeAndCreatedAtBetween(TradingMode orderMode, Instant start, Instant end);
+
+    List<Order> findAllByOrderByCreatedAtDesc(Pageable pageable);
 }

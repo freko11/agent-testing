@@ -57,6 +57,7 @@ function describeResult(response: TradeOrderResponse): { tone: ResultTone; text:
 
 interface TradeFormProps {
   signal: SignalResponse
+  onOrderPlaced?: () => void
 }
 
 /**
@@ -72,7 +73,7 @@ interface TradeFormProps {
  * (possibly stale) snapshot, so a submission can still fail with SIGNAL_NOT_ACTIONABLE
  * if the call flipped to HOLD between lookup and confirm.
  */
-function TradeForm({ signal }: TradeFormProps) {
+function TradeForm({ signal, onOrderPlaced }: TradeFormProps) {
   const [values, setValues] = useState<TradeFormValues>(DEFAULT_VALUES)
   const [submitState, setSubmitState] = useState<SubmitState>({ kind: 'idle' })
   const dialogRef = useRef<HTMLDialogElement>(null)
@@ -128,6 +129,7 @@ function TradeForm({ signal }: TradeFormProps) {
     try {
       const response = await placeOrder(ticker.symbol, payload)
       setSubmitState({ kind: 'result', response })
+      onOrderPlaced?.()
     } catch (reason) {
       const message =
         reason instanceof MarketDataError

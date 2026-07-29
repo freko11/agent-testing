@@ -29,10 +29,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -104,6 +106,14 @@ class OrderServiceTest {
 
     private BrokerCredential credential() {
         return new BrokerCredential(Broker.BINANCE, TradingMode.PAPER, "enc-key", "enc-secret");
+    }
+
+    private Order persistedOrder(Long id, Ticker ticker, String clientOrderId) {
+        Order order = new Order(ticker, credential(), Broker.BINANCE, ticker.getAssetType(), OrderSide.BUY,
+                new BigDecimal("1.00000000"), new BigDecimal("110"), new BigDecimal("90"), clientOrderId);
+        order.setOrderMode(TradingMode.PAPER);
+        ReflectionTestUtils.setField(order, "id", id);
+        return order;
     }
 
     @Test
@@ -310,6 +320,79 @@ class OrderServiceTest {
                 new BigDecimal("190"), new BigDecimal("210"));
 
         assertThrows(InvalidTradeRequestException.class, () -> service.submitOrder("AAPL", request));
+        verify(orderRepository, never()).save(any());
+    }
+
+    @Test
+    void listOrders_mapsRepositoryResultsToResponses() {
+        Ticker ticker = cryptoTicker();
+        Order order = persistedOrder(5L, ticker, "client-1");
+        order.setStatus(OrderStatus.FILLED);
+        when(orderRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(0, 50))).thenReturn(List.of(order));
+
+        List<OrderResponse> responses = service.listOrders(50);
+
+        assertEquals(1, responses.size());
+        assertEquals(5L, responses.get(0).id());
+        assertEquals("BTCUSDT", responses.get(0).tickerSymbol());
+        assertEquals(OrderStatus.FILLED, responses.get(0).status());
+    }
+
+    @Test
+    void refreshOrder_unknownId_throwsOrderNotFound() {
+        when(orderRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThrows(OrderNotFoundException.class, () -> service.refreshOrder(99L));
+    }
+
+    @Test
+    void refreshOrder_brokerConfirmsFilled_persistsUpdatedStatus() {
+        Ticker ticker = cryptoTicker();
+        Order order = persistedOrder(7L, ticker, "client-7");
+        order.setStatus(OrderStatus.SUBMISSION_UNKNOWN);
+        when(orderRepository.findById(7L)).thenReturn(Optional.of(order));
+        when(router.forAssetType(AssetType.CRYPTO)).thenReturn(adapter);
+        BrokerOrderResult result = new BrokerOrderResult("client-7", "broker-7", OrderStatus.FILLED,
+                new BigDecimal("101.0"), null, Instant.parse("2026-07-29T00:00:02Z"));
+        when(adapter.getOrderStatus("BTCUSDT", "client-7", TradingMode.PAPER)).thenReturn(Optional.of(result));
+
+        OrderResponse response = service.refreshOrder(7L);
+
+        assertEquals(OrderStatus.FILLED, response.status());
+        assertEquals("broker-7", response.brokerOrderId());
+        assertEquals(new BigDecimal("101.0"), response.entryPrice());
+    }
+
+    @Test
+    void refreshOrder_brokerHasNoRecord_persistsFailedSafeToRetry() {
+        Ticker ticker = cryptoTicker();
+        Order order = persistedOrder(8L, ticker, "client-8");
+        order.setStatus(OrderStatus.SUBMISSION_UNKNOWN);
+        when(orderRepository.findById(8L)).thenReturn(Optional.of(order));
+        when(router.forAssetType(AssetType.CRYPTO)).thenReturn(adapter);
+        when(adapter.getOrderStatus("BTCUSDT", "client-8", TradingMode.PAPER)).thenReturn(Optional.empty());
+
+        OrderResponse response = service.refreshOrder(8L);
+
+        assertEquals(OrderStatus.FAILED, response.status());
+        assertEquals("Broker confirmed no record of this order — safe to retry.", response.rejectionReason());
+    }
+
+    @Test
+    void refreshOrder_brokerThrows_leavesStoredRowUntouched() {
+        Ticker ticker = cryptoTicker();
+        Order order = persistedOrder(9L, ticker, "client-9");
+        order.setStatus(OrderStatus.PARTIALLY_PROTECTED);
+        order.setRejectionReason("Missing stop-loss leg");
+        when(orderRepository.findById(9L)).thenReturn(Optional.of(order));
+        when(router.forAssetType(AssetType.CRYPTO)).thenReturn(adapter);
+        when(adapter.getOrderStatus("BTCUSDT", "client-9", TradingMode.PAPER))
+                .thenThrow(new BrokerAdapterException(Broker.BINANCE, "rate limited"));
+
+        assertThrows(OrderRefreshUnavailableException.class, () -> service.refreshOrder(9L));
+
+        assertEquals(OrderStatus.PARTIALLY_PROTECTED, order.getStatus());
+        assertEquals("Missing stop-loss leg", order.getRejectionReason());
         verify(orderRepository, never()).save(any());
     }
 }

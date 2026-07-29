@@ -131,9 +131,10 @@ interface TickerMetricsProps {
   /** Set by the watchlist's "revisit" click — a fresh object (new nonce) re-triggers the lookup even for the same symbol. */
   lookupRequest?: { symbol: string; nonce: number } | null
   onWatchlistChanged?: () => void
+  onOrderPlaced?: () => void
 }
 
-function TickerMetrics({ lookupRequest, onWatchlistChanged }: TickerMetricsProps) {
+function TickerMetrics({ lookupRequest, onWatchlistChanged, onOrderPlaced }: TickerMetricsProps) {
   const [symbol, setSymbol] = useState('')
   const [result, setResult] = useState<SignalResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -211,7 +212,7 @@ function TickerMetrics({ lookupRequest, onWatchlistChanged }: TickerMetricsProps
         <>
           <TickerMetricsResult signal={result} />
           <AddToWatchlistButton key={result.ticker.symbol} symbol={result.ticker.symbol} onAdded={onWatchlistChanged} />
-          <TradeForm key={result.ticker.symbol} signal={result} />
+          <TradeForm key={result.ticker.symbol} signal={result} onOrderPlaced={onOrderPlaced} />
         </>
       )}
       {chartError && <p role="alert">{chartError}</p>}
