@@ -177,3 +177,29 @@ body {
   font-size: 0.85rem;
   color: light-dark(#666666, #999999);
 }
+
+.trade-form__result {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.4rem;
+  font-size: 0.85rem;
+}
+
+/* Same teal/orange hues as .signal-badge, plus a distinct amber for the one outcome
+   that must not read as a routine success or failure: a real open position that's
+   only partially protected, or a genuinely unknown submission status. */
+.trade-form__result--success {
+  background: light-dark(#e3f6f3, #0f2e2b);
+  color: light-dark(#0f766e, #5eead4);
+}
+
+.trade-form__result--warning {
+  background: light-dark(#fef6e0, #3a2f0a);
+  color: light-dark(#92700c, #fde68a);
+  font-weight: 600;
+}
+
+.trade-form__result--error {
+  background: light-dark(#fdf0e6, #3a2410);
+  color: light-dark(#c2410c, #fdba74);
+}

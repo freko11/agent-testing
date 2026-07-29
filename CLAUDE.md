@@ -1789,7 +1789,137 @@ observed live in this session, same gap E5-F1-S1 itself already flagged for
 this exact path.
 
 E5-F2-S1 (bracket-order construction and submission through the
-`BrokerAdapter` layer) is next.
+`BrokerAdapter` layer) is done, starting F5.2. A `Plan`-agent design gate
+(mandatory for bracket-order construction per this repo's own convention)
+fixed every open design question up front, and two of its money-safety
+decisions were confirmed directly with the user before implementation, per
+this epic's established pattern (E4-F2-S1/E4-F3-S1/E4-F3-S2's own
+check-ins): (1) **the USD amount is notional trade size, not margin** —
+`quantity = amountUsd / price`, independent of leverage; leverage only
+affects margin efficiency at the broker (via Binance's set-leverage call),
+so a fat-fingered leverage value can't silently balloon exposure beyond the
+dollar amount entered; and (2) a genuinely ambiguous `placeOrder` outcome
+(`BrokerAdapterAmbiguousOrderException` — both the original call and
+`RetryingBrokerAdapter`'s own reconciliation probe failed) gets a new
+**`OrderStatus.SUBMISSION_UNKNOWN`** rather than being folded into `FAILED`,
+since `FAILED` would wrongly imply it's safe to retry — `SUBMISSION_UNKNOWN`
+honestly encodes "don't know, don't resubmit" in the audit trail.
+`V8__widen_orders_status_check_submission_unknown.sql` widens
+`ck_orders_status` for it, same drop-and-recreate pattern as `V7`.
+
+The other design-gate decision: **the backend never trusts the client's
+cached `SignalResponse`.** `POST /api/tickers/{symbol}/orders` accepts only
+`amountUsd`/`leverage`/`takeProfitPrice`/`stopLossPrice` — direction and
+price are always re-derived by recomputing the signal server-side
+(`SignalService.computeSignalWithProvenance`, a new method returning a
+`SignalComputation(SignalResponse, IndicatorSnapshot)` record; the existing
+`computeSignal` is now a thin wrapper over it, same refactor shape
+`IndicatorService.computeForSignal`/`computeIndicators` already
+established). A call that's flipped to HOLD between the user's lookup and
+their click throws a new `SignalNotActionableException` (409
+`SIGNAL_NOT_ACTIONABLE`) — nothing to trade, no `Order` row created.
+
+New `com.autotrade.dashboard.brokeradapter.BrokerAdapterRouter` — the
+routing component `BrokerAdapterConfig`/`BinanceFuturesAdapterConfig` (E4)
+deliberately deferred as YAGNI until a second adapter existed to route
+between. Both real `@Bean BrokerAdapter`s are already plain-typed (wrapped
+in `RetryingBrokerAdapter`), so a `List<BrokerAdapter>` injection picks up
+both with no `@Qualifier` needed; an `EnumMap<AssetType, BrokerAdapter>`
+keyed by each adapter's own `supportedAssetType()` — same pattern
+`MarketDataService` already established for market-data clients.
+
+New `com.autotrade.dashboard.order.OrderService.submitOrder` is the actual
+bracket-order flow: recompute the signal → reject HOLD → re-validate
+leverage/TP/SL server-side against the *fresh* price (mirrors
+`trade/validation.ts` almost line-for-line, an accepted flagged triple
+duplication of `MAX_CRYPTO_LEVERAGE=20` across FE/BE-adapter/BE-service,
+same posture `validation.ts`'s own comment already accepted for the
+FE/adapter pair) → convert `amountUsd` to a quantity
+(`amountUsd.divide(price, 8, RoundingMode.DOWN)` — rounds down, never lets
+the computed quantity imply spending more than requested) → route to the
+right `BrokerAdapter` via the new router → resolve the `(broker, PAPER)`
+`BrokerCredential` via `BrokerCredentialService.find` (`TradingMode` is
+hardcoded `PAPER` in `OrderService`, never taken from the request — `LIVE`
+isn't seeded by either credential bootstrap yet, so live trading is
+structurally unreachable through this endpoint until E6's gate exists;
+absence throws a new `BrokerCredentialNotConfiguredException`, 503
+`BROKER_CREDENTIAL_NOT_CONFIGURED`) → generate `clientOrderId` and persist
+the `Order` row as `PENDING` in its own short write (so the idempotency key
+survives an app crash mid-call) → call `adapter.placeOrder` with **no open
+transaction** (an external HTTP round-trip, including
+`RetryingBrokerAdapter`'s own multi-attempt backoff, must never hold a DB
+connection) → finalize the same row in a second short write. Every outcome —
+filled, a business rejection, `PARTIALLY_PROTECTED`, `SUBMISSION_UNKNOWN`, or
+a plain infra `FAILED` — is written onto that row as a normal value, never a
+second HTTP exception; only pre-flight failures (bad ticker, HOLD, invalid
+request, no credential) skip creating an `Order` row at all. New
+`PlaceOrderRequest`/`TradeOrderResponse` records, `OrderController`
+(`POST /api/tickers/{symbol}/orders`, always 201), and
+`OrderExceptionHandler` (a separate `@RestControllerAdvice` from
+`MarketDataExceptionHandler`, per that class's own documented invitation for
+an unrelated — here, money-moving — error domain to decide for itself).
+
+Tested via `BrokerAdapterRouterTest` (2), `OrderServiceTest` (11: every
+pre-flight rejection, a filled/rejected/ambiguous/unavailable/rate-limited/
+fatal outcome each mapped onto the right persisted status, and a stock
+leverage-forced-to-1x case), and `OrderControllerTest` (6, status codes and
+error bodies) — 19 new tests, 290 backend tests total, `./mvnw verify`
+green.
+
+Frontend: new `frontend/src/trade/api.ts` (`placeOrder`, reusing
+`parseMarketDataError`; two new `MarketDataErrorCode` members,
+`SIGNAL_NOT_ACTIONABLE`/`BROKER_CREDENTIAL_NOT_CONFIGURED`).
+`TradeForm.tsx`'s `handleSubmit` now actually calls the broker: a
+`SubmitState` union (`idle`/`submitting`/`result`/`error`) replaces the old
+placeholder boolean, `describeResult` maps each `OrderStatus` to a
+tone-and-message pair — `success` (FILLED/PARTIALLY_FILLED), `warning`
+(PARTIALLY_PROTECTED/SUBMISSION_UNKNOWN — deliberately not styled as a
+routine success or failure, since both mean a real position needs manual
+attention), or `error` (REJECTED/FAILED) — rendered via new
+`.trade-form__result--{success,warning,error}` CSS rules (same
+`light-dark()` pattern as `.stat-tile`/`.signal-badge`, warning using a new
+amber hue distinct from both). No confirmation step — per the AC's "in one
+click" framing and this being the story immediately superseded by
+E5-F2-S2, `handleSubmit` fires the real order as soon as client-side
+validation passes. `npm run build`/`lint`/`test` all pass clean (13 tests,
+unchanged — no new frontend logic worth a Vitest case beyond what
+`validation.test.ts` already covers; the real order-submission behavior is
+verified via backend tests and live browser verification instead).
+
+Verified live via the `run` skill against the real running stack (Docker
+Oracle XE + real public Binance API, no mocking; logged in through E1-F3-S2's
+session-cookie auth) — a repeat of this file's own recurring gotcha: stale
+`java`/`node` processes from an earlier session were still holding
+8080/5173 with pre-story code, killed and both restarted clean before
+trusting `/health`. `V8` applied cleanly against real Oracle (schema version
+7 → 8). Exercised every pre-flight path via `curl` against real data first:
+a HOLD ticker (`BTCUSDT`, `CONFLICTING_SIGNALS`) correctly 409'd
+`SIGNAL_NOT_ACTIONABLE`; 25x leverage against a live `SELL` (`SOLUSDT`)
+correctly 400'd `INVALID_REQUEST` ("Leverage must be between 1x and 20x.");
+a take-profit on the wrong side of a live SELL price correctly 400'd;
+`NOTREAL` correctly 404'd `TICKER_NOT_REGISTERED`; a negative amount
+correctly 400'd via bean validation; and a fully valid `SOLUSDT` SELL order
+correctly 503'd `BROKER_CREDENTIAL_NOT_CONFIGURED` — the actual reachable
+terminus on this dev machine, since no real `BINANCE_TRADING_API_KEY`/
+`BINANCE_TRADING_API_SECRET` exist here (same flagged gap as every E4-F2/F3
+story). A direct `sqlplus` query confirmed **zero** rows were ever written
+to `orders` across all six of these attempts — proving every pre-flight
+failure, including the credential check, short-circuits before the `Order`
+row is created, exactly as designed. Then clicked through the identical
+`SOLUSDT` SELL flow in a real browser: the trade form rendered correctly
+keyed to the live SELL signal, client-side validation errors appeared and
+cleared correctly, and submitting rendered "No broker credentials are
+configured for this asset type yet — the order was not submitted." in the
+new error-toned result box, with no browser console errors. A real
+FILLED/REJECTED/PARTIALLY_PROTECTED/SUBMISSION_UNKNOWN render, and the
+`SIGNAL_NOT_ACTIONABLE` race window itself (the call flipping to HOLD
+between lookup and click), were **not** observed live in this session — the
+former needs real broker credentials this dev machine doesn't have, the
+latter needs a live signal flip during a manual click, neither
+practically reproducible here; flagged, not silently assumed, same
+disclosure style as this file's other un-observed paths (e.g. E3-F1-S2's
+BUY badge, E3-F2-S1's `autoSize` resize). E5-F2-S2 (explicit confirmation
+step before the order fires) is next.
 
 The original agile delivery plan for the project (drafted before any of E1-E3 above
 was implemented) lives at `docs/agile-plan.md` — an auto-trade signal dashboard

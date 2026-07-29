@@ -31,6 +31,8 @@ export type MarketDataErrorCode =
   | 'MARKET_DATA_RATE_LIMITED'
   | 'MARKET_DATA_UNAVAILABLE'
   | 'INSUFFICIENT_PRICE_HISTORY'
+  | 'SIGNAL_NOT_ACTIONABLE'
+  | 'BROKER_CREDENTIAL_NOT_CONFIGURED'
 
 export class MarketDataError extends Error {
   code: MarketDataErrorCode | 'UNKNOWN'

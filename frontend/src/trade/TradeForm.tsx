@@ -1,5 +1,7 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react'
+import { MarketDataError } from '../marketdata/api'
 import type { SignalResponse } from '../signal/api'
+import { placeOrder, type TradeOrderResponse } from './api'
 import { MAX_CRYPTO_LEVERAGE, validateTradeForm, type TradeFormValues } from './validation'
 
 const DEFAULT_VALUES: TradeFormValues = {
@@ -7,6 +9,49 @@ const DEFAULT_VALUES: TradeFormValues = {
   leverage: '1',
   takeProfitPrice: '',
   stopLossPrice: '',
+}
+
+const SUBMIT_ERROR_MESSAGES: Partial<Record<string, string>> = {
+  SIGNAL_NOT_ACTIONABLE: 'The signal changed to HOLD before this order could be submitted. Look the ticker up again to see the current call.',
+  BROKER_CREDENTIAL_NOT_CONFIGURED: 'No broker credentials are configured for this asset type yet — the order was not submitted.',
+  MARKET_CLOSED: 'The market closed before this order could be submitted.',
+}
+
+type SubmitState =
+  | { kind: 'idle' }
+  | { kind: 'submitting' }
+  | { kind: 'result'; response: TradeOrderResponse }
+  | { kind: 'error'; message: string }
+
+type ResultTone = 'success' | 'warning' | 'error'
+
+function describeResult(response: TradeOrderResponse): { tone: ResultTone; text: string } {
+  switch (response.status) {
+    case 'FILLED':
+    case 'PARTIALLY_FILLED':
+      return {
+        tone: 'success',
+        text: `Order filled at ${response.filledPrice ?? '—'}. Broker order ID: ${response.brokerOrderId ?? '—'}.`,
+      }
+    case 'PARTIALLY_PROTECTED':
+      return {
+        tone: 'warning',
+        text: `Position opened, but not fully protected: ${response.rejectionReason ?? 'a take-profit or stop-loss leg is missing.'} Check the broker's account view.`,
+      }
+    case 'SUBMISSION_UNKNOWN':
+      return {
+        tone: 'warning',
+        text: `Status unknown — do not resubmit. ${response.rejectionReason ?? 'Verify manually via the broker before retrying.'}`,
+      }
+    case 'REJECTED':
+    case 'FAILED':
+      return {
+        tone: 'error',
+        text: `Order not placed: ${response.rejectionReason ?? 'the broker rejected the order.'}`,
+      }
+    default:
+      return { tone: 'success', text: `Order submitted (status: ${response.status}).` }
+  }
 }
 
 interface TradeFormProps {
@@ -18,13 +63,15 @@ interface TradeFormProps {
  * "Trade" is enabled (E5-F1-S1). Leverage is only shown for crypto, bounded to
  * 1x-MAX_CRYPTO_LEVERAGE; stock orders hide the field entirely and stay at the
  * hardcoded 1x default (E5-F1-S2). Only rendered for a BUY/SELL call — a HOLD has no
- * direction to size an entry for. Submitting doesn't call a broker yet: bracket-order
- * construction and adapter routing are E5-F2-S1's scope, so this only proves the
- * validated payload is ready to hand off once that wiring lands.
+ * direction to size an entry for. Submitting fires the real bracket order immediately
+ * (E5-F2-S1) — no confirmation step yet, that's E5-F2-S2's job. The backend always
+ * re-derives direction/price from a fresh signal computation rather than trusting this
+ * form's (possibly stale) snapshot, so a submission can still fail with
+ * SIGNAL_NOT_ACTIONABLE if the call flipped to HOLD between lookup and click.
  */
 function TradeForm({ signal }: TradeFormProps) {
   const [values, setValues] = useState<TradeFormValues>(DEFAULT_VALUES)
-  const [submitted, setSubmitted] = useState(false)
+  const [submitState, setSubmitState] = useState<SubmitState>({ kind: 'idle' })
 
   const { call, ticker, indicators } = signal
 
@@ -35,15 +82,31 @@ function TradeForm({ signal }: TradeFormProps) {
 
   function updateField(field: keyof TradeFormValues) {
     return (event: ChangeEvent<HTMLInputElement>) => {
-      setSubmitted(false)
+      setSubmitState({ kind: 'idle' })
       setValues((current) => ({ ...current, [field]: event.target.value }))
     }
   }
 
-  function handleSubmit(event: FormEvent) {
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     if (!isValid) return
-    setSubmitted(true)
+
+    setSubmitState({ kind: 'submitting' })
+    try {
+      const response = await placeOrder(ticker.symbol, {
+        amountUsd: Number(values.amountUsd),
+        leverage: Number(values.leverage),
+        takeProfitPrice: Number(values.takeProfitPrice),
+        stopLossPrice: Number(values.stopLossPrice),
+      })
+      setSubmitState({ kind: 'result', response })
+    } catch (reason) {
+      const message =
+        reason instanceof MarketDataError
+          ? (SUBMIT_ERROR_MESSAGES[reason.code] ?? reason.message)
+          : 'Something went wrong submitting the order. Please try again.'
+      setSubmitState({ kind: 'error', message })
+    }
   }
 
   return (
@@ -102,11 +165,18 @@ function TradeForm({ signal }: TradeFormProps) {
         </p>
       )}
 
-      <button type="submit" disabled={!isValid}>
-        Trade
+      <button type="submit" disabled={!isValid || submitState.kind === 'submitting'}>
+        {submitState.kind === 'submitting' ? 'Submitting…' : 'Trade'}
       </button>
-      {submitted && (
-        <p className="trade-form__note">Order details captured — submitting this to the broker lands in E5-F2-S1.</p>
+      {submitState.kind === 'result' && (
+        <p className={`trade-form__result trade-form__result--${describeResult(submitState.response).tone}`} role="status">
+          {describeResult(submitState.response).text}
+        </p>
+      )}
+      {submitState.kind === 'error' && (
+        <p className="trade-form__result trade-form__result--error" role="alert">
+          {submitState.message}
+        </p>
       )}
     </form>
   )
