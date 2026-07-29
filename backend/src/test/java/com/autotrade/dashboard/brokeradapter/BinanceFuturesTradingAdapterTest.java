@@ -6,12 +6,14 @@ import com.autotrade.dashboard.broker.BrokerCredentialService;
 import com.autotrade.dashboard.common.TradingMode;
 import com.autotrade.dashboard.order.EntryOrderType;
 import com.autotrade.dashboard.order.OrderSide;
+import com.autotrade.dashboard.order.OrderStatus;
 import com.autotrade.dashboard.ticker.AssetType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -24,13 +26,17 @@ import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.Optional;
 
+import static org.hamcrest.Matchers.startsWith;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.queryParam;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
@@ -189,34 +195,350 @@ class BinanceFuturesTradingAdapterTest {
         server.verify();
     }
 
+    // --- E4-F3-S2: placeOrder validation (fatal, pre-HTTP) ---
+
     @Test
-    void placeOrder_notYetImplemented_throwsDeferredException() {
+    void placeOrder_stockAssetType_throwsWithoutCallingHttp() {
+        BrokerOrderRequest request = sampleRequest(AssetType.STOCK, EntryOrderType.MARKET, BigDecimal.ONE);
+
+        BrokerAdapterException ex = assertThrows(BrokerAdapterException.class, () -> adapter.placeOrder(request, TradingMode.PAPER));
+
+        assertTrue(ex.getMessage().contains("CRYPTO"));
+        server.verify();
+    }
+
+    @Test
+    void placeOrder_limitEntry_throwsWithoutCallingHttp() {
+        BrokerOrderRequest request = sampleRequest(AssetType.CRYPTO, EntryOrderType.LIMIT, BigDecimal.ONE);
+
+        BrokerAdapterException ex = assertThrows(BrokerAdapterException.class, () -> adapter.placeOrder(request, TradingMode.PAPER));
+
+        assertTrue(ex.getMessage().contains("MARKET"));
+        server.verify();
+    }
+
+    @Test
+    void placeOrder_leverageBelowOne_throwsWithoutCallingHttp() {
+        BrokerOrderRequest request = sampleRequest(AssetType.CRYPTO, EntryOrderType.MARKET, BigDecimal.ZERO);
+
+        assertThrows(BrokerAdapterException.class, () -> adapter.placeOrder(request, TradingMode.PAPER));
+        server.verify();
+    }
+
+    @Test
+    void placeOrder_leverageAboveMax_throwsWithoutCallingHttp() {
+        BrokerOrderRequest request = sampleRequest(AssetType.CRYPTO, EntryOrderType.MARKET, new BigDecimal("21"));
+
+        assertThrows(BrokerAdapterException.class, () -> adapter.placeOrder(request, TradingMode.PAPER));
+        server.verify();
+    }
+
+    @Test
+    void placeOrder_nonWholeLeverage_throwsWithoutCallingHttp() {
+        BrokerOrderRequest request = sampleRequest(AssetType.CRYPTO, EntryOrderType.MARKET, new BigDecimal("2.5"));
+
+        assertThrows(BrokerAdapterException.class, () -> adapter.placeOrder(request, TradingMode.PAPER));
+        server.verify();
+    }
+
+    @Test
+    void placeOrder_symbolWithQueryInjectionCharacters_throwsWithoutCallingHttp() {
         BrokerOrderRequest request = new BrokerOrderRequest(
-                "co-1", "BTCUSDT", AssetType.CRYPTO, OrderSide.BUY, new BigDecimal("0.01"),
+                "co-1", "BTCUSDT&leverage=125", AssetType.CRYPTO, OrderSide.BUY, new BigDecimal("0.01"),
                 EntryOrderType.MARKET, null, new BigDecimal("70000"), new BigDecimal("50000"), BigDecimal.ONE);
 
-        BrokerAdapterException ex = assertThrows(BrokerAdapterException.class,
-                () -> adapter.placeOrder(request, TradingMode.PAPER));
+        BrokerAdapterException ex = assertThrows(BrokerAdapterException.class, () -> adapter.placeOrder(request, TradingMode.PAPER));
 
-        assertTrue(ex.getMessage().contains("E4-F3-S2"));
+        assertTrue(ex.getMessage().contains("Invalid symbol"));
         server.verify();
     }
 
     @Test
-    void getOrderStatus_notYetImplemented_throwsDeferredException() {
+    void getOrderStatus_symbolWithQueryInjectionCharacters_throwsWithoutCallingHttp() {
         BrokerAdapterException ex = assertThrows(BrokerAdapterException.class,
-                () -> adapter.getOrderStatus("BTCUSDT", "co-1", TradingMode.PAPER));
+                () -> adapter.getOrderStatus("BTCUSDT&leverage=125", "co-1", TradingMode.PAPER));
 
-        assertTrue(ex.getMessage().contains("E4-F3-S2"));
+        assertTrue(ex.getMessage().contains("Invalid symbol"));
+        server.verify();
+    }
+
+    // --- E4-F3-S2: placeOrder happy path and partial-failure ---
+
+    @Test
+    void placeOrder_fullSuccess_setsLeveragePlacesEntryAndBothExitLegs() {
+        BrokerOrderRequest request = sampleRequest(AssetType.CRYPTO, EntryOrderType.MARKET, new BigDecimal("5"));
+
+        expectOrderCheckNotFound();
+        server.expect(method(HttpMethod.POST))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/leverage?")))
+                .andExpect(queryParam("symbol", "BTCUSDT"))
+                .andExpect(queryParam("leverage", "5"))
+                .andRespond(withSuccess("{\"leverage\":5,\"maxNotionalValue\":\"1000000\",\"symbol\":\"BTCUSDT\"}", MediaType.APPLICATION_JSON));
+        server.expect(method(HttpMethod.POST))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andExpect(queryParam("type", "MARKET"))
+                .andExpect(queryParam("side", "BUY"))
+                .andRespond(withSuccess(orderJson(555, "FILLED", "61000.00"), MediaType.APPLICATION_JSON));
+        expectOrderCheckNotFound();
+        server.expect(method(HttpMethod.POST))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andExpect(queryParam("type", "STOP_MARKET"))
+                .andExpect(queryParam("side", "SELL"))
+                .andExpect(queryParam("closePosition", "true"))
+                .andExpect(queryParam("stopPrice", "50000"))
+                .andRespond(withSuccess(orderJson(556, "NEW", "0"), MediaType.APPLICATION_JSON));
+        expectOrderCheckNotFound();
+        server.expect(method(HttpMethod.POST))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andExpect(queryParam("type", "TAKE_PROFIT_MARKET"))
+                .andExpect(queryParam("side", "SELL"))
+                .andExpect(queryParam("closePosition", "true"))
+                .andExpect(queryParam("stopPrice", "70000"))
+                .andRespond(withSuccess(orderJson(557, "NEW", "0"), MediaType.APPLICATION_JSON));
+
+        BrokerOrderResult result = adapter.placeOrder(request, TradingMode.PAPER);
+
+        assertEquals("co-full-success", result.clientOrderId());
+        assertEquals("555", result.brokerOrderId());
+        assertEquals(OrderStatus.FILLED, result.status());
+        assertEquals(0, new BigDecimal("61000.00").compareTo(result.filledPrice()));
+        assertNull(result.rejectionReason());
         server.verify();
     }
 
     @Test
-    void cancelOrder_notYetImplemented_throwsDeferredException() {
-        BrokerAdapterException ex = assertThrows(BrokerAdapterException.class,
-                () -> adapter.cancelOrder("BTCUSDT", "co-1", TradingMode.PAPER));
+    void placeOrder_leverageRejected_returnsRejectedResultWithoutPlacingEntry() {
+        BrokerOrderRequest request = sampleRequest(AssetType.CRYPTO, EntryOrderType.MARKET, new BigDecimal("5"));
 
-        assertTrue(ex.getMessage().contains("E4-F3-S2"));
+        expectOrderCheckNotFound();
+        server.expect(method(HttpMethod.POST))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/leverage?")))
+                .andRespond(withStatus(HttpStatus.BAD_REQUEST)
+                        .body("{\"code\":-4028,\"msg\":\"Leverage is not valid.\"}")
+                        .contentType(MediaType.APPLICATION_JSON));
+
+        BrokerOrderResult result = adapter.placeOrder(request, TradingMode.PAPER);
+
+        assertEquals(OrderStatus.REJECTED, result.status());
+        assertTrue(result.rejectionReason().contains("Leverage is not valid"));
         server.verify();
+    }
+
+    @Test
+    void placeOrder_entryRejected_returnsRejectedResultWithoutPlacingExitLegs() {
+        BrokerOrderRequest request = sampleRequest(AssetType.CRYPTO, EntryOrderType.MARKET, new BigDecimal("5"));
+
+        expectOrderCheckNotFound();
+        server.expect(method(HttpMethod.POST))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/leverage?")))
+                .andRespond(withSuccess("{\"leverage\":5,\"maxNotionalValue\":\"1000000\",\"symbol\":\"BTCUSDT\"}", MediaType.APPLICATION_JSON));
+        server.expect(method(HttpMethod.POST))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andRespond(withStatus(HttpStatus.BAD_REQUEST)
+                        .body("{\"code\":-2019,\"msg\":\"Margin is insufficient.\"}")
+                        .contentType(MediaType.APPLICATION_JSON));
+
+        BrokerOrderResult result = adapter.placeOrder(request, TradingMode.PAPER);
+
+        assertEquals(OrderStatus.REJECTED, result.status());
+        assertTrue(result.rejectionReason().contains("Margin is insufficient"));
+        server.verify();
+    }
+
+    @Test
+    void placeOrder_takeProfitLegFailsAfterRetry_returnsPartiallyProtected() {
+        BrokerOrderRequest request = sampleRequest(AssetType.CRYPTO, EntryOrderType.MARKET, new BigDecimal("5"));
+
+        expectOrderCheckNotFound();
+        server.expect(method(HttpMethod.POST))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/leverage?")))
+                .andRespond(withSuccess("{\"leverage\":5,\"maxNotionalValue\":\"1000000\",\"symbol\":\"BTCUSDT\"}", MediaType.APPLICATION_JSON));
+        server.expect(method(HttpMethod.POST))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andExpect(queryParam("type", "MARKET"))
+                .andRespond(withSuccess(orderJson(555, "FILLED", "61000.00"), MediaType.APPLICATION_JSON));
+        expectOrderCheckNotFound(); // stop-loss check
+        server.expect(method(HttpMethod.POST))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andExpect(queryParam("type", "STOP_MARKET"))
+                .andRespond(withSuccess(orderJson(556, "NEW", "0"), MediaType.APPLICATION_JSON));
+        // take-profit: both bounded-retry attempts fail
+        expectOrderCheckNotFound();
+        server.expect(method(HttpMethod.POST))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andExpect(queryParam("type", "TAKE_PROFIT_MARKET"))
+                .andRespond(withServerError());
+        expectOrderCheckNotFound();
+        server.expect(method(HttpMethod.POST))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andExpect(queryParam("type", "TAKE_PROFIT_MARKET"))
+                .andRespond(withServerError());
+
+        BrokerOrderResult result = adapter.placeOrder(request, TradingMode.PAPER);
+
+        assertEquals(OrderStatus.PARTIALLY_PROTECTED, result.status());
+        assertEquals("555", result.brokerOrderId());
+        assertEquals(0, new BigDecimal("61000.00").compareTo(result.filledPrice()));
+        assertTrue(result.rejectionReason().contains("TAKE_PROFIT"));
+        assertFalse(result.rejectionReason().contains("STOP_LOSS"));
+        server.verify();
+    }
+
+    @Test
+    void placeOrder_repeatedClientOrderId_replaysExistingLegsWithoutReposting() {
+        BrokerOrderRequest request = sampleRequest(AssetType.CRYPTO, EntryOrderType.MARKET, new BigDecimal("5"));
+
+        // Entry, stop-loss, and take-profit legs all already exist from a prior attempt.
+        server.expect(method(HttpMethod.GET))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andRespond(withSuccess(orderJson(555, "FILLED", "61000.00"), MediaType.APPLICATION_JSON));
+        server.expect(method(HttpMethod.GET))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andRespond(withSuccess(orderJson(556, "NEW", "0"), MediaType.APPLICATION_JSON));
+        server.expect(method(HttpMethod.GET))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andRespond(withSuccess(orderJson(557, "NEW", "0"), MediaType.APPLICATION_JSON));
+
+        BrokerOrderResult result = adapter.placeOrder(request, TradingMode.PAPER);
+
+        assertEquals(OrderStatus.FILLED, result.status());
+        assertEquals("555", result.brokerOrderId());
+        assertNull(result.rejectionReason());
+        server.verify(); // no POST calls at all — proves check-first idempotency
+    }
+
+    // --- E4-F3-S2: getOrderStatus ---
+
+    @Test
+    void getOrderStatus_unknownClientOrderId_returnsEmpty() {
+        expectOrderCheckNotFound();
+
+        assertTrue(adapter.getOrderStatus("BTCUSDT", "co-unknown", TradingMode.PAPER).isEmpty());
+        server.verify();
+    }
+
+    @Test
+    void getOrderStatus_entryFilledBothLegsResting_returnsFilled() {
+        server.expect(method(HttpMethod.GET))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andRespond(withSuccess(orderJson(555, "FILLED", "61000.00"), MediaType.APPLICATION_JSON));
+        server.expect(method(HttpMethod.GET))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andRespond(withSuccess(orderJson(556, "NEW", "0"), MediaType.APPLICATION_JSON));
+        server.expect(method(HttpMethod.GET))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andRespond(withSuccess(orderJson(557, "NEW", "0"), MediaType.APPLICATION_JSON));
+
+        Optional<BrokerOrderResult> result = adapter.getOrderStatus("BTCUSDT", "co-1", TradingMode.PAPER);
+
+        assertTrue(result.isPresent());
+        assertEquals(OrderStatus.FILLED, result.get().status());
+        server.verify();
+    }
+
+    @Test
+    void getOrderStatus_missingExitLeg_returnsPartiallyProtected() {
+        server.expect(method(HttpMethod.GET))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andRespond(withSuccess(orderJson(555, "FILLED", "61000.00"), MediaType.APPLICATION_JSON));
+        server.expect(method(HttpMethod.GET))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andRespond(withSuccess(orderJson(556, "CANCELED", "0"), MediaType.APPLICATION_JSON));
+        server.expect(method(HttpMethod.GET))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andRespond(withSuccess(orderJson(557, "NEW", "0"), MediaType.APPLICATION_JSON));
+
+        Optional<BrokerOrderResult> result = adapter.getOrderStatus("BTCUSDT", "co-1", TradingMode.PAPER);
+
+        assertTrue(result.isPresent());
+        assertEquals(OrderStatus.PARTIALLY_PROTECTED, result.get().status());
+        server.verify();
+    }
+
+    @Test
+    void getOrderStatus_exitLegTriggered_returnsCancelled() {
+        server.expect(method(HttpMethod.GET))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andRespond(withSuccess(orderJson(555, "FILLED", "61000.00"), MediaType.APPLICATION_JSON));
+        server.expect(method(HttpMethod.GET))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andRespond(withSuccess(orderJson(556, "FILLED", "50000.00"), MediaType.APPLICATION_JSON));
+        server.expect(method(HttpMethod.GET))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andRespond(withSuccess(orderJson(557, "NEW", "0"), MediaType.APPLICATION_JSON));
+
+        Optional<BrokerOrderResult> result = adapter.getOrderStatus("BTCUSDT", "co-1", TradingMode.PAPER);
+
+        assertTrue(result.isPresent());
+        assertEquals(OrderStatus.CANCELLED, result.get().status());
+        server.verify();
+    }
+
+    // --- E4-F3-S2: cancelOrder ---
+
+    @Test
+    void cancelOrder_unknownClientOrderId_returnsFailedWithoutThrowing() {
+        expectOrderCheckNotFound();
+
+        BrokerOrderResult result = adapter.cancelOrder("BTCUSDT", "co-unknown", TradingMode.PAPER);
+
+        assertEquals(OrderStatus.FAILED, result.status());
+        server.verify();
+    }
+
+    @Test
+    void cancelOrder_alreadyFilledAndProtected_isIdempotentNoOpWithoutDeleting() {
+        server.expect(method(HttpMethod.GET))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andRespond(withSuccess(orderJson(555, "FILLED", "61000.00"), MediaType.APPLICATION_JSON));
+        server.expect(method(HttpMethod.GET))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andRespond(withSuccess(orderJson(556, "NEW", "0"), MediaType.APPLICATION_JSON));
+        server.expect(method(HttpMethod.GET))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andRespond(withSuccess(orderJson(557, "NEW", "0"), MediaType.APPLICATION_JSON));
+
+        BrokerOrderResult result = adapter.cancelOrder("BTCUSDT", "co-1", TradingMode.PAPER);
+
+        assertEquals(OrderStatus.FILLED, result.status());
+        server.verify(); // no DELETE call — idempotent no-op on a terminal composite status
+    }
+
+    @Test
+    void cancelOrder_restingEntry_deletesThenReturnsAuthoritativeStatus() {
+        server.expect(method(HttpMethod.GET))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andRespond(withSuccess(orderJson(555, "NEW", "0"), MediaType.APPLICATION_JSON));
+        server.expect(method(HttpMethod.DELETE))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andRespond(withSuccess(orderJson(555, "CANCELED", "0"), MediaType.APPLICATION_JSON));
+        server.expect(method(HttpMethod.GET))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andRespond(withSuccess(orderJson(555, "CANCELED", "0"), MediaType.APPLICATION_JSON));
+
+        BrokerOrderResult result = adapter.cancelOrder("BTCUSDT", "co-1", TradingMode.PAPER);
+
+        assertEquals(OrderStatus.CANCELLED, result.status());
+        server.verify();
+    }
+
+    private BrokerOrderRequest sampleRequest(AssetType assetType, EntryOrderType entryOrderType, BigDecimal leverage) {
+        return new BrokerOrderRequest(
+                "co-full-success", "BTCUSDT", assetType, OrderSide.BUY, new BigDecimal("0.01"),
+                entryOrderType, entryOrderType == EntryOrderType.LIMIT ? new BigDecimal("60000") : null,
+                new BigDecimal("70000"), new BigDecimal("50000"), leverage);
+    }
+
+    private void expectOrderCheckNotFound() {
+        server.expect(method(HttpMethod.GET))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andRespond(withStatus(HttpStatus.BAD_REQUEST)
+                        .body("{\"code\":-2013,\"msg\":\"Order does not exist.\"}")
+                        .contentType(MediaType.APPLICATION_JSON));
+    }
+
+    private static String orderJson(long orderId, String status, String avgPrice) {
+        return "{\"orderId\":" + orderId + ",\"clientOrderId\":\"ignored\",\"status\":\"" + status
+                + "\",\"avgPrice\":\"" + avgPrice + "\"}";
     }
 }

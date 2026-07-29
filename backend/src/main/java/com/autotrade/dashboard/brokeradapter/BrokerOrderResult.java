@@ -8,8 +8,12 @@ import java.time.Instant;
 /**
  * The outcome of a {@link BrokerAdapter} placeOrder/getOrderStatus/cancelOrder
  * call. {@code filledPrice} is non-null only when {@code status} is {@code
- * FILLED} or {@code PARTIALLY_FILLED}; {@code rejectionReason} is non-null
- * only when {@code status} is {@code REJECTED} or {@code FAILED}.
+ * FILLED}, {@code PARTIALLY_FILLED}, or {@code PARTIALLY_PROTECTED} (the
+ * entry itself still filled at that price); {@code rejectionReason} is
+ * non-null when {@code status} is {@code REJECTED}, {@code FAILED}, or
+ * {@code PARTIALLY_PROTECTED} (E4-F3-S2) — for the latter it describes which
+ * take-profit/stop-loss leg is missing and why, since the position is real
+ * and open but not fully protected.
  */
 public record BrokerOrderResult(
         String clientOrderId,

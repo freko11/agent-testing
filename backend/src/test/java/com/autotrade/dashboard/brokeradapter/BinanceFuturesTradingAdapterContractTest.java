@@ -8,8 +8,6 @@ import com.autotrade.dashboard.order.EntryOrderType;
 import com.autotrade.dashboard.order.OrderSide;
 import com.autotrade.dashboard.ticker.AssetType;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -26,18 +24,10 @@ import static org.mockito.Mockito.lenient;
  * Runs the shared {@link BrokerAdapterContractTest} suite against {@link
  * BinanceFuturesTradingAdapter} driven over a {@link
  * FakeBinanceFuturesTradingServer} — mirrors {@code
- * AlpacaTradingAdapterContractTest}'s template.
- *
- * <p><b>Intentionally disabled (confirmed with the user as this story's
- * scope):</b> {@code placeOrder}/{@code getOrderStatus}/{@code cancelOrder}
- * are not implemented until E4-F3-S2 (leverage/bracket-order design), so 5
- * of the 7 shared tests are {@code @Disabled} here rather than silently
- * skipped — this list is E4-F3-S2's checklist of exactly which tests to
- * re-enable once those methods are real. Only {@code
- * getAccountStatusReturnsNonEmptyBalances} and {@code
- * getPositionForASymbolWithNoActivityReturnsEmpty} run for real, per {@link
- * BrokerAdapterContractTest}'s own documented allowance for a real-adapter
- * subclass to skip assertions that don't apply.
+ * AlpacaTradingAdapterContractTest}'s template. All 7 shared tests run for
+ * real now that {@code placeOrder}/{@code getOrderStatus}/{@code
+ * cancelOrder} are implemented (E4-F3-S2) — previously 5 were {@code
+ * @Disabled} pending this story.
  */
 @ExtendWith(MockitoExtension.class)
 class BinanceFuturesTradingAdapterContractTest extends BrokerAdapterContractTest {
@@ -79,35 +69,5 @@ class BinanceFuturesTradingAdapterContractTest extends BrokerAdapterContractTest
         return new BrokerOrderRequest(
                 clientOrderId, tradableSymbol(), AssetType.CRYPTO, OrderSide.BUY, new BigDecimal("0.01"),
                 EntryOrderType.MARKET, null, new BigDecimal("70000"), new BigDecimal("50000"), BigDecimal.ONE);
-    }
-
-    @Test
-    @Disabled("placeOrder deferred to E4-F3-S2 — Binance Futures leverage/bracket-order design not done yet")
-    @Override
-    void placeOrderReturnsResultMatchingRequestedClientOrderId() {
-    }
-
-    @Test
-    @Disabled("placeOrder deferred to E4-F3-S2 — Binance Futures leverage/bracket-order design not done yet")
-    @Override
-    void placeOrderIsIdempotentForARepeatedClientOrderId() {
-    }
-
-    @Test
-    @Disabled("getOrderStatus deferred to E4-F3-S2")
-    @Override
-    void getOrderStatusForAnUnknownClientOrderIdReturnsEmpty() {
-    }
-
-    @Test
-    @Disabled("cancelOrder deferred to E4-F3-S2")
-    @Override
-    void cancelOrderOnAnOpenOrderSucceedsWithoutThrowing() {
-    }
-
-    @Test
-    @Disabled("cancelOrder deferred to E4-F3-S2")
-    @Override
-    void cancelOrderOnAnUnknownClientOrderIdReturnsAResultRatherThanThrowing() {
     }
 }

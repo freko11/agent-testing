@@ -1566,9 +1566,133 @@ correct, but the exact live shape of a real authenticated `/account`/
 ambiguity noted above — remains unconfirmed beyond docs/secondary sources;
 flagged, not silently assumed, same gap pattern as E4-F2-S1/S2's Alpaca
 adapter. No frontend changes — same backend-only scope as every other E4
-story. E4-F3-S2 (place a leveraged order via Binance testnet) is next, and
-can now build `placeOrder`/`getOrderStatus`/`cancelOrder` on top of this
-story's signing/error-classification/config plumbing.
+story.
+
+E4-F3-S2 (place a leveraged order via Binance testnet) is done, closing out
+F4.3 (Binance adapter) and E4 (Broker Adapter Layer) in full. A `Plan`-agent
+design gate resolved the story's real crux — Binance Futures has no
+single-call bracket order the way Alpaca does — and four money-safety
+decisions from that plan were confirmed directly with the user before
+implementation, per this epic's established precedent (E4-F2-S1's
+credential-source confirmation, E4-F3-S1's Spot-vs-Futures confirmation):
+(1) **no auto-flatten** of the position if a take-profit/stop-loss leg fails
+to place after entry fills — surfaced as a new `OrderStatus.PARTIALLY_PROTECTED`
+result instead, since closing is itself another order action with the same
+failure modes and could realize a worse loss than surfacing the state;
+(2) the **stop-loss leg is attempted before the take-profit leg** when only
+one fits in the bounded retry budget — the protective leg gets priority;
+(3) **MARKET entries only for v1** — `LIMIT` is rejected with a clear,
+documented `BrokerAdapterException`, since a resting LIMIT entry might not
+fill before the call returns and the exit legs' `closePosition=true` needs
+an already-open position; and (4) a hardcoded **`MAX_LEVERAGE = 20`**
+adapter-intrinsic ceiling, distinct from E6-F2-S1's later user-configurable
+risk cap, consistent with this codebase's bias toward hardcoded simple
+values (`MarketHoursService`'s calendar, `SignalRuleEngine`'s thresholds)
+over an extra live-data dependency on Binance's real per-symbol
+`/fapi/v1/leverageBracket` (1x-125x).
+
+`BinanceFuturesTradingAdapter.placeOrder`/`getOrderStatus`/`cancelOrder` are
+now real. A "bracket" is three separate Binance orders — `POST
+/fapi/v1/leverage` then a MARKET entry, then a `STOP_MARKET` stop-loss and a
+`TAKE_PROFIT_MARKET` take-profit (both `closePosition=true`, so they close
+the whole position regardless of fills, avoiding separate quantity
+tracking). All three orders' `newClientOrderId`s are derived deterministically
+from the app's single `clientOrderId` via SHA-256 (truncated to 30 hex chars
+plus a `-E`/`-T`/`-S` suffix) rather than suffixed directly onto it — Binance's
+36-char id limit is incompatible with this app's own `orders.client_order_id
+VARCHAR2(64)` column. This determinism is what makes every leg idempotent on
+retry: `placeOrder` always **checks first** (`GET /fapi/v1/order` by the
+derived id) before ever creating a leg, rather than "POST then catch a
+duplicate-id error" the way `AlpacaTradingAdapter` does — a full replay of
+`placeOrder`, whether from a caller retry or `RetryingBrokerAdapter`'s own
+outage reconciliation, safely re-discovers whatever already exists instead
+of risking a duplicate order. Once the entry is confirmed `FILLED`/
+`PARTIALLY_FILLED`, `placeOrder` never throws again: each exit leg is
+placed with a small **bounded local retry** (2 attempts, 200ms pause —
+same "one bounded retry" bias as `marketdata.RetryHelper`, deliberately not
+`RetryingBrokerAdapter`'s multi-second exponential backoff), and every
+failure (transient, rate-limited, or a fatal business rejection) is caught
+uniformly and never rethrown post-fill — the caller only learns via the
+returned `PARTIALLY_PROTECTED` result which leg(s) are missing. A business
+rejection *before* the entry fills (bad leverage, insufficient margin) is
+still returned as a normal `REJECTED` result, never thrown, per
+`BrokerAdapter`'s existing contract.
+
+`getOrderStatus` reports a **composite status** across all three legs: an
+entry that hasn't filled yet is reported as-is; once filled, a missing or
+terminated-without-filling exit leg downgrades the report to
+`PARTIALLY_PROTECTED`, and an exit leg that itself shows `FILLED` (it
+triggered, closing the position) reports as `CANCELLED` — the closest
+existing vocabulary for "no longer live, no rejection" (which leg fired and
+at what price isn't preserved by this interface today, a flagged, accepted
+gap). `cancelOrder` cancels only the entry leg — same "cancel the order, not
+the position" scope `AlpacaTradingAdapter` already has for its own bracket
+legs — and is an idempotent no-op on any terminal composite status,
+including the new `PARTIALLY_PROTECTED`.
+
+`OrderStatus` gained `PARTIALLY_PROTECTED`; `V7__widen_orders_status_check_partially_protected.sql`
+widens `ck_orders_status` to allow it (Oracle requires drop-then-recreate to
+widen a CHECK constraint's value list). No other entity/enum needed a
+change — a grep confirmed no exhaustive `switch` over `OrderStatus` exists
+anywhere in the codebase yet (`AlpacaTradingAdapter.mapStatus` switches over
+Alpaca's own status *strings*, not this enum), so `AlpacaTradingAdapter`/
+`MockBrokerAdapter` both compile and behave unchanged despite never
+producing the new value. `BrokerOrderResult`'s Javadoc was broadened to
+document the new status's `filledPrice`/`rejectionReason` semantics.
+
+One security-review finding, fixed before this story closed: every signed
+Binance request builds a **literal, non-re-encoded query string** (see
+`BinanceFuturesTradingAdapter`'s own class Javadoc on why — re-encoding
+would break the signature), and `symbol` is the one caller-supplied value
+built directly into it. `TickerController`'s own validation is only
+`@NotBlank @Size(max = 20)`, no character-class restriction, so an
+unvalidated ticker symbol like `"BTC&leverage=125"` could inject extra query
+parameters into a real money-moving Binance request — a latent gap that
+existed since E4-F3-S1's `getPosition`/`getAccountStatus` but that this
+story's new `placeOrder`/`cancelOrder` calls meaningfully widened the blast
+radius of. Fixed with a new `validateSymbol` fatal, pre-HTTP check (`^[A-Z0-9-]{1,20}$`
+— hyphen allowed only for this codebase's own `"-NOACTIVITY"` test-symbol
+convention from `BrokerAdapterContractTest`) applied to all four methods
+that take a raw `symbol`: `placeOrder`, `getOrderStatus`, `getPosition`
+(retrofitted), and transitively `cancelOrder` (which calls `getOrderStatus`
+first). Two new tests prove the guard rejects an injection-shaped symbol
+before any HTTP call.
+
+Tested via 24 new/changed tests in `BinanceFuturesTradingAdapterTest`
+(validation-fatal cases for asset type/entry type/leverage bounds/symbol
+injection, full bracket-success mapping, leverage-rejected and
+entry-rejected short-circuits, a take-profit-leg-fails-after-retry ->
+`PARTIALLY_PROTECTED` case, a full-replay idempotency case proving zero POST
+calls on a repeated `clientOrderId`, `getOrderStatus` unknown/filled/missing-leg/
+triggered-leg cases, and `cancelOrder` idempotent-on-terminal vs.
+cancels-a-resting-entry cases) plus the 5 previously-`@Disabled` shared
+`BrokerAdapterContractTest` cases now enabled and passing in both
+`BinanceFuturesTradingAdapterContractTest` and
+`RetryingBinanceFuturesTradingAdapterContractTest` — 271 backend tests
+total, `./mvnw verify` green. `adapter-contract-check` and `simplify` skills
+both run clean (two throwaway/unused fields removed during the simplify
+pass: an unused `BinanceLeverageResponse` DTO whose only field was never
+read, and `BinanceOrderResponse.clientOrderId`, which this adapter never
+reads since — unlike Alpaca — it always returns the app's own `clientOrderId`
+in results, never Binance's derived leg id).
+
+Not live-verified against a real Binance Futures Testnet account in this
+session — same gap as E4-F3-S1, no real `BINANCE_TRADING_API_KEY`/
+`BINANCE_TRADING_API_SECRET` exist on this dev machine, so the full
+leverage-set/entry/exit-leg order flow has only been proven against
+`FakeBinanceFuturesTradingServer`/`MockRestServiceServer` fixtures, not a
+live testnet call. The exact Binance error code for a leverage-set rejection
+(the Plan agent's own research guessed `-4028` but couldn't confirm it
+live) remains unconfirmed — the adapter's classification doesn't depend on
+that specific code (any non-429/418 4xx during leverage-set maps to a
+`REJECTED` result), so this doesn't block correctness, only the precision
+of matching Binance's exact documented error taxonomy. No frontend changes
+— same backend-only scope as every other E4 story.
+
+This closes out F4.3 (Binance adapter) and E4 (Broker Adapter Layer) in
+full. E5 (Auto-Trade Execution) is next — E5-F1-S1 (trade input form) and
+E5-F2-S1 (bracket order construction/submission) can now build on top of
+both `BrokerAdapter` implementations being complete.
 
 The original agile delivery plan for the project (drafted before any of E1-E3 above
 was implemented) lives at `docs/agile-plan.md` — an auto-trade signal dashboard

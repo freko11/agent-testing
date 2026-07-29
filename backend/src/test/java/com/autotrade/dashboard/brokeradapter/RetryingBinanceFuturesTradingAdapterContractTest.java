@@ -8,8 +8,6 @@ import com.autotrade.dashboard.order.EntryOrderType;
 import com.autotrade.dashboard.order.OrderSide;
 import com.autotrade.dashboard.ticker.AssetType;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -27,9 +25,9 @@ import static org.mockito.Mockito.lenient;
  * path when wrapping the real {@link BinanceFuturesTradingAdapter},
  * following the "wrap your adapter and run the shared suite again" template
  * {@code RetryingMockBrokerAdapterContractTest}/{@code
- * RetryingAlpacaTradingAdapterContractTest} already established. Same
- * disabled-test subset as {@link BinanceFuturesTradingAdapterContractTest},
- * for the same E4-F3-S2-deferred-scope reason.
+ * RetryingAlpacaTradingAdapterContractTest} already established. All 7
+ * shared tests run for real now that {@code placeOrder}/{@code
+ * getOrderStatus}/{@code cancelOrder} are implemented (E4-F3-S2).
  */
 @ExtendWith(MockitoExtension.class)
 class RetryingBinanceFuturesTradingAdapterContractTest extends BrokerAdapterContractTest {
@@ -73,35 +71,5 @@ class RetryingBinanceFuturesTradingAdapterContractTest extends BrokerAdapterCont
         return new BrokerOrderRequest(
                 clientOrderId, tradableSymbol(), AssetType.CRYPTO, OrderSide.BUY, new BigDecimal("0.01"),
                 EntryOrderType.MARKET, null, new BigDecimal("70000"), new BigDecimal("50000"), BigDecimal.ONE);
-    }
-
-    @Test
-    @Disabled("placeOrder deferred to E4-F3-S2 — Binance Futures leverage/bracket-order design not done yet")
-    @Override
-    void placeOrderReturnsResultMatchingRequestedClientOrderId() {
-    }
-
-    @Test
-    @Disabled("placeOrder deferred to E4-F3-S2 — Binance Futures leverage/bracket-order design not done yet")
-    @Override
-    void placeOrderIsIdempotentForARepeatedClientOrderId() {
-    }
-
-    @Test
-    @Disabled("getOrderStatus deferred to E4-F3-S2")
-    @Override
-    void getOrderStatusForAnUnknownClientOrderIdReturnsEmpty() {
-    }
-
-    @Test
-    @Disabled("cancelOrder deferred to E4-F3-S2")
-    @Override
-    void cancelOrderOnAnOpenOrderSucceedsWithoutThrowing() {
-    }
-
-    @Test
-    @Disabled("cancelOrder deferred to E4-F3-S2")
-    @Override
-    void cancelOrderOnAnUnknownClientOrderIdReturnsAResultRatherThanThrowing() {
     }
 }
