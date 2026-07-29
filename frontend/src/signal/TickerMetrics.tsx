@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { fetchChartData, type ChartDataResponse } from '../chart/api'
 import PriceChart from '../chart/PriceChart'
 import { MarketDataError } from '../marketdata/api'
+import TradeForm from '../trade/TradeForm'
 import { addToWatchlist } from '../watchlist/api'
 import { fetchSignal, type MovingAverageResult, type SignalResponse } from './api'
 
@@ -210,6 +211,7 @@ function TickerMetrics({ lookupRequest, onWatchlistChanged }: TickerMetricsProps
         <>
           <TickerMetricsResult signal={result} />
           <AddToWatchlistButton key={result.ticker.symbol} symbol={result.ticker.symbol} onAdded={onWatchlistChanged} />
+          <TradeForm key={result.ticker.symbol} signal={result} />
         </>
       )}
       {chartError && <p role="alert">{chartError}</p>}

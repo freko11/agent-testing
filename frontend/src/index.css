@@ -146,3 +146,34 @@ body {
   color: light-dark(#666666, #999999);
   margin-right: auto;
 }
+
+.trade-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 24rem;
+  margin: 1rem 0;
+  padding: 1rem 1.25rem;
+  border: 1px solid light-dark(#d0d0d0, #3a3a3a);
+  border-radius: 0.5rem;
+  background: light-dark(#f7f7f7, #1e1e1e);
+}
+
+.trade-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+}
+
+.trade-form__error {
+  margin: 0;
+  font-size: 0.8rem;
+  color: light-dark(#c2410c, #fb923c);
+}
+
+.trade-form__note {
+  margin: 0;
+  font-size: 0.85rem;
+  color: light-dark(#666666, #999999);
+}

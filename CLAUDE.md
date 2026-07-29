@@ -1694,6 +1694,68 @@ full. E5 (Auto-Trade Execution) is next — E5-F1-S1 (trade input form) and
 E5-F2-S1 (bracket order construction/submission) can now build on top of
 both `BrokerAdapter` implementations being complete.
 
+E5-F1-S1 (trade input form: amount, leverage, take-profit, stop-loss) is
+done, starting E5 (Auto-Trade Execution). No `Plan`-agent design gate —
+frontend-only, no new architectural decision, same reasoning as E3-F1-S1/S2.
+The two open numeric-bound questions were resolved directly against this
+codebase's own existing precedents rather than left to guesswork: leverage's
+upper bound mirrors `BinanceFuturesTradingAdapter.MAX_LEVERAGE` (20), and
+stock orders are validated to exactly 1x, mirroring the DB-level check
+constraint from E1-F2-S1 that stock orders can never carry leverage. This is
+deliberately narrower than E5-F1-S2's scope: leverage is still always
+*shown* here (no asset-type-conditional hiding yet — that's next), just
+tightly validated per asset type. Take-profit/stop-loss are validated not
+just as positive numbers but directionally against the signal's own call
+and current price (BUY: TP above price, SL below; SELL: TP below price, SL
+above) — a real "broker limits" check, not just numeric-range busywork,
+since a TP/SL on the wrong side of price is nonsensical for a bracket order.
+The form only renders for a BUY/SELL call; a HOLD has no direction to size
+an entry for, so nothing is shown (matches `SignalBadge`'s own no-hold-term
+precedent for HOLD).
+
+New `frontend/src/trade/` package (mirrors `chart`/`signal`/`watchlist`):
+`validation.ts` (pure `validateTradeForm`, no React) and `TradeForm.tsx`
+(the form itself, wired into `TickerMetrics.tsx` right after
+`AddToWatchlistButton`, keyed by ticker symbol so switching tickers resets
+its state same as the watchlist button). Submitting doesn't call a broker
+yet — bracket-order construction and adapter routing are E5-F2-S1's
+explicit scope — so a valid submit just renders "Order details captured —
+submitting this to the broker lands in E5-F2-S1" rather than pretending to
+place a real order, the same kind of explicit test-only/not-yet-wired
+stand-in this codebase already used in E1-F4-S1's E2E test and E4-F1-S1's
+unconsumed interface methods. New `index.css` `.trade-form` rules follow
+the existing `.stat-tile`/`.signal-badge` `light-dark()` pattern.
+
+Tested via `validation.test.ts` (9 Vitest cases: valid BUY/SELL payloads,
+non-positive/non-numeric amount, stock-leverage-must-be-1x, crypto leverage
+bounds and fractional-leverage rejection, and directional TP/SL validation
+both ways) — 13 frontend tests total (4 existing + 9 new), `npm run
+build`/`npm run lint`/`npm test` all pass clean (same pre-existing unrelated
+`AuthContext.tsx` lint warning as every prior story). No backend changes —
+this story is entirely frontend, same split as E3's stories.
+
+Verified live via the `run` skill against the real running stack (Docker
+Oracle XE + real public Binance API, no mocking; logged in through E1-F3-S2's
+session-cookie auth) — Docker Desktop wasn't running at the start of this
+session and had to be launched first, then Oracle XE brought up fresh and
+polled for healthy before the backend would connect. `BTCUSDT` (a live HOLD)
+correctly rendered no trade form at all; `ETHUSDT` (a live BUY) rendered the
+full form, showed all four live validation errors on empty submission,
+cleared them once valid amount/leverage/TP/SL were entered, enabled the
+previously-disabled "Trade" button, and clicking it rendered the
+not-yet-wired confirmation note. Typing leverage `25` against `ETHUSDT`
+(crypto) correctly rendered "Leverage must be between 1x and 20x." live.
+`AAPL` correctly still 409'd `MARKET_CLOSED` (checked outside market hours),
+confirming no regression to E2-F1-S3 — this also means the STOCK-leverage-
+capped-at-1x path could only be verified via `validation.test.ts`, not live
+in this session (no stock ticker had a live BUY/SELL signal available
+during market-closed hours); flagged, not silently assumed, same disclosure
+style as prior stories' un-observed paths (e.g. E3-F1-S2's BUY badge).
+
+E5-F1-S2 (hide/default fields by asset type) is next, followed by E5-F2-S1
+(actual bracket-order construction and submission through the `BrokerAdapter`
+layer this form's payload is now shaped for).
+
 The original agile delivery plan for the project (drafted before any of E1-E3 above
 was implemented) lives at `docs/agile-plan.md` — an auto-trade signal dashboard
 (React frontend, Java/Spring Boot backend, Oracle Database via local Oracle XE,
