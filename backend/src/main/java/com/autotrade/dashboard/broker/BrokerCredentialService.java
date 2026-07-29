@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Sole entry point for plaintext broker API keys/secrets (E1-F3-S1) — every
@@ -46,6 +47,12 @@ public class BrokerCredentialService {
                 encryptionService.encrypt(apiSecretPlaintext));
         credential.setEncryptionKeyVersion(encryptionService.activeKeyId());
         return repository.save(credential);
+    }
+
+    /** The sole lookup path for a broker/environment's active credential — used by both adapters and the credential bootstrap. */
+    @Transactional(readOnly = true)
+    public Optional<BrokerCredential> find(Broker broker, TradingMode environment) {
+        return repository.findByBrokerAndEnvironmentAndIsActiveTrue(broker, environment);
     }
 
     @Transactional(readOnly = true)

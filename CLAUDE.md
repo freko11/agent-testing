@@ -1308,8 +1308,108 @@ translation stays inline in the test method, explicitly commented as a stand-
 in rather than real E5 logic. No frontend or database changes.
 
 E1 (Platform Foundation) is now fully closed out — every story across F1.1
-through F1.4 is done. E4-F2-S1 (Alpaca paper adapter) is next per the plan's
-build sequence.
+through F1.4 is done.
+
+E4-F2-S1 (Alpaca paper account connected; `getAccountStatus` returns
+balance) is done, starting F4.2. A `Plan`-agent design gate resolved the
+one real open question up front — confirmed directly with the user before
+implementation, per its security-review weight: where do this adapter's
+*trading* credentials come from, given `BrokerCredentialService` (E1-F3-S1)
+exists specifically for this but no "connect my account" UI exists yet.
+Decision: **bootstrap `BrokerCredentialService` from env vars at startup**
+rather than reading plain env vars directly the way
+`AlpacaMarketDataClient` does — the adapter always reads through the
+encrypted, rotation-eligible store, and the real UI-driven connect flow
+stays a separate future story. New `broker.AlpacaTradingCredentialBootstrap`
+(`ApplicationRunner`) reads `ALPACA_TRADING_API_KEY`/
+`ALPACA_TRADING_API_SECRET` (deliberately separate from
+`ALPACA_API_KEY`/`ALPACA_API_SECRET`, which stay scoped to E2-F1-S1's
+read-only market data) and seeds a `(ALPACA, PAPER)` row via
+`BrokerCredentialService.store` **only if one doesn't already exist** —
+re-seeding every restart would fight the audited `rotateAll()` rotation
+flow that owns updating it from here on. `BrokerCredentialService` gained a
+`find(Broker, TradingMode)` lookup (thin wrapper over the existing
+repository method), the sole path both the bootstrap and the adapter use.
+Scoped to `PAPER` only — no `LIVE` seeding, so `getAccountStatus`/etc.
+called under `LIVE` fail closed with no credential configured until a
+future story seeds one (a free backstop, not a substitute for E6's real
+live-mode consent gate).
+
+New `com.autotrade.dashboard.brokeradapter.AlpacaTradingAdapter` implements
+the full `BrokerAdapter` interface for real against Alpaca's actual
+paper/live trading API (`https://paper-api.alpaca.markets` /
+`https://api.alpaca.markets` — distinct from `AlpacaMarketDataClient`'s
+read-only `data.alpaca.markets`), not just this story's narrow
+`getAccountStatus` AC: `BrokerAdapterContractTest`'s shared suite requires a
+fully-working adapter, and E4-F2-S2 (place a market order) needs
+`placeOrder`/`getOrderStatus`/`getPosition`/`cancelOrder` immediately next.
+`placeOrder` submits Alpaca's native bracket-order shape
+(`order_class=bracket`, `take_profit.limit_price`/`stop_loss.stop_price`,
+`time_in_force=day`); a 403 (insufficient buying power/trading blocked) is
+mapped to a normal `REJECTED` result rather than thrown, per
+`BrokerAdapter`'s existing "business outcomes are return values, not
+exceptions" contract; a 422 with Alpaca's `client_order_id`-uniqueness code
+triggers a replay via `GET /v2/orders:by_client_order_id` (idempotent, no
+duplicate order) rather than throwing; any other 422 is a fatal,
+non-retried `BrokerAdapterException` (malformed request, a caller bug, not
+a broker business decision); 429 throws `BrokerAdapterRateLimitedException`
+with the parsed `Retry-After`; 5xx/connectivity throws
+`BrokerAdapterTransientException`; everything else unexpected is a fatal
+`BrokerAdapterException` — the same three-way classification
+`RetryingBrokerAdapter` (E4-F1-S2/S3) already expects from a concrete
+adapter. `cancelOrder` resolves the current state via `getOrderStatus`
+first (idempotent no-op if already terminal, `FAILED` result — not an
+exception — for an unknown `clientOrderId`), then `DELETE`s and re-fetches
+the authoritative status afterward rather than trusting the 204 as "done."
+Alpaca's order-status vocabulary maps onto this codebase's `OrderStatus`
+enum; `expired`/`done_for_day`/`suspended` all provisionally map to
+`CANCELLED` (no matching enum value), flagged to revisit if a later story
+needs to distinguish them. Stock-order leverage is defense-in-depth
+validated (fatal, no HTTP call) before every `placeOrder`, mirroring the
+DB-level CHECK constraint from E1-F2-S1.
+
+`AlpacaTradingAdapter` itself is a plain, non-`@Component` class — like
+`MockBrokerAdapter`'s positioning but for a different reason (it's real,
+just not the thing that should be directly injectable). New
+`brokeradapter.BrokerAdapterConfig` wraps it in `RetryingBrokerAdapter` for
+the actual exposed `BrokerAdapter` bean, per
+`RetryingMockBrokerAdapterContractTest`'s own documented "wrap your
+adapter" template — nothing consumes this bean yet (E5 doesn't exist),
+same "bean nothing wires up yet" situation E4-F1-S1's interface addition
+already accepted. New `brokeradapter.AlpacaTradingProperties`
+(`broker.alpaca.paper-base-url`/`live-base-url`) deliberately has no
+`apiKey`/`apiSecret` fields, unlike `AlpacaMarketDataProperties` — credentials
+come from `BrokerCredentialService`, not config. The shared app-wide `Clock`
+bean moved from `marketdata.MarketDataClientConfig` to a new
+`common.ClockConfig`, per that bean's own comment instructing exactly this
+once a second, unrelated consumer (this adapter) showed up.
+
+Tested via `AlpacaTradingAdapterTest` (19 tests: JSON<->DTO mapping,
+auth-header wiring, every error-classification branch, no-HTTP-call proofs
+for the no-credential/leverage-validation fatal paths — no live HTTP, no
+Spring context, same posture as `AlpacaMarketDataClientTest`),
+`AlpacaTradingAdapterContractTest`/`RetryingAlpacaTradingAdapterContractTest`
+(7 tests each, running the existing shared `BrokerAdapterContractTest`
+suite — bare and `RetryingBrokerAdapter`-wrapped — against a new
+test-only `FakeAlpacaTradingServer`: a minimal in-memory fake of Alpaca's
+trading API wired in via `MockRestServiceServer`'s custom-`ResponseCreator`
+escape hatch rather than a fixed `.expect()` sequence, since the shared
+suite's call order isn't fixed), `AlpacaTradingCredentialBootstrapTest` (3
+tests: unset env vars, already-stored no-overwrite, first-time seed), and
+`BrokerCredentialServiceFindTest` (2 tests, real H2 repository) — 38 new
+tests, 226 backend tests total, `./mvnw verify` green.
+
+Not live-verified against a real Alpaca paper account in this session — no
+real `ALPACA_TRADING_API_KEY`/`ALPACA_TRADING_API_SECRET` exist on this dev
+machine (same gap flagged for `ALPACA_API_KEY` back in E2-F1-S1), so
+`getAccountStatus`'s real response shape against Alpaca's live paper API is
+unconfirmed beyond the fetched API docs and `FakeAlpacaTradingServer`'s
+fixtures. `.env.example` documents `ALPACA_TRADING_API_KEY`/
+`ALPACA_TRADING_API_SECRET` alongside the existing market-data keys. No
+frontend changes — same backend-only scope as every other E4 story.
+E4-F2-S2 (place a market order via Alpaca) is next, and can now inject the
+`BrokerAdapter` bean this story wired up with no further adapter-layer
+plumbing.
 
 The original agile delivery plan for the project (drafted before any of E1-E3 above
 was implemented) lives at `docs/agile-plan.md` — an auto-trade signal dashboard
