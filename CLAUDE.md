@@ -1241,6 +1241,76 @@ map to is E5's decision when that controller is actually built.
 This closes out F4.1 (adapter interface) and E4-F1 in full. F4.2 (Alpaca
 adapter) is next.
 
+E1-F4-S1 (mock-broker E2E test covering ticker → signal → order) is done,
+closing the one remaining gap in F1.4 (testing strategy) that had been open
+since early E1 — deferred back then because it needed both E2's signal engine
+and E4-F1-S1's `MockBrokerAdapter` to exist first, both now do. A `Plan`-agent
+design gate resolved the one real open question: E5 (Auto-Trade Execution —
+the trade-input form, bracket-order construction, guardrails) hasn't been
+built yet, so there's no production code that turns a `SignalResponse` into a
+`BrokerOrderRequest`. Decision: the test itself contains a minimal, explicitly
+commented test-only stand-in for that translation (no amount sizing, no
+leverage rules, no guardrails — E5-F2-S1's actual scope), proving the plumbing
+wires together end-to-end without pretending to be the real trade-execution
+feature. This mirrors `com.autotrade.dashboard.backtest`'s existing precedent
+of test-only logic standing in for a step production code doesn't own yet.
+
+New test-only `com.autotrade.dashboard.e2e` package (parallels `backtest` —
+also test-only, also cross-cutting, not owned by one feature package):
+`TickerSignalOrderE2ETest` (`@SpringBootTest`, `@Transactional`, real H2, same
+shape as `CoreDataModelIntegrationTest`) and `E2ECandleFixtures` (a
+purpose-built 40-daily-candle series, deliberately not reused from
+`IndicatorTestFixtures` — that package-private fixture's degenerate
+`CLOSES_40` series actually evaluates to `CONFLICTING_SIGNALS` under
+`SignalRuleEngine`, not a usable directional call for this test). Asset type
+is CRYPTO, not STOCK, specifically to sidestep `MarketHoursService`'s
+open/closed gate — a stock ticker would make the test's pass/fail depend on
+what time CI happens to run. The fixture's 40 candles chop without net drift
+for the first 26, then add a gentle uptrend for the last 14 so MACD's
+histogram and the SMA10/SMA30 crossover both read bullish while RSI-14 stays
+inside its neutral 30-70 band — a naive straight-line uptrend instead pushes
+RSI toward overbought/bearish, colliding with MACD/MA's bullish read and
+producing `CONFLICTING_SIGNALS` rather than a clean `BULLISH_MAJORITY`, a real
+trap confirmed via an independent Python/Decimal script (mirroring
+`RsiCalculator`/`MacdCalculator`/`MovingAverageCrossoverCalculator`/
+`VolatilityCalculator`/`VolumeTrendCalculator` exactly) before the numbers
+were finalized, same discipline as E2-F2-S1/S2's reference values. Final
+series: RSI-14 = 57.7870, MACD histogram = +0.08595536, SMA10 100.787 > SMA30
+100.278, ATR% = 1.5920 (LOW band), volume-trend ratio = 1.0000 (constant
+volume) → `BULLISH_MAJORITY` / `HoldTermRule.MODERATE_LOW` ("3-10 days").
+
+The test drives real `TickerService.resolveOrRegister` →
+`SignalService.computeSignal` (real `IndicatorService`/`MarketDataService`/
+calculators/`SignalRuleEngine`/`HoldTermCalculator`, real persisted
+`IndicatorSnapshot`/`SignalCallEntry`) → a manually-instantiated
+`MockBrokerAdapter.placeOrder` (never a Spring bean, per its own documented
+contract) → a real persisted `Order` FK'd to both the ticker and the exact
+`IndicatorSnapshot` the signal computation produced → a `getPosition` read
+proving the fill is reflected in the adapter's own state, not just the
+immediate return value. One real Spring Boot 4.1 wiring subtlety, flagged by
+the `Plan` agent and confirmed necessary: `MarketDataService`'s constructor
+eagerly calls `supportedAssetType()` on every injected `MarketDataClient` bean
+at context-refresh time, before any test stubbing runs — a plain
+`@MockitoBean` on `BinanceMarketDataClient` would return null from that
+unstubbed call and silently corrupt the CRYPTO routing entry for the whole
+test class. Fixed by using `@MockitoSpyBean` instead (wraps the real,
+fully-constructed bean; only `fetchRecentCandles` is stubbed, via
+`doReturn(...).when(spy)...` rather than `when(spy...).thenReturn(...)` —
+the latter would trigger one real Binance HTTP call during stub setup on a
+spy). `AlpacaMarketDataClient` needed no stubbing at all, since CRYPTO routing
+never reaches it.
+
+Tested via 1 new test (`TickerSignalOrderE2ETest`) — 188 backend tests total,
+`./mvnw verify` green, no live network calls or wall-clock dependence (same
+CI-safety posture as every other backend test). `simplify` skill run clean:
+no generic "order builder" abstraction was introduced — the test-only
+translation stays inline in the test method, explicitly commented as a stand-
+in rather than real E5 logic. No frontend or database changes.
+
+E1 (Platform Foundation) is now fully closed out — every story across F1.1
+through F1.4 is done. E4-F2-S1 (Alpaca paper adapter) is next per the plan's
+build sequence.
+
 The original agile delivery plan for the project (drafted before any of E1-E3 above
 was implemented) lives at `docs/agile-plan.md` — an auto-trade signal dashboard
 (React frontend, Java/Spring Boot backend, Oracle Database via local Oracle XE,
