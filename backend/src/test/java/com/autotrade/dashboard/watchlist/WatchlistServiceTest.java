@@ -1,6 +1,7 @@
 package com.autotrade.dashboard.watchlist;
 
 import com.autotrade.dashboard.ticker.AssetType;
+import com.autotrade.dashboard.ticker.Ticker;
 import com.autotrade.dashboard.ticker.TickerNotRegisteredException;
 import com.autotrade.dashboard.ticker.TickerService;
 import org.junit.jupiter.api.Test;
@@ -86,5 +87,20 @@ class WatchlistServiceTest {
 
         assertEquals("ADAUSDT", entries.get(0).getTicker().getSymbol());
         assertEquals("DOGEUSDT", entries.get(1).getTicker().getSymbol());
+    }
+
+    /** {@code listTickers} (E5-F4-S1) — used by {@code WatchlistSignalPoller}, which accesses tickers outside any
+     * transaction, so this must return real entities, not the lazy {@code WatchlistEntry.ticker} association. */
+    @Test
+    void listTickers_ordersByMostRecentlyAddedFirst() {
+        tickerService.resolveOrRegister("XRPUSDT", AssetType.CRYPTO, null);
+        tickerService.resolveOrRegister("LTCUSDT", AssetType.CRYPTO, null);
+        watchlistService.add("XRPUSDT");
+        watchlistService.add("LTCUSDT");
+
+        List<Ticker> tickers = watchlistService.listTickers();
+
+        assertEquals("LTCUSDT", tickers.get(0).getSymbol());
+        assertEquals("XRPUSDT", tickers.get(1).getSymbol());
     }
 }

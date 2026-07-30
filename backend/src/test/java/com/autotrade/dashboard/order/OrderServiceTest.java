@@ -18,6 +18,7 @@ import com.autotrade.dashboard.indicator.MacdResult;
 import com.autotrade.dashboard.indicator.MovingAverageRelation;
 import com.autotrade.dashboard.indicator.MovingAverageResult;
 import com.autotrade.dashboard.marketdata.TickerSummary;
+import com.autotrade.dashboard.notification.NotificationService;
 import com.autotrade.dashboard.signal.SignalCall;
 import com.autotrade.dashboard.signal.SignalCallEntry;
 import com.autotrade.dashboard.signal.SignalCallEntryRepository;
@@ -69,6 +70,8 @@ class OrderServiceTest {
     private SignalCallEntryRepository signalCallEntryRepository;
     @Mock
     private BrokerAdapter adapter;
+    @Mock
+    private NotificationService notificationService;
 
     private OrderService service;
     private final AtomicReference<Order> saved = new AtomicReference<>();
@@ -76,7 +79,7 @@ class OrderServiceTest {
     @BeforeEach
     void setUp() {
         service = new OrderService(signalService, router, brokerCredentialService, orderRepository,
-                signalCallEntryRepository);
+                signalCallEntryRepository, notificationService);
         lenient().when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
             Order order = invocation.getArgument(0);
             if (order.getId() == null) {
@@ -207,6 +210,8 @@ class OrderServiceTest {
         verify(adapter).placeOrder(requestCaptor.capture(), eq(TradingMode.PAPER));
         assertEquals(OrderSide.BUY, requestCaptor.getValue().side());
         assertEquals(new BigDecimal("10.00000000"), requestCaptor.getValue().quantity());
+
+        verify(notificationService).recordOrderOutcome(any(Order.class), eq(OrderStatus.PENDING));
     }
 
     @Test
@@ -369,6 +374,24 @@ class OrderServiceTest {
         assertEquals(OrderStatus.FILLED, response.status());
         assertEquals("broker-7", response.brokerOrderId());
         assertEquals(new BigDecimal("101.0"), response.entryPrice());
+        verify(notificationService).recordOrderOutcome(any(Order.class), eq(OrderStatus.SUBMISSION_UNKNOWN));
+    }
+
+    @Test
+    void refreshOrder_brokerConfirmsSameStatus_doesNotNotify() {
+        Ticker ticker = cryptoTicker();
+        Order order = persistedOrder(12L, ticker, "client-12");
+        order.setStatus(OrderStatus.FILLED);
+        when(orderRepository.findById(12L)).thenReturn(Optional.of(order));
+        when(router.forAssetType(AssetType.CRYPTO)).thenReturn(adapter);
+        BrokerOrderResult result = new BrokerOrderResult("client-12", "broker-12", OrderStatus.FILLED,
+                new BigDecimal("101.0"), null, Instant.parse("2026-07-29T00:00:02Z"));
+        when(adapter.getOrderStatus("BTCUSDT", "client-12", TradingMode.PAPER)).thenReturn(Optional.of(result));
+
+        OrderResponse response = service.refreshOrder(12L);
+
+        assertEquals(OrderStatus.FILLED, response.status());
+        verify(notificationService, never()).recordOrderOutcome(any(), any());
     }
 
     @Test

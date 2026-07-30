@@ -12,6 +12,7 @@ import com.autotrade.dashboard.brokeradapter.BrokerAdapterUnavailableException;
 import com.autotrade.dashboard.brokeradapter.BrokerOrderRequest;
 import com.autotrade.dashboard.brokeradapter.BrokerOrderResult;
 import com.autotrade.dashboard.common.TradingMode;
+import com.autotrade.dashboard.notification.NotificationService;
 import com.autotrade.dashboard.signal.SignalCall;
 import com.autotrade.dashboard.signal.SignalCallEntry;
 import com.autotrade.dashboard.signal.SignalCallEntryRepository;
@@ -79,15 +80,17 @@ public class OrderService {
     private final BrokerCredentialService brokerCredentialService;
     private final OrderRepository orderRepository;
     private final SignalCallEntryRepository signalCallEntryRepository;
+    private final NotificationService notificationService;
 
     public OrderService(SignalService signalService, BrokerAdapterRouter router,
                          BrokerCredentialService brokerCredentialService, OrderRepository orderRepository,
-                         SignalCallEntryRepository signalCallEntryRepository) {
+                         SignalCallEntryRepository signalCallEntryRepository, NotificationService notificationService) {
         this.signalService = signalService;
         this.router = router;
         this.brokerCredentialService = brokerCredentialService;
         this.orderRepository = orderRepository;
         this.signalCallEntryRepository = signalCallEntryRepository;
+        this.notificationService = notificationService;
     }
 
     public TradeOrderResponse submitOrder(String symbol, PlaceOrderRequest request) {
@@ -252,10 +255,13 @@ public class OrderService {
     }
 
     /** Not {@code @Transactional} at the {@link #submitOrder} level — each of these two short writes gets its own
-     * transaction via {@code SimpleJpaRepository}, so the DB connection is never held open across the broker HTTP call. */
+     * transaction via {@code SimpleJpaRepository}, so the DB connection is never held open across the broker HTTP call.
+     * Notifies (E5-F4-S1) only on a genuine status transition — this is what stops a manual {@link #refreshOrder}
+     * re-poll of an already-terminal order (e.g. re-fetching an already-{@code FILLED} order) from re-notifying. */
     private Order applyOutcome(Long orderId, OrderStatus status, String rejectionReason, BrokerOrderResult result) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new IllegalStateException("Order " + orderId + " vanished mid-submission"));
+        OrderStatus previousStatus = order.getStatus();
         order.setStatus(status);
         order.setRejectionReason(rejectionReason);
         order.setSubmittedAt(Instant.now());
@@ -266,6 +272,10 @@ public class OrderService {
                 order.setFilledAt(result.asOf());
             }
         }
-        return orderRepository.save(order);
+        Order saved = orderRepository.save(order);
+        if (previousStatus != status) {
+            notificationService.recordOrderOutcome(saved, previousStatus);
+        }
+        return saved;
     }
 }

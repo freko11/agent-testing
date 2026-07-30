@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
+import NotificationPanel from '../notification/NotificationPanel'
 import OrderHistory from '../order/OrderHistory'
 import TickerMetrics from '../signal/TickerMetrics'
 import Watchlist from '../watchlist/Watchlist'
@@ -19,6 +20,7 @@ function DashboardPage() {
         </button>
       </header>
       <h1>Auto-Trade Dashboard</h1>
+      <NotificationPanel />
       <Watchlist
         refreshKey={watchlistRefreshKey}
         onSelect={(symbol) => setLookupRequest({ symbol, nonce: Date.now() })}

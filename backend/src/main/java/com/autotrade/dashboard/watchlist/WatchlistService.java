@@ -31,6 +31,13 @@ public class WatchlistService {
         return repository.findAllByOrderByCreatedAtDesc();
     }
 
+    /** For {@code WatchlistSignalPoller} (E5-F4-S1) — returns real {@link Ticker} entities (not the lazy {@code
+     * WatchlistEntry.ticker} association), safe to use after this transaction closes. */
+    @Transactional(readOnly = true)
+    public List<Ticker> listTickers() {
+        return repository.findAllWatchlistedTickersOrderByCreatedAtDesc();
+    }
+
     @Transactional(readOnly = true)
     public boolean contains(String symbol) {
         Ticker ticker = requireRegistered(symbol);

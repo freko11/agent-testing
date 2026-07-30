@@ -2202,6 +2202,194 @@ in full. E5-F4-S1 (notifications) is next — the one story flagged in
 `docs/agile-plan.md` as softly depending on the E3-F3-S1 watchlist stretch
 feature, which is already done.
 
+E5-F4-S1 (notifications) is done, closing out F5.4 and E5 (Auto-Trade
+Execution) in full. A `Plan`-agent design gate resolved both open questions
+before implementation. **Delivery channel**: in-app only, not email — no
+email/SMTP infrastructure exists anywhere in this codebase, and standing one
+up would need real provider credentials this dev machine doesn't have (the
+same gap already flagged for `ALPACA_TRADING_API_KEY`/`BINANCE_TRADING_API_KEY`
+throughout E4). Confirmed directly with the user before implementation, per
+this epic's established "confirm the channel/credential-source decision"
+precedent (E4-F2-S1, E4-F3-S1); email is a flagged, explicitly-deferred
+fast-follow, not built here. **Watchlist signal-change detection**: the
+first background/scheduled job in this codebase — every prior story
+deliberately avoided one (E5-F3-S1's own design gate rejected background
+order-status polling in favor of a manual refresh button) because nothing
+needed to run without a user request until now. A new `notification`
+package: `WatchlistSignalPoller` (`@Scheduled(fixedDelayString =
+"${notification.watchlist-poll.fixed-delay-ms}")`, `fixedDelay` not
+`fixedRate` so a slow cycle never overlaps the next one) polls every
+watchlisted ticker sequentially with a 750ms inter-ticker pause — this is a
+single-user tool with an expected-small watchlist, so no adaptive
+rate-limit framework was needed. "Changed" means the `SignalCall`
+(BUY/SELL/HOLD) itself transitions, not a rule-detail change while the call
+stays the same. The "previous known call" baseline reuses the existing
+append-only `signal_calls` audit table (`SignalCallEntryRepository`'s new
+`findTopByTickerOrderByCreatedAtDescIdDesc`) rather than a new "last known
+state" table — restart-safe for free, since it's a real persisted row. A
+ticker's first-ever poll establishes the baseline silently (no notification)
+to avoid a notification burst the moment a ticker is first watchlisted or
+right after an app restart. Every per-ticker failure (market closed,
+insufficient history, rate-limited, etc. — every exception in this codebase
+is an unchecked `RuntimeException`) is caught, logged, and skipped so one
+ticker's failure never aborts the batch — a stock ticker polled outside
+market hours will routinely throw on every off-hours cycle, expected, not an
+error. `WatchlistSignalPoller` is gated by `@ConditionalOnProperty(name =
+"notification.watchlist-poll.enabled", matchIfMissing = true)`, forced
+`false` in `backend/src/test/resources/application.properties` — this
+codebase's repeated "no live network calls in CI" discipline, since an
+`@SpringBootTest` would otherwise trigger a real Alpaca/Binance call via
+this bean. New `common.SchedulingConfig` (`@EnableScheduling`) is the app's
+first scheduling config, alongside the existing `common.ClockConfig`.
+
+New `notification.Notification` (JPA entity, append-only, same audit-log
+pattern as `IndicatorSnapshot`/`SignalCallEntry` — `readAt` is the one
+intentionally-mutable field, for unread/read UI state) is associated with
+*either* an `Order` (an order-outcome notification) *or* a `SignalCallEntry`
+(a watchlist signal-change notification), never both — DB-enforced via
+`ck_notifications_association` in `V9__add_notifications.sql`, the same
+defense-in-depth CHECK-constraint style as `V1`'s stock/leverage check and
+`V5`'s hold-term all-or-nothing check. `NotificationType` mirrors every
+status `OrderService.applyOutcome` can persist (`ORDER_FILLED`,
+`ORDER_PARTIALLY_FILLED`, `ORDER_REJECTED`, `ORDER_FAILED`,
+`ORDER_CANCELLED`, `ORDER_PARTIALLY_PROTECTED`, `ORDER_SUBMISSION_UNKNOWN`)
+plus `SIGNAL_CHANGED` — not just the AC's literally-named "fills or is
+rejected," since `PARTIALLY_PROTECTED`/`SUBMISSION_UNKNOWN` are exactly the
+states E4/E5's own design gates flagged as needing manual attention.
+`NotificationService.recordOrderOutcome`/`recordSignalChange` both swallow
+and log their own failures — a notification-recording bug must never fail
+an order response or abort the poller's batch. The order-outcome hook is a
+single choke point: `OrderService.applyOutcome` now captures the order's
+`previousStatus` before overwriting it, and only calls
+`notificationService.recordOrderOutcome` on a genuine transition — this is
+what stops a manual `refreshOrder` re-poll of an already-terminal order
+(e.g. re-fetching an already-`FILLED` order) from re-notifying every time.
+New `GET /api/notifications`/`GET /api/notifications/unread-count`/
+`POST /api/notifications/{id}/read`/`POST /api/notifications/read-all`
+(`NotificationController`) — marking read is idempotent-by-convention (a
+no-op on an unknown/already-read id, matching `WatchlistService.remove`'s
+DELETE-style precedent), so no dedicated not-found error code was needed;
+a new `InvalidNotificationRequestException`/`NotificationExceptionHandler`
+pair handles only the `limit`-bounds case, mirroring every other domain's
+own small per-domain exception-handler precedent.
+
+Frontend: new `frontend/src/notification/` package (`api.ts`,
+`NotificationPanel.tsx` — a list with an unread-count badge, a manual
+"Refresh" button, and per-item/mark-all "Mark read" actions; **no
+`setInterval`/automatic polling**, same "manual refresh only" bias as
+`OrderHistory`'s E5-F3-S1 precedent, since the watchlist-signal half is
+produced by a backend scheduled job on its own interval, not by any
+frontend action). Rendered at the top of `DashboardPage`, above the
+watchlist. New `.notification-panel__*` CSS rules follow the existing
+`light-dark()` pattern.
+
+A real bug was found and fixed during live verification (not caught by any
+unit test, since Mockito-based tests use plain POJOs with no real Hibernate
+proxies, and the one `@SpringBootTest` watchlist test runs its whole method
+inside one transaction so a lazy load never crosses a transaction boundary
+the way it does in production): `WatchlistSignalPoller` iterating
+`WatchlistEntry.getTicker()` after `WatchlistService.list()`'s
+`@Transactional(readOnly = true)` method had already returned threw
+`org.hibernate.LazyInitializationException: could not initialize proxy - no
+session`, since `WatchlistEntry.ticker` is a lazy `@ManyToOne` and the
+Hibernate session was already closed by the time the poller (running with
+no open transaction, by design — it must not hold a DB connection across its
+market-data/signal HTTP calls, the same discipline `OrderService` already
+follows around its broker calls) touched it. Fixed with a new real-join
+query, `WatchlistEntryRepository.findAllWatchlistedTickersOrderByCreatedAtDesc`
+(`select w.ticker from WatchlistEntry w order by w.createdAt desc`), which
+returns fully-loaded `Ticker` entities rather than the lazy association, and
+a new `WatchlistService.listTickers()` wrapping it; `WatchlistSignalPoller`
+now calls that instead of `list()`. A new `WatchlistServiceTest` case
+(`listTickers_ordersByMostRecentlyAddedFirst`) covers the query's ordering,
+though — as this bug's own root cause implies — no test in this codebase's
+current H2/`@Transactional`-test-method style can actually reproduce the
+lazy-loading failure itself; the live `run`-skill verification is what
+caught it.
+
+Tested via `NotificationServiceTest` (12 tests: every `OrderStatus`→
+`NotificationType` mapping, rejection-reason message formatting, the
+repository-throws-swallows-exception case, signal-change message
+formatting, list/count/mark-read/mark-all-read), `WatchlistSignalPollerTest`
+(4 tests: first-ever-poll-establishes-baseline-silently, call-unchanged-
+doesn't-notify, call-changed-notifies-with-both-calls, and one-ticker-
+failing-doesn't-block-the-others — this last one also caught a real test
+bug of its own: giving two distinct `Ticker` fixtures the same hardcoded id
+made them `equals()`-collide under Mockito's argument matching, since
+`Ticker.equals` is id-based; fixed with a per-call incrementing id),
+`NotificationControllerTest` (6 tests: status codes and error bodies), and
+3 new `OrderServiceTest` cases (a filled order notifies with the correct
+previous status, a `SUBMISSION_UNKNOWN`→`FILLED` refresh notifies, and a
+same-status refresh does *not* re-notify) — 27 new tests, 334 backend tests
+total, `./mvnw verify` green. No new frontend Vitest cases — same gap
+already accepted for `Watchlist.tsx`/`OrderHistory.tsx` (view-only DOM
+components with no pure logic to unit test); `npm run build`/`lint`/`test`
+all pass clean (13 tests, unchanged, same pre-existing unrelated
+`AuthContext.tsx` lint warning as every prior story). `simplify` skill run
+clean: the `OrderStatus`→`NotificationType` map stayed a plain documented
+mapping (no generic event-dispatch framework), the poller stayed scoped to
+exactly the polling/comparison logic it needs (no reusable "scheduled job"
+abstraction, since there's only one job), and the double
+`findTopByTickerOrderByCreatedAtDescIdDesc` query per ticker per poll cycle
+(once for the "previous" baseline, once to re-fetch the "current" entry
+`SignalService.computeSignalWithProvenance` doesn't return directly) was
+deliberately left as-is rather than widening `SignalComputation`'s return
+shape — that record is already constructed directly across a dozen-plus
+`OrderServiceTest`/`TickerSignalOrderE2ETest` call sites, so a shape change
+for a single low-frequency caller's minor query-count savings would be a
+disproportionate blast radius.
+
+Verified live via the `run` skill against the real running stack — Docker
+Desktop wasn't running at the start of this session and had to be launched
+first, then Oracle XE brought up fresh and polled healthy before the
+backend would connect. `V9` applied cleanly against real Oracle (schema
+version 8 → 9). After hitting and fixing the `LazyInitializationException`
+above and restarting the backend clean, exercised the API via `curl` first:
+watchlisted `SOLUSDT` (a live `SELL`) and `BTCUSDT`; `GET /api/notifications`
+and `GET /api/notifications/unread-count` both correctly returned empty/zero
+on a fresh container; `limit=0` correctly 400'd `INVALID_REQUEST`; a full
+`POST /api/tickers/SOLUSDT/orders` attempt correctly 503'd
+`BROKER_CREDENTIAL_NOT_CONFIGURED` — the same reachable terminus every prior
+E4/E5 story has hit on this dev machine (no real
+`BINANCE_TRADING_API_KEY`/`BINANCE_TRADING_API_SECRET` exist here) — and a
+direct `sqlplus` query confirmed **zero** rows were ever written to either
+`orders` or `notifications`, proving the pre-flight failure correctly never
+reaches the notification hook. A direct `sqlplus` query against
+`signal_calls`, cross-referenced with wall-clock timestamps, confirmed
+`WatchlistSignalPoller` fired automatically on its own ~2-minute `local`-
+profile schedule (not from any manual request) across multiple cycles,
+correctly polling both watchlisted tickers each time with zero errors on
+the scheduling thread. Then clicked through the identical flow in a real
+browser: the new "Notifications" section rendered "No notifications yet."
+with working Refresh/disabled-at-zero "Mark all read" controls; looking up
+`SOLUSDT` rendered its live `SELL` badge, stat tiles, and chart; filling the
+trade form and confirming through the E5-F2-S2 dialog correctly rendered
+"No broker credentials are configured for this asset type yet — the order
+was not submitted." with the Notifications section still correctly reading
+"No notifications yet." afterward. Browser console showed no errors at any
+point.
+
+A real live-observed order-fill/reject notification and a real
+live-observed watchlist signal-change notification were **not** obtained in
+this session — the former needs real broker credentials this dev machine
+doesn't have (same gap as every E4-F2/F3/E5-F2/F3 story before it); the
+latter would need an actual market call to flip during the session, not
+practically reproducible on demand. An attempt to seed a realistic "previous
+call" row directly via SQL (to let a real scheduled poll cycle detect a
+transition and prove the path end-to-end) was correctly blocked by the
+auto-mode permission classifier as a direct, invasive database mutation
+outside the app's own write paths — not worked around. Both paths are
+covered instead by `NotificationServiceTest`/`WatchlistSignalPollerTest`'s
+mocked-adapter cases above; flagged, not silently assumed, same disclosure
+style as this file's other structural-rather-than-live-observed gaps (e.g.
+E3-F1-S2's un-observed BUY badge, E3-F2-S1's un-observed `autoSize` resize).
+
+This closes out F5.4 (notifications) and E5 (Auto-Trade Execution) in full.
+E6 (Risk & Safety Controls) is next — E6-F1-S1 (global paper/live mode
+switch) is the first story, since every subsequent E6 story (the paper-trade
+threshold gate, the live-mode consent step, the guardrails) builds on top of
+that switch existing first.
+
 The original agile delivery plan for the project (drafted before any of E1-E3 above
 was implemented) lives at `docs/agile-plan.md` — an auto-trade signal dashboard
 (React frontend, Java/Spring Boot backend, Oracle Database via local Oracle XE,
