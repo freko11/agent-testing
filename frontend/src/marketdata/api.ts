@@ -35,6 +35,7 @@ export type MarketDataErrorCode =
   | 'BROKER_CREDENTIAL_NOT_CONFIGURED'
   | 'ORDER_NOT_FOUND'
   | 'ORDER_REFRESH_UNAVAILABLE'
+  | 'LIVE_MODE_NOT_YET_AVAILABLE'
 
 export class MarketDataError extends Error {
   code: MarketDataErrorCode | 'UNKNOWN'

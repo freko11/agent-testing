@@ -379,3 +379,47 @@ body {
   font-size: 0.8rem;
   color: light-dark(#666666, #999999);
 }
+
+.trading-mode-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0 1rem;
+  padding: 0.6rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid;
+}
+
+.trading-mode-banner__mode {
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.trading-mode-banner__since {
+  font-size: 0.85rem;
+  opacity: 0.8;
+  margin-right: auto;
+}
+
+.trading-mode-banner__error {
+  margin: 0;
+  flex-basis: 100%;
+  font-size: 0.85rem;
+  color: light-dark(#c2410c, #fb923c);
+}
+
+/* PAPER is calm/informational; LIVE is a deliberate, singular exception to this
+   app's avoid-raw-red convention — it isn't part of a red/green comparison pair
+   the way BUY/SELL is, and the word "LIVE" is always shown alongside the color. */
+.trading-mode-banner--paper {
+  background: light-dark(#eaf2fb, #101f2e);
+  border-color: light-dark(#2563eb, #60a5fa);
+  color: light-dark(#1d4ed8, #93c5fd);
+}
+
+.trading-mode-banner--live {
+  background: light-dark(#fdecec, #3a1414);
+  border-color: light-dark(#b91c1c, #f87171);
+  color: light-dark(#b91c1c, #fca5a5);
+}

@@ -20,6 +20,7 @@ import com.autotrade.dashboard.signal.SignalResponse;
 import com.autotrade.dashboard.signal.SignalService;
 import com.autotrade.dashboard.ticker.AssetType;
 import com.autotrade.dashboard.ticker.Ticker;
+import com.autotrade.dashboard.tradingmode.TradingModeService;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
@@ -40,10 +41,12 @@ import java.util.stream.Collectors;
  * (E5-F2-S1). Always recomputes the signal server-side rather than trusting
  * whatever {@link SignalResponse} the frontend has cached — a stale call or
  * price is a real risk for a leveraged bracket order. {@code TradingMode} is
- * hardcoded {@link TradingMode#PAPER} here, never taken from the request:
- * {@code LIVE} isn't seeded by either credential bootstrap yet (E4-F2-S1/
- * E4-F3-S1), so live trading is structurally unreachable through this
- * service until E6 builds its consent gate.
+ * read from the global switch (E6-F1-S1, {@link TradingModeService#current()})
+ * rather than taken from the request — a single app-wide mode, not a
+ * per-order choice. In practice this is still always {@code PAPER}: {@code
+ * TradingModeService.switchTo} unconditionally rejects {@code LIVE} until
+ * E6-F1-S2/S3's threshold and consent gates exist, and neither credential
+ * bootstrap (E4-F2-S1/E4-F3-S1) seeds a {@code LIVE} credential yet either.
  *
  * <p>{@code clientOrderId} is generated once and the {@code Order} row is
  * persisted as {@code PENDING} <em>before</em> the broker is ever called, in
@@ -81,16 +84,19 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final SignalCallEntryRepository signalCallEntryRepository;
     private final NotificationService notificationService;
+    private final TradingModeService tradingModeService;
 
     public OrderService(SignalService signalService, BrokerAdapterRouter router,
                          BrokerCredentialService brokerCredentialService, OrderRepository orderRepository,
-                         SignalCallEntryRepository signalCallEntryRepository, NotificationService notificationService) {
+                         SignalCallEntryRepository signalCallEntryRepository, NotificationService notificationService,
+                         TradingModeService tradingModeService) {
         this.signalService = signalService;
         this.router = router;
         this.brokerCredentialService = brokerCredentialService;
         this.orderRepository = orderRepository;
         this.signalCallEntryRepository = signalCallEntryRepository;
         this.notificationService = notificationService;
+        this.tradingModeService = tradingModeService;
     }
 
     public TradeOrderResponse submitOrder(String symbol, PlaceOrderRequest request) {
@@ -113,10 +119,11 @@ public class OrderService {
                     "Requested amount is too small to produce a positive quantity at the current price (" + price + ").");
         }
 
+        TradingMode mode = tradingModeService.current();
         BrokerAdapter adapter = router.forAssetType(ticker.getAssetType());
         Broker broker = adapter.broker();
-        BrokerCredential credential = brokerCredentialService.find(broker, TradingMode.PAPER)
-                .orElseThrow(() -> new BrokerCredentialNotConfiguredException(broker, TradingMode.PAPER));
+        BrokerCredential credential = brokerCredentialService.find(broker, mode)
+                .orElseThrow(() -> new BrokerCredentialNotConfiguredException(broker, mode));
 
         String clientOrderId = UUID.randomUUID().toString();
         Order order = new Order(ticker, credential, broker, ticker.getAssetType(), side, quantity,
@@ -125,7 +132,7 @@ public class OrderService {
         order.setRequestedAmountUsd(request.amountUsd());
         order.setLeverage(request.leverage());
         order.setEntryOrderType(EntryOrderType.MARKET);
-        order.setOrderMode(TradingMode.PAPER);
+        order.setOrderMode(mode);
         Long orderId = orderRepository.save(order).getId();
 
         BrokerOrderRequest brokerRequest = new BrokerOrderRequest(clientOrderId, ticker.getSymbol(), ticker.getAssetType(),
@@ -133,7 +140,7 @@ public class OrderService {
                 request.leverage());
 
         try {
-            BrokerOrderResult result = adapter.placeOrder(brokerRequest, TradingMode.PAPER);
+            BrokerOrderResult result = adapter.placeOrder(brokerRequest, mode);
             return TradeOrderResponse.from(applyResult(orderId, result));
         } catch (BrokerAdapterAmbiguousOrderException e) {
             return TradeOrderResponse.from(applyOutcome(orderId, OrderStatus.SUBMISSION_UNKNOWN, e.getMessage(), null));

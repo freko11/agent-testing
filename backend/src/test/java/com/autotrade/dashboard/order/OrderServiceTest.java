@@ -27,6 +27,7 @@ import com.autotrade.dashboard.signal.SignalRuleId;
 import com.autotrade.dashboard.signal.SignalService;
 import com.autotrade.dashboard.ticker.AssetType;
 import com.autotrade.dashboard.ticker.Ticker;
+import com.autotrade.dashboard.tradingmode.TradingModeService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -72,6 +73,8 @@ class OrderServiceTest {
     private BrokerAdapter adapter;
     @Mock
     private NotificationService notificationService;
+    @Mock
+    private TradingModeService tradingModeService;
 
     private OrderService service;
     private final AtomicReference<Order> saved = new AtomicReference<>();
@@ -79,7 +82,8 @@ class OrderServiceTest {
     @BeforeEach
     void setUp() {
         service = new OrderService(signalService, router, brokerCredentialService, orderRepository,
-                signalCallEntryRepository, notificationService);
+                signalCallEntryRepository, notificationService, tradingModeService);
+        lenient().when(tradingModeService.current()).thenReturn(TradingMode.PAPER);
         lenient().when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
             Order order = invocation.getArgument(0);
             if (order.getId() == null) {
@@ -337,6 +341,30 @@ class OrderServiceTest {
     }
 
     @Test
+    void submitOrder_usesCurrentGlobalTradingMode_notHardcodedPaper() {
+        Ticker ticker = cryptoTicker();
+        when(signalService.computeSignalWithProvenance("BTCUSDT", 200))
+                .thenReturn(buyComputation(ticker, new BigDecimal("100")));
+        when(router.forAssetType(AssetType.CRYPTO)).thenReturn(adapter);
+        when(adapter.broker()).thenReturn(Broker.BINANCE);
+        when(tradingModeService.current()).thenReturn(TradingMode.LIVE);
+        when(brokerCredentialService.find(Broker.BINANCE, TradingMode.LIVE)).thenReturn(Optional.of(credential()));
+
+        BrokerOrderResult result = new BrokerOrderResult("client-id", "broker-order-1", OrderStatus.FILLED,
+                new BigDecimal("100.5"), null, Instant.parse("2026-07-29T00:00:01Z"));
+        when(adapter.placeOrder(any(BrokerOrderRequest.class), eq(TradingMode.LIVE))).thenReturn(result);
+
+        PlaceOrderRequest request = new PlaceOrderRequest(new BigDecimal("1000"), BigDecimal.ONE,
+                new BigDecimal("110"), new BigDecimal("90"));
+
+        service.submitOrder("BTCUSDT", request);
+
+        verify(brokerCredentialService).find(Broker.BINANCE, TradingMode.LIVE);
+        verify(adapter).placeOrder(any(BrokerOrderRequest.class), eq(TradingMode.LIVE));
+        assertEquals(TradingMode.LIVE, saved.get().getOrderMode());
+    }
+
+    @Test
     void listOrders_mapsRepositoryResultsToResponses() {
         Ticker ticker = cryptoTicker();
         Order order = persistedOrder(5L, ticker, "client-1");
@@ -407,6 +435,27 @@ class OrderServiceTest {
 
         assertEquals(OrderStatus.FAILED, response.status());
         assertEquals("Broker confirmed no record of this order — safe to retry.", response.rejectionReason());
+    }
+
+    @Test
+    void refreshOrder_ignoresCurrentGlobalTradingMode_usesOrdersOwnPersistedMode() {
+        Ticker ticker = cryptoTicker();
+        Order order = persistedOrder(13L, ticker, "client-13");
+        order.setStatus(OrderStatus.SUBMISSION_UNKNOWN);
+        when(orderRepository.findById(13L)).thenReturn(Optional.of(order));
+        when(router.forAssetType(AssetType.CRYPTO)).thenReturn(adapter);
+        // The global switch has since moved on to LIVE, but this order was placed under PAPER —
+        // refreshOrder must poll the broker environment the order actually lives in, not "whatever mode is
+        // active now". This stub is deliberately never expected to be consulted (lenient, not strict) —
+        // that's the whole point of this regression guard.
+        lenient().when(tradingModeService.current()).thenReturn(TradingMode.LIVE);
+        BrokerOrderResult result = new BrokerOrderResult("client-13", "broker-13", OrderStatus.FILLED,
+                new BigDecimal("101.0"), null, Instant.parse("2026-07-29T00:00:02Z"));
+        when(adapter.getOrderStatus("BTCUSDT", "client-13", TradingMode.PAPER)).thenReturn(Optional.of(result));
+
+        service.refreshOrder(13L);
+
+        verify(adapter).getOrderStatus("BTCUSDT", "client-13", TradingMode.PAPER);
     }
 
     @Test

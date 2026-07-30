@@ -3,6 +3,7 @@ import { useAuth } from '../auth/AuthContext'
 import NotificationPanel from '../notification/NotificationPanel'
 import OrderHistory from '../order/OrderHistory'
 import TickerMetrics from '../signal/TickerMetrics'
+import TradingModeBanner from '../tradingmode/TradingModeBanner'
 import Watchlist from '../watchlist/Watchlist'
 
 function DashboardPage() {
@@ -19,6 +20,7 @@ function DashboardPage() {
           Log out
         </button>
       </header>
+      <TradingModeBanner />
       <h1>Auto-Trade Dashboard</h1>
       <NotificationPanel />
       <Watchlist

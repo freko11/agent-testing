@@ -2385,10 +2385,141 @@ style as this file's other structural-rather-than-live-observed gaps (e.g.
 E3-F1-S2's un-observed BUY badge, E3-F2-S1's un-observed `autoSize` resize).
 
 This closes out F5.4 (notifications) and E5 (Auto-Trade Execution) in full.
-E6 (Risk & Safety Controls) is next — E6-F1-S1 (global paper/live mode
-switch) is the first story, since every subsequent E6 story (the paper-trade
-threshold gate, the live-mode consent step, the guardrails) builds on top of
-that switch existing first.
+
+E6-F1-S1 (global paper/live mode switch) is done, starting E6 (Risk & Safety
+Controls). A `Plan`-agent design gate resolved every open question before
+implementation, since this is the first story to make `TradingMode.LIVE`
+reachable anywhere in the app. **Where the mode lives**: a new append-only
+`trading_mode_events` table (`V10__add_trading_mode_events.sql`) — "current"
+mode is always the latest row by id, the same "latest row = current state"
+pattern `signal_calls` already established, rather than an in-memory
+singleton (this codebase's own bias: every meaningful piece of state is a DB
+row) or a Spring profile (fixed at JVM startup, can't be user-toggled at
+runtime). **The safety question this story couldn't dodge just because
+E6-F1-S2/S3 aren't built yet**: relying on "no `LIVE` broker credentials are
+seeded anywhere yet" as the only backstop against a premature live switch
+would be safety-by-accident, not a designed control — confirmed directly with
+the user, `TradingModeService.switchTo` now unconditionally throws a new
+`LiveModeNotYetAvailableException` (403 `LIVE_MODE_NOT_YET_AVAILABLE`) for
+any attempt to switch to `LIVE`, deliberate temporary scaffolding for
+E6-F1-S2 (paper-trade threshold)/E6-F1-S3 (risk consent) to *replace*, not
+just delete. Switching to `PAPER` always succeeds; switching to the mode
+already active is an idempotent no-op (no new history row). Reads
+(`TradingModeService.current()`) are never cached — a fresh DB read every
+call, correctness over performance for money-moving code.
+
+New `com.autotrade.dashboard.tradingmode` package: `TradingModeEvent`
+(entity)/`TradingModeEventRepository`/`TradingModeService`/
+`TradingModeResponse`/`TradingModeChangeRequest`/
+`LiveModeNotYetAvailableException`/`TradingModeController`
+(`GET`/`POST /api/trading-mode`)/`TradingModeExceptionHandler` — a standalone
+top-level resource mirroring `/api/watchlist`/`/api/orders`/
+`/api/notifications`'s precedent, normal session auth only (no re-auth/
+confirmation step — that's E6-F1-S3's job, not this one's).
+`OrderService.submitOrder` now reads `TradingMode` from
+`TradingModeService.current()` instead of a hardcoded `TradingMode.PAPER`
+literal; `refreshOrder` deliberately still uses the order's own persisted
+`orderMode`, never the current global switch — an order placed under `PAPER`
+must always be re-polled against `PAPER` even if the switch has since moved
+on, or a refresh would poll the wrong broker environment for an existing
+order. In practice, behavior is unchanged from before this story: the switch
+can only ever be `PAPER` today, since `switchTo(LIVE)` always throws and
+neither credential bootstrap (E4-F2-S1/E4-F3-S1) seeds a `LIVE` credential
+yet either.
+
+Frontend: new `frontend/src/tradingmode/` package (`api.ts`,
+`TradingModeBanner.tsx`) — a persistent banner mounted at the very top of
+`DashboardPage`, above even the page title, showing the current mode, when
+it last changed (or "Default — never changed"), and a single toggle button
+labeled with the *other* mode. A 403 from attempting `LIVE` renders the
+backend's own message inline via the existing generic
+`MarketDataError`-based error handling — no client-side special-casing of
+"LIVE is blocked," so this component needs no changes once E6-F1-S2/S3
+replace the guard with a real threshold/consent check. New
+`.trading-mode-banner` CSS rules: PAPER uses a calm blue, LIVE a strong red —
+a deliberate, singular exception to this app's avoid-raw-red convention,
+since LIVE isn't part of a red/green comparison pair the way BUY/SELL is, and
+the word "LIVE" is always shown alongside the color.
+
+A real-Oracle-only bug surfaced during live verification, not caught by
+`./mvnw verify` (H2's Oracle-compatibility mode doesn't reserve this word):
+`MODE` is an Oracle SQL reserved keyword (used in `LOCK TABLE ... MODE`/
+`ALTER SESSION ... MODE` syntax) — the migration's original `mode
+VARCHAR2(10)` column failed real Oracle with `ORA-00904` ("invalid
+identifier") the moment `CREATE TABLE` ran. Fixed by renaming the column to
+`trading_mode` in both the migration and `TradingModeEvent`'s `@Column`
+mapping (the Java field itself stays named `mode`). Recovering the local Oracle container from the failed migration attempt
+needed the same `flyway_schema_history` cleanup this file's E1-F3-S1 entry
+already flagged for a failed migration, plus one further step: deleting the
+`success=0` row for version 10 from `flyway_schema_history` (Oracle persists
+this across restarts, unlike H2), and dropping the `trading_mode_events_seq`
+sequence a failed `CREATE TABLE` had already left behind — Oracle DDL
+auto-commits per statement regardless of the surrounding transaction, so the
+sequence survived even though the table creation that came after it rolled
+back.
+
+`simplify`, `security-review`, and `guardrail-check` skills all run clean:
+`TradingModeService.current()`/`currentState()` collapsed to avoid two
+separate query implementations of the same "latest row, default PAPER"
+logic; the `LiveModeNotYetAvailableException` guard is exactly the kind of
+check that looks removable but is a deliberate, documented E6 safety net
+(per `simplify.md`'s own guidance) and was kept; the guard is enforced
+server-side in `TradingModeService` itself, not just hidden by the
+frontend — proven via `TradingModeControllerTest`'s direct `POST` against
+the raw endpoint, bypassing any UI.
+
+Tested via `TradingModeServiceTest` (7 tests, H2/real repository: default
+`PAPER` on empty history, `switchTo(LIVE)` always throws with no row
+persisted from both a default and an explicitly-seeded-`PAPER` starting
+state, `switchTo(PAPER)` no-op when already `PAPER`, `switchTo(PAPER)`
+succeeding from a directly-seeded `LIVE` row — the one path `switchTo`
+itself can't produce today, seeded via the repository directly to exercise
+it ahead of E6-F1-S2/S3 making it reachable for real — and reading the
+latest of several seeded rows), `TradingModeControllerTest` (4 tests: status
+codes and error bodies), and two new `OrderServiceTest` cases (`submitOrder`
+threads a non-`PAPER` `TradingModeService.current()` value through to the
+credential lookup/adapter call/persisted `orderMode`, proving no hardcoding
+remains; `refreshOrder` ignores `TradingModeService.current()` entirely and
+uses the order's own persisted mode) — 12 new tests, 346 backend tests
+total, `./mvnw verify` green. No new frontend Vitest cases — same gap already
+accepted for `Watchlist.tsx`/`OrderHistory.tsx`/`NotificationPanel.tsx`
+(view-only DOM components with no pure logic to unit test); `npm run
+build`/`lint`/`test` all pass clean (13 tests, unchanged, same pre-existing
+unrelated `AuthContext.tsx` lint warning as every prior story).
+
+Verified live via the `run` skill against the real running stack (Docker
+Oracle XE + real public Binance API, no mocking) — stale `java`/`node`
+processes from an earlier session were again holding 8080/5173 (this file's
+own recurring gotcha), killed and both restarted clean; the Oracle-reserved-
+word bug above was caught and fixed during this restart, then the container
+cleanup steps applied before a second restart succeeded, `V10` applying
+cleanly (schema version 9 → 10). Logged in through E1-F3-S2's session-cookie
+auth (a repeat of the CSRF-cookie-rotates-after-login behavior E1-F3-S2's
+own `SpaCsrfTokenRequestHandler` already documents — a request immediately
+after login needs `GET /api/auth/me` first to re-prime the cookie, same as
+the frontend's own login flow already does) and exercised the API via `curl`
+first: `GET /api/trading-mode` returned `{mode: "PAPER", changedAt: null}` on
+a fresh container; `POST {mode: "LIVE"}` correctly 403'd
+`LIVE_MODE_NOT_YET_AVAILABLE`; `POST {mode: "PAPER"}` correctly 200'd as a
+no-op with `changedAt` still `null`. A full `SOLUSDT` SELL trade-form
+submission still correctly 503'd `BROKER_CREDENTIAL_NOT_CONFIGURED` — the
+same reachable terminus every prior E4/E5 story has hit on this dev machine
+(no real `BINANCE_TRADING_API_KEY`/`BINANCE_TRADING_API_SECRET` exist here) —
+confirming the `OrderService` refactor from hardcoded `PAPER` to
+`TradingModeService.current()` didn't change observable behavior; a direct
+`sqlplus` query confirmed zero `orders` rows and zero `trading_mode_events`
+rows after all of the above, exactly as designed. Then clicked through the
+identical flow in a real browser: the banner rendered `PAPER mode · Default
+— never changed` at the very top of the dashboard; clicking "Switch to LIVE"
+rendered the backend's own message inline
+("LIVE mode isn't available yet — it unlocks once the paper-trade threshold
+(E6-F1-S2) and risk-consent step (E6-F1-S3) are in place.") with the banner
+staying in `PAPER` state throughout. Browser console showed no errors.
+
+E6-F1-S2 (paper-trade threshold before live unlocks) is next — it can
+replace `LiveModeNotYetAvailableException`'s unconditional throw with a real
+count check, since `TradingModeService.switchTo` is now the single place
+that decision needs to change.
 
 The original agile delivery plan for the project (drafted before any of E1-E3 above
 was implemented) lives at `docs/agile-plan.md` — an auto-trade signal dashboard
