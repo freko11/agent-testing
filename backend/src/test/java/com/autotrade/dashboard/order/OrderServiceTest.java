@@ -94,7 +94,7 @@ class OrderServiceTest {
 
     /** Mirrors the conservative starter defaults in application.properties (E6-F2-S1). */
     private static final RiskLimitsProperties REAL_RISK_LIMITS =
-            new RiskLimitsProperties(new BigDecimal("5000"), new BigDecimal("5"), new BigDecimal("2000"));
+            new RiskLimitsProperties(new BigDecimal("5000"), new BigDecimal("5"), new BigDecimal("2000"), new BigDecimal("8000"));
 
     @BeforeEach
     void setUp() {
@@ -110,6 +110,7 @@ class OrderServiceTest {
             return order;
         });
         lenient().when(orderRepository.findById(1L)).thenAnswer(invocation -> Optional.ofNullable(saved.get()));
+        lenient().when(orderRepository.sumOpenNotionalUsd(any(), any())).thenReturn(BigDecimal.ZERO);
     }
 
     private Ticker cryptoTicker() {
@@ -448,6 +449,47 @@ class OrderServiceTest {
         OrderService serviceWithRealCaps = serviceWithRealRiskLimits();
 
         // notional = 2000 * 1 = 2000, exactly at the configured crypto position-size cap — boundary-inclusive.
+        PlaceOrderRequest request = new PlaceOrderRequest(new BigDecimal("2000"), BigDecimal.ONE,
+                new BigDecimal("110"), new BigDecimal("90"));
+
+        TradeOrderResponse response = serviceWithRealCaps.submitOrder("BTCUSDT", request);
+
+        assertEquals(OrderStatus.FILLED, response.status());
+    }
+
+    @Test
+    void overAggregateExposureCap_manySmallOrdersAddingUp_rejectedNoOrderRowNoAdapterCall() {
+        Ticker ticker = cryptoTicker();
+        when(signalService.computeSignalWithProvenance("BTCUSDT", 200))
+                .thenReturn(buyComputation(ticker, new BigDecimal("100")));
+        // 6500 already open in PAPER mode (well within any single per-order cap) + this 2000 order = 8500 > the
+        // 8000 aggregate cap — proves the cap catches many individually-small orders adding up, not just one big one.
+        when(orderRepository.sumOpenNotionalUsd(eq(TradingMode.PAPER), any())).thenReturn(new BigDecimal("6500"));
+        OrderService serviceWithRealCaps = serviceWithRealRiskLimits();
+
+        PlaceOrderRequest request = new PlaceOrderRequest(new BigDecimal("2000"), BigDecimal.ONE,
+                new BigDecimal("110"), new BigDecimal("90"));
+
+        assertThrows(RiskLimitExceededException.class, () -> serviceWithRealCaps.submitOrder("BTCUSDT", request));
+        verify(orderRepository, never()).save(any());
+        verifyNoInteractions(adapter);
+    }
+
+    @Test
+    void atExactAggregateExposureCap_allowed_orderSubmittedNormally() {
+        Ticker ticker = cryptoTicker();
+        when(signalService.computeSignalWithProvenance("BTCUSDT", 200))
+                .thenReturn(buyComputation(ticker, new BigDecimal("100")));
+        when(router.forAssetType(AssetType.CRYPTO)).thenReturn(adapter);
+        when(adapter.broker()).thenReturn(Broker.BINANCE);
+        when(brokerCredentialService.find(Broker.BINANCE, TradingMode.PAPER)).thenReturn(Optional.of(credential()));
+        BrokerOrderResult result = new BrokerOrderResult("client-id", "broker-order-1", OrderStatus.FILLED,
+                new BigDecimal("100.5"), null, Instant.parse("2026-07-29T00:00:01Z"));
+        when(adapter.placeOrder(any(BrokerOrderRequest.class), eq(TradingMode.PAPER))).thenReturn(result);
+        // 6000 already open + this 2000 order = exactly 8000, the configured aggregate cap — boundary-inclusive.
+        when(orderRepository.sumOpenNotionalUsd(any(), any())).thenReturn(new BigDecimal("6000"));
+        OrderService serviceWithRealCaps = serviceWithRealRiskLimits();
+
         PlaceOrderRequest request = new PlaceOrderRequest(new BigDecimal("2000"), BigDecimal.ONE,
                 new BigDecimal("110"), new BigDecimal("90"));
 

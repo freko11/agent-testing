@@ -2972,3 +2972,85 @@ cancelled and the summary message renders sensibly, confirm `TradeForm`'s submit
 button disables and a fresh order attempt is blocked, then clear it via the
 confirm dialog and confirm trading resumes.
 
+## E6-F2-S3 — portfolio-level aggregate exposure cap on top of per-order limits
+
+No separate `Plan` design gate this time — the shape was already settled by E6-F2-S1's
+own forward-looking comment ("gives E6-F2-S2/E6-F2-S3 an obvious shared home") and
+E6-F2-S1's existing `risk` package/`RiskLimitService`/`RiskLimitExceededException`/
+`RiskExceptionHandler` scaffolding, so this story is additive to that shape rather than
+a new design. A few judgment calls made directly (not put to the user, since each had
+an unambiguous existing precedent to follow) worth recording:
+
+1. **Mode-scoped, not global.** Aggregate exposure sums only orders in the *same*
+   `TradingMode` as the new order, not paper+live combined. Paper and live are separate
+   broker accounts/capital pools (paper is fake money), so combining them would
+   misrepresent real risk — matches `countByOrderModeAndStatus`'s existing per-mode
+   precedent (E6-F1-S2's paper-trade threshold) rather than `cancelAllOpenOrders`'s
+   deliberately-global kill-switch precedent, which is a different kind of control
+   (a panic button, not a risk budget).
+2. **Portfolio-wide, not per-asset-type.** One aggregate cap across stocks and crypto
+   combined, matching the story's own "portfolio-level" framing and acceptance
+   criterion ("many individually-small orders can't add up") — a per-asset-type split
+   would just be two more per-order-style caps, not a portfolio cap.
+3. **Fail-fast config validation**, extending E6-F2-S1's existing constructor check
+   (`crypto-max-leverage` vs. the adapter's technical ceiling): the aggregate cap must
+   be >= the larger of the two per-order position-size caps, or a single
+   maximally-sized order would always breach the aggregate cap on its own, even against
+   an empty portfolio — the same "a cap that can never bind is a config bug, not a
+   valid conservative setting" reasoning.
+4. **Starter default of $8,000**, picked the same way E6-F2-S1's defaults were:
+   conservative for a personal paper/testnet-scale account, above the $5,000 largest
+   per-order cap (per point 3) but not by a huge margin, env-overridable via
+   `RISK_LIMITS_MAX_AGGREGATE_EXPOSURE_USD` to raise later.
+
+Backend: `RiskLimitsProperties` gains a fourth field, `maxAggregateExposureUsd`
+(`risk-limits.max-aggregate-exposure-usd`). `RiskLimitService` gains
+`enforceAggregateExposureCap(currentOpenNotionalUsd, newOrderNotionalUsd)` — a pure
+function like `enforcePerOrderCaps`, deliberately *not* given an `OrderRepository`
+dependency itself (this service stays config-only/stateless, matching E6-F2-S1's own
+`RiskLimitService`-is-stateless-vs-`KillSwitchService`-is-stateful split); the caller
+computes `currentOpenNotionalUsd` and hands it in. `OrderRepository` gains
+`sumOpenNotionalUsd(orderMode, excludedStatuses)`, a `@Query` JPQL aggregate
+(`SELECT COALESCE(SUM(o.requestedAmountUsd * o.leverage), 0) ...`) — `COALESCE` so an
+empty portfolio returns a real zero, never `null`, so `OrderService` never needs a null
+check. Reuses the same `TERMINAL_STATUSES` list `cancelAllOpenOrders` already excludes
+(so "open" means the identical thing in both the kill switch and this cap), rather than
+inventing a second "open" definition. Wired into `OrderService.submitOrder()`
+immediately after `enforcePerOrderCaps`, still before quantity computation or `Order`
+persistence — same pre-flight, no-row, `RiskLimitExceededException`/403
+`RISK_LIMIT_EXCEEDED` treatment as E6-F2-S1, so `RiskExceptionHandler` and the
+frontend's existing generic `MarketDataError` rendering in `TradeForm` needed zero
+changes to surface it. `tradingModeService.current()` was moved a few lines earlier in
+`submitOrder()` (it was previously read just before adapter routing) since the
+aggregate-cap query now also needs the current mode — no behavior change, just reusing
+one read instead of two.
+
+Frontend: no changes. The 403 `RISK_LIMIT_EXCEEDED` error code and its message are
+already rendered generically by `TradeForm`'s existing `MarketDataError` handling from
+E6-F2-S1 — a new failure reason on an already-wired error path, not a new path.
+
+Tests: `RiskLimitServiceTest` gains 4 cases (exact-boundary-inclusive aggregate cap,
+over-cap even with a small in-isolation-compliant new order, empty-portfolio allowed,
+plus the new fail-fast constructor check for an aggregate cap configured below the
+largest per-order cap) — 11 total, up from 7. `OrderServiceTest` gains 2 cases using
+`serviceWithRealRiskLimits()` (E6-F2-S1's real-not-mocked-`RiskLimitService` pattern),
+stubbing `orderRepository.sumOpenNotionalUsd` to simulate pre-existing open exposure:
+one proving many-small-orders-adding-up rejection (6500 existing + a 2000 new order,
+each individually within every per-order cap) with zero `orderRepository.save()` calls
+and zero adapter interactions, one proving the exact-boundary-inclusive allowed case
+(6000 existing + 2000 new = exactly the 8000 cap). The `@BeforeEach` setup also gained
+a lenient default (`sumOpenNotionalUsd` → `BigDecimal.ZERO`) so every pre-existing test
+in the file — none of which know about this new repository call — keeps working
+unchanged. 30 `OrderServiceTest` cases total (up from 28), 388 backend tests overall,
+full `./mvnw test` green, no regressions.
+
+Not verified live in a running browser: Docker wasn't running in this session, so (same
+as E6-F2-S1/E6-F2-S2) no actual HTTP round-trip through a live server. Verification
+rests on the unit-test suite, including the two tests above that exercise a real
+`RiskLimitService` end to end. Worth a follow-up manual check once Docker's available:
+place several small paper crypto orders in a row until aggregate exposure approaches
+the $8,000 default, confirm the next order gets rejected with a sensible message even
+though its own amount/leverage are well within the per-order caps, and confirm a
+similarly-sized order still succeeds if submitted against the *other* trading mode
+(proving the mode-scoping actually holds against a live backend, not just mocks).
+

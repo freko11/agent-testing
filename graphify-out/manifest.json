@@ -445,8 +445,8 @@
     "semantic_hash": "c052318c774ff7add251b3538e0e8e66"
   },
   "backend/src/main/java/com/autotrade/dashboard/order/OrderRepository.java": {
-    "mtime": 1785681570.8947375,
-    "ast_hash": "9757b0d048d1de3422cb4f0f86441d75",
+    "mtime": 1785682751.558638,
+    "ast_hash": "ffcbd6b6b918df627b50c1458b436843",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/order/OrderResponse.java": {
@@ -455,8 +455,8 @@
     "semantic_hash": "d5089fc5ba35f2f3943e6a78c9a6a29d"
   },
   "backend/src/main/java/com/autotrade/dashboard/order/OrderService.java": {
-    "mtime": 1785681605.3892152,
-    "ast_hash": "f650296be4bbf1f4db8fe57521603d31",
+    "mtime": 1785682771.4153514,
+    "ast_hash": "42fda68cba4a144aa688b0aa30ad3ae0",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/order/OrderSide.java": {
@@ -980,8 +980,8 @@
     "semantic_hash": "0ca56e271d538a931eaaa253c778d481"
   },
   "backend/src/test/java/com/autotrade/dashboard/order/OrderServiceTest.java": {
-    "mtime": 1785681669.1449814,
-    "ast_hash": "e6f14b9fc38ffd2538f105b15bd29139",
+    "mtime": 1785682830.1398277,
+    "ast_hash": "4c4337bc0bf6afdb89b98776957ad06b",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/security/SecurityConfigTest.java": {
@@ -1280,8 +1280,8 @@
     "semantic_hash": "ba2aaaac807614916be42c0c7583990e"
   },
   "CLAUDE.md": {
-    "mtime": 1785682219.7535384,
-    "ast_hash": "692f08ea15b74a9b577ebe90128ba1a7",
+    "mtime": 1785682991.0111303,
+    "ast_hash": "f7044adc1790d65434314b32b953cda4",
     "semantic_hash": ""
   },
   "docker-compose.yml": {
@@ -1330,8 +1330,8 @@
     "semantic_hash": ""
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1785682268.3478763,
-    "ast_hash": "d568811b4e57aa3d6f8eaf6dba2beb6a",
+    "mtime": 1785683053.0309064,
+    "ast_hash": "7eacdce2916f6112f5928e452cc7682f",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/risk/RiskExceptionHandler.java": {
@@ -1350,13 +1350,13 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/risk/RiskLimitService.java": {
-    "mtime": 1785678785.7360182,
-    "ast_hash": "9ff8661472046bb84c6a0bc5c6814444",
+    "mtime": 1785682741.6274128,
+    "ast_hash": "e3ce109705cbff7e6de609580ff4df55",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/risk/RiskLimitsProperties.java": {
-    "mtime": 1785678761.518937,
-    "ast_hash": "909f59bf1fc78ce7b52108431bf8f2f7",
+    "mtime": 1785682721.6342916,
+    "ast_hash": "59a92210b6ab571ce839fb210bb9a110",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/tradingmode/RiskConsentEvent.java": {
@@ -1380,8 +1380,8 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/risk/RiskLimitServiceTest.java": {
-    "mtime": 1785678850.737537,
-    "ast_hash": "65d85c64ca3a395cc9709fea1a35c8c9",
+    "mtime": 1785682799.2928526,
+    "ast_hash": "6643e3f83e73cfe2ea18a3a0b3020e34",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/risk/EngageKillSwitchResponse.java": {

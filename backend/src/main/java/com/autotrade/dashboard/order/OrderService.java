@@ -63,8 +63,8 @@ import java.util.stream.Collectors;
  * written onto that row as a normal value; only pre-flight failures (bad
  * ticker/request, no actionable signal, no credential configured, an engaged
  * {@link KillSwitchService kill switch} (E6-F2-S2), or a breached {@link
- * RiskLimitService risk cap}, E6-F2-S1) skip creating an {@code Order} row at
- * all.
+ * RiskLimitService risk cap} — per-order (E6-F2-S1) or portfolio-level
+ * aggregate exposure (E6-F2-S3)) skip creating an {@code Order} row at all.
  *
  * <p>Also serves order status/history (E5-F3-S1): {@link #listOrders} reads
  * straight from the DB (every order already reflects its final synchronous
@@ -132,13 +132,17 @@ public class OrderService {
         validate(request, ticker.getAssetType(), side, price);
         riskLimitService.enforcePerOrderCaps(ticker.getAssetType(), request.amountUsd(), request.leverage());
 
+        TradingMode mode = tradingModeService.current();
+        BigDecimal openNotionalUsd = orderRepository.sumOpenNotionalUsd(mode, TERMINAL_STATUSES);
+        BigDecimal newOrderNotionalUsd = request.amountUsd().multiply(request.leverage());
+        riskLimitService.enforceAggregateExposureCap(openNotionalUsd, newOrderNotionalUsd);
+
         BigDecimal quantity = request.amountUsd().divide(price, 8, RoundingMode.DOWN);
         if (quantity.signum() <= 0) {
             throw new InvalidTradeRequestException(
                     "Requested amount is too small to produce a positive quantity at the current price (" + price + ").");
         }
 
-        TradingMode mode = tradingModeService.current();
         BrokerAdapter adapter = router.forAssetType(ticker.getAssetType());
         Broker broker = adapter.broker();
         BrokerCredential credential = brokerCredentialService.find(broker, mode)

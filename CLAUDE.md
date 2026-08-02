@@ -16,8 +16,8 @@ Testnet) with risk/safety guardrails (E6).
 
 ## Status
 
-All stories below are done unless noted. Current next-up story: **E6-F2-S3**
-(portfolio-level aggregate exposure cap on top of per-order limits).
+All stories below are done unless noted. Current next-up story: **E6-F3-S1**
+(append-only audit log of every order and the signal that triggered it).
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -107,6 +107,27 @@ All stories below are done unless noted. Current next-up story: **E6-F2-S3**
   `KillSwitchControl` (one-click engage, confirm-dialog-gated clear) above
   `TradingModeBanner` on the dashboard, plus a proactive disable in
   `TradeForm`.
+- E6-F2-S3: Portfolio-level aggregate exposure cap on top of the per-order
+  caps, via a new `risk-limits.max-aggregate-exposure-usd` config key
+  (default 8000) and `RiskLimitService.enforceAggregateExposureCap`. Catches
+  many individually-small orders adding up to outsized risk, which
+  E6-F2-S1's per-order caps can't. "Open exposure" is the sum of
+  `requestedAmountUsd * leverage` across this app's own non-terminal `Order`
+  rows — a new `OrderRepository.sumOpenNotionalUsd` JPQL aggregate query,
+  `COALESCE`d to zero so an empty portfolio never needs a null check — scoped
+  to the *same trading mode* as the new order (paper and live are separate
+  broker accounts/capital pools, matching `countByOrderModeAndStatus`'s
+  existing per-mode precedent), not scoped by asset type (a true portfolio
+  total, stocks and crypto combined). Called from `OrderService.submitOrder`
+  right after the per-order cap check, still before any `Order` row exists —
+  same pre-flight, no-row, `RiskLimitExceededException`/403
+  `RISK_LIMIT_EXCEEDED` treatment as E6-F2-S1, so the frontend needed no
+  changes to surface it. `RiskLimitService`'s constructor fails fast if
+  `max-aggregate-exposure-usd` is ever configured below the larger of the two
+  per-order position-size caps — otherwise a single maximally-sized order
+  would always breach the aggregate cap on its own, even with zero other
+  open exposure, the same "a cap that can never bind is a config bug"
+  reasoning as E6-F2-S1's leverage-ceiling check.
 
 ## Build / lint / test
 

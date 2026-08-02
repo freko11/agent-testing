@@ -5,7 +5,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.math.BigDecimal;
 
 /**
- * Configured hard caps enforced by {@link RiskLimitService} (E6-F2-S1) —
+ * Configured hard caps enforced by {@link RiskLimitService} (E6-F2-S1's
+ * per-order caps, E6-F2-S3's portfolio-level aggregate exposure cap) —
  * config-only, matching {@code trading-mode.paper-trade-threshold}'s
  * precedent for a personal, single-operator tool's safety knobs: set
  * deliberately, changed rarely, via env var + restart rather than a DB-backed
@@ -16,5 +17,6 @@ import java.math.BigDecimal;
 public record RiskLimitsProperties(
         BigDecimal stockMaxPositionSizeUsd,
         BigDecimal cryptoMaxLeverage,
-        BigDecimal cryptoMaxPositionSizeUsd) {
+        BigDecimal cryptoMaxPositionSizeUsd,
+        BigDecimal maxAggregateExposureUsd) {
 }

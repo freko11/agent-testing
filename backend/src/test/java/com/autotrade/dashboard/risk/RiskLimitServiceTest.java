@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class RiskLimitServiceTest {
 
     private static final RiskLimitsProperties LIMITS =
-            new RiskLimitsProperties(new BigDecimal("5000"), new BigDecimal("5"), new BigDecimal("2000"));
+            new RiskLimitsProperties(new BigDecimal("5000"), new BigDecimal("5"), new BigDecimal("2000"), new BigDecimal("8000"));
 
     private final RiskLimitService service = new RiskLimitService(LIMITS);
 
@@ -56,7 +56,34 @@ class RiskLimitServiceTest {
     @Test
     void cryptoMaxLeverageConfiguredAboveAdapterCeiling_failsFastAtConstruction() {
         RiskLimitsProperties invalid = new RiskLimitsProperties(new BigDecimal("5000"),
-                BigDecimal.valueOf(OrderService.MAX_CRYPTO_LEVERAGE + 1), new BigDecimal("2000"));
+                BigDecimal.valueOf(OrderService.MAX_CRYPTO_LEVERAGE + 1), new BigDecimal("2000"), new BigDecimal("8000"));
         assertThrows(IllegalStateException.class, () -> new RiskLimitService(invalid));
+    }
+
+    @Test
+    void maxAggregateExposureConfiguredBelowLargestPerOrderCap_failsFastAtConstruction() {
+        // Largest per-order cap here is the 5000 stock cap; an aggregate cap of 4999 would mean a single
+        // maximally-sized stock order always breaches the aggregate cap on its own, even with zero other exposure.
+        RiskLimitsProperties invalid = new RiskLimitsProperties(new BigDecimal("5000"), new BigDecimal("5"),
+                new BigDecimal("2000"), new BigDecimal("4999"));
+        assertThrows(IllegalStateException.class, () -> new RiskLimitService(invalid));
+    }
+
+    @Test
+    void aggregateExposure_atExactCap_allowed() {
+        assertDoesNotThrow(() -> service.enforceAggregateExposureCap(new BigDecimal("6000"), new BigDecimal("2000")));
+    }
+
+    @Test
+    void aggregateExposure_overCap_throwsRiskLimitExceeded_evenWhenNewOrderWithinPerOrderCaps() {
+        // The new order alone (1500) is well within any per-order cap, but existing open exposure (7000) pushes the
+        // total to 8500 > the 8000 aggregate cap.
+        assertThrows(RiskLimitExceededException.class,
+                () -> service.enforceAggregateExposureCap(new BigDecimal("7000"), new BigDecimal("1500")));
+    }
+
+    @Test
+    void aggregateExposure_noOpenOrders_newOrderWithinCap_allowed() {
+        assertDoesNotThrow(() -> service.enforceAggregateExposureCap(BigDecimal.ZERO, new BigDecimal("2000")));
     }
 }
