@@ -57,6 +57,9 @@ public class OrderAuditEntry {
     @JoinColumn(name = "signal_call_id", nullable = false)
     private SignalCallEntry signalCallEntry;
 
+    @Column(name = "rule_table_version", nullable = false, length = 20)
+    private String ruleTableVersion;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "result_status", nullable = false, length = 20)
     private OrderStatus resultStatus;
@@ -78,11 +81,13 @@ public class OrderAuditEntry {
         // JPA
     }
 
-    public OrderAuditEntry(Order order, SignalCallEntry signalCallEntry, OrderStatus resultStatus,
-                            String rejectionReason, String brokerOrderId, BigDecimal entryPrice) {
+    public OrderAuditEntry(Order order, SignalCallEntry signalCallEntry, String ruleTableVersion,
+                            OrderStatus resultStatus, String rejectionReason, String brokerOrderId,
+                            BigDecimal entryPrice) {
         this.order = order;
         this.ticker = order.getTicker();
         this.signalCallEntry = signalCallEntry;
+        this.ruleTableVersion = ruleTableVersion;
         this.resultStatus = resultStatus;
         this.rejectionReason = rejectionReason;
         this.brokerOrderId = brokerOrderId;
@@ -110,6 +115,10 @@ public class OrderAuditEntry {
 
     public SignalCallEntry getSignalCallEntry() {
         return signalCallEntry;
+    }
+
+    public String getRuleTableVersion() {
+        return ruleTableVersion;
     }
 
     public OrderStatus getResultStatus() {

@@ -3133,3 +3133,57 @@ Docker's available: place a paper order through the real UI, confirm exactly one
 FKs, then `refreshOrder` or cancel it and confirm the audit row is unchanged while the
 `orders` row itself updates — the concrete behavior this story's scope cut predicts.
 
+## E6-F3-S2 — record the rule-table version alongside the signal snapshot in the audit log
+
+Design gate (`Plan` agent) confirmed there was no real decision left to make on shape —
+E6-F3-S1's own changelog entry (above) had already forecast this exact story: "a
+dedicated audit-trail viewer is better built once E6-F3-S2 lands the rule-table-version
+column right next to it [the `signal_call_id` FK], rather than twice." The only question
+was where the value comes from at write time. Two candidates: re-read
+`SignalRuleEngine.RULE_TABLE_VERSION` (the engine's current static constant) or reuse
+`signalCallEntry.getRuleTableVersion()` (already persisted on the `SignalCallEntry` row
+looked up for this specific submission, since E2-F3-S1 — ahead of need, per that story's
+own changelog note). Went with the latter: the story's entire purpose is that a *later*
+rule-table version bump must not retroactively change what a *past* audit row says
+produced it, so the audit write must copy the version actually recorded for that
+signal, not re-derive "whatever the constant says right now." The two happen to agree
+today (nothing changes `RULE_TABLE_VERSION` mid-request), but only the `SignalCallEntry`
+read is correct by construction rather than by coincidence, and doesn't depend on the
+signal lookup and the audit write staying in the same request/deploy forever.
+
+Backend: `V14__add_rule_table_version_to_order_audit_entries.sql` — plain
+`ALTER TABLE order_audit_entries ADD rule_table_version VARCHAR2(20) NOT NULL`, no
+default. Safe because `order_audit_entries` has zero rows in every real environment
+(E6-F3-S1 was never live-verified — Docker wasn't up in that session either, see above),
+so there's no backfill problem a default would be papering over; mirrors
+`signal_calls.rule_table_version`'s own definition exactly (same type/length, no
+default, no `CHECK` — free-form version string, not an enum). `OrderAuditEntry` gains a
+`ruleTableVersion` field/getter, placed directly after `signalCallEntry` in both the
+entity and its constructor to stay visually adjacent to the FK it's copied from.
+`OrderService.recordAuditEntry`'s one `new OrderAuditEntry(...)` call site now passes
+`signalCallEntry.getRuleTableVersion()` as the new argument — no other call sites exist,
+and no other file constructs `OrderAuditEntry` directly.
+
+Tests: `OrderServiceTest.filledOrder_recordsAuditEntryLinkedToOrderAndSignalCall` stubs
+the mocked `SignalCallEntry.getRuleTableVersion()` to return
+`SignalRuleEngine.RULE_TABLE_VERSION` and asserts the captured `OrderAuditEntry` carries
+it through unchanged. No other test needed updating —
+`rejectedOrder_persistsAsRejectedWithReason` and the `verifyNoInteractions`-based
+pre-flight-reject/scope-boundary tests don't assert on this field, and no standalone
+`OrderAuditEntryTest` exists (the entity is exercised only through `OrderServiceTest`,
+same as `SignalCallEntry`). Full `./mvnw verify` green (389 tests, 0 failures/errors),
+including Hibernate schema validation of the new column against H2's Oracle-compatibility
+mode. No config, no new endpoint, no frontend change — CLAUDE.md's E6-F3-S1 note said a
+dedicated audit-trail viewer is left for a future story once this column landed; it has
+now landed, but the viewer itself is still that future story, not this one.
+
+Not verified live: Docker wasn't running in this session, so no real Oracle round-trip
+for the new `ALTER TABLE`. Verification rests on `./mvnw verify`'s H2-backed Flyway
+validation, same posture as E6-F3-S1. Worth checking alongside that story's own
+follow-up once Docker's available: confirm a placed paper order's audit row carries
+`rule_table_version = "v1"` (or whatever `SignalRuleEngine.RULE_TABLE_VERSION` is by
+then) directly, with no join needed.
+
+With this story done, E6 (Risk & Safety Controls) is complete; E7 (Observability &
+Hardening) is next up.
+

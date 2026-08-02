@@ -16,8 +16,8 @@ Testnet) with risk/safety guardrails (E6).
 
 ## Status
 
-All stories below are done unless noted. Current next-up story: **E6-F3-S2**
-(record the rule-table version alongside the signal snapshot in the audit log).
+All stories below are done. E6 (Risk & Safety Controls) is now complete; next up
+is E7 (Observability & Hardening).
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -146,8 +146,19 @@ All stories below are done unless noted. Current next-up story: **E6-F3-S2**
   tracking the order's live/current status — `Order`/`OrderResponse`/CSV
   export remain the source of truth for that. No new config, no new
   read endpoint (existing `listOrders`/CSV export already serve as review
-  surfaces); a dedicated audit-trail viewer is left for a future story once
-  E6-F3-S2 adds the rule-table-version column alongside it.
+  surfaces); a dedicated audit-trail viewer is left for a future story now
+  that E6-F3-S2 has landed the rule-table-version column alongside it.
+- E6-F3-S2: The audit log now records the rule-table version alongside the
+  signal snapshot — a new `rule_table_version` column on
+  `order_audit_entries` (`V14__add_rule_table_version_to_order_audit_entries.sql`),
+  set on `OrderAuditEntry` construction in `OrderService.recordAuditEntry`
+  from `signalCallEntry.getRuleTableVersion()` (the value already frozen on
+  the specific `SignalCallEntry` row for that submission), not re-read from
+  `SignalRuleEngine.RULE_TABLE_VERSION` — so a later rule-table version bump
+  can never retroactively change what a past audit row says produced it.
+  Denormalized rather than left as a join through the existing
+  `signal_call_id` FK, so the audit row is self-contained for a future
+  audit-trail viewer. No config, no new endpoint, no frontend change.
 
 ## Build / lint / test
 
@@ -199,7 +210,7 @@ All stories below are done unless noted. Current next-up story: **E6-F3-S2**
   `KillSwitchController` (E6-F2-S2's global kill switch, append-only
   `kill_switch_events`).
 - `watchlist`, `security` (session auth), `common` (`Clock`/`SchedulingConfig`).
-- Schema: Flyway `V1`–`V13` under `backend/src/main/resources/db/migration/` is the
+- Schema: Flyway `V1`–`V14` under `backend/src/main/resources/db/migration/` is the
   single source of truth; `spring.jpa.hibernate.ddl-auto=validate` everywhere.
 
 **Frontend** (`frontend/src/`) mirrors the backend split: `marketdata`, `signal`,

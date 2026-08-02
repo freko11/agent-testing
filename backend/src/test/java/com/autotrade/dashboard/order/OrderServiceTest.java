@@ -29,6 +29,7 @@ import com.autotrade.dashboard.signal.SignalCall;
 import com.autotrade.dashboard.signal.SignalCallEntry;
 import com.autotrade.dashboard.signal.SignalCallEntryRepository;
 import com.autotrade.dashboard.signal.SignalResponse;
+import com.autotrade.dashboard.signal.SignalRuleEngine;
 import com.autotrade.dashboard.signal.SignalRuleId;
 import com.autotrade.dashboard.signal.SignalService;
 import com.autotrade.dashboard.ticker.AssetType;
@@ -267,6 +268,7 @@ class OrderServiceTest {
         when(adapter.broker()).thenReturn(Broker.BINANCE);
         when(brokerCredentialService.find(Broker.BINANCE, TradingMode.PAPER)).thenReturn(Optional.of(credential()));
         SignalCallEntry signalCallEntry = mock(SignalCallEntry.class);
+        when(signalCallEntry.getRuleTableVersion()).thenReturn(SignalRuleEngine.RULE_TABLE_VERSION);
         when(signalCallEntryRepository.findTopByIndicatorSnapshot_IdOrderByIdDesc(any()))
                 .thenReturn(Optional.of(signalCallEntry));
 
@@ -284,6 +286,7 @@ class OrderServiceTest {
         OrderAuditEntry entry = auditCaptor.getValue();
         assertEquals(saved.get(), entry.getOrder());
         assertEquals(signalCallEntry, entry.getSignalCallEntry());
+        assertEquals(SignalRuleEngine.RULE_TABLE_VERSION, entry.getRuleTableVersion());
         assertEquals(OrderStatus.FILLED, entry.getResultStatus());
         assertEquals("broker-order-1", entry.getBrokerOrderId());
         assertEquals(new BigDecimal("100.5"), entry.getEntryPrice());

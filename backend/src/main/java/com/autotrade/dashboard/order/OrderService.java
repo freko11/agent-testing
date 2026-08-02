@@ -325,7 +325,8 @@ public class OrderService {
      * order-placement time; {@code Order}/{@code OrderResponse}/CSV export remain the source of truth for an
      * order's current/live status. */
     private Order recordAuditEntry(Order order, SignalCallEntry signalCallEntry) {
-        orderAuditEntryRepository.save(new OrderAuditEntry(order, signalCallEntry, order.getStatus(),
+        orderAuditEntryRepository.save(new OrderAuditEntry(order, signalCallEntry,
+                signalCallEntry.getRuleTableVersion(), order.getStatus(),
                 order.getRejectionReason(), order.getBrokerOrderId(), order.getEntryPrice()));
         return order;
     }
