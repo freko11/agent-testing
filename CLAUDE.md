@@ -16,8 +16,8 @@ Testnet) with risk/safety guardrails (E6).
 
 ## Status
 
-All stories below are done unless noted. Current next-up story: **E6-F2-S2** (kill
-switch that cancels all open orders and blocks new submissions).
+All stories below are done unless noted. Current next-up story: **E6-F2-S3**
+(portfolio-level aggregate exposure cap on top of per-order limits).
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -90,6 +90,23 @@ switch that cancels all open orders and blocks new submissions).
   fast if `crypto-max-leverage` is ever configured above
   `OrderService.MAX_CRYPTO_LEVERAGE` (20x) — a cap above the adapter's own
   ceiling would never actually bind.
+- E6-F2-S2: Kill switch (`risk.KillSwitchService`/`KillSwitchController`,
+  same append-only-event/"latest row = current state" pattern as
+  `TradingModeService`) that blocks new order submissions
+  (`OrderService.submitOrder`'s very first line,
+  `KillSwitchService.assertNotEngaged()`) and best-effort cancels every
+  non-terminal `Order` this app has submitted across both brokers
+  (`OrderService.cancelAllOpenOrders`, reusing the existing
+  `BrokerAdapter.cancelOrder` — no adapter interface change needed).
+  Engaging flips state to `ENGAGED` *before* the cancel sweep runs, so
+  "block new submissions" never depends on cancellation succeeding; one
+  order's broker failure doesn't stop the sweep for the rest. Scoped to
+  this app's own tracked `Order` rows, not broker-side position-flattening
+  (matches E4-F3-S2's no-auto-flatten precedent). `POST
+  /api/kill-switch/engage` and `/clear`, `GET /api/kill-switch`; frontend
+  `KillSwitchControl` (one-click engage, confirm-dialog-gated clear) above
+  `TradingModeBanner` on the dashboard, plus a proactive disable in
+  `TradeForm`.
 
 ## Build / lint / test
 
@@ -135,15 +152,17 @@ switch that cancels all open orders and blocks new submissions).
   E6-F1-S3's `risk_consents` one-time acknowledgment).
 - `risk` — `RiskLimitService` (E6-F2-S1's hard per-order leverage/position-size
   caps, config-only via `RiskLimitsProperties`), called from `OrderService`
-  pre-flight, before any `Order` row exists.
+  pre-flight, before any `Order` row exists; `KillSwitchService`/
+  `KillSwitchController` (E6-F2-S2's global kill switch, append-only
+  `kill_switch_events`).
 - `watchlist`, `security` (session auth), `common` (`Clock`/`SchedulingConfig`).
-- Schema: Flyway `V1`–`V11` under `backend/src/main/resources/db/migration/` is the
+- Schema: Flyway `V1`–`V12` under `backend/src/main/resources/db/migration/` is the
   single source of truth; `spring.jpa.hibernate.ddl-auto=validate` everywhere.
 
 **Frontend** (`frontend/src/`) mirrors the backend split: `marketdata`, `signal`,
-`chart`, `trade`, `order`, `watchlist`, `notification`, `tradingmode`, `auth`. Each
-domain has its own `api.ts` (typed fetch wrapper, shared `MarketDataError` parsing)
-and one or two components wired into `DashboardPage`.
+`chart`, `trade`, `order`, `watchlist`, `notification`, `tradingmode`, `killswitch`,
+`auth`. Each domain has its own `api.ts` (typed fetch wrapper, shared `MarketDataError`
+parsing) and one or two components wired into `DashboardPage`.
 
 Project-specific subagents live in `.claude/agents/` (`Plan`, `Explore`,
 `general-purpose`); project-specific skills in `.claude/skills/` (`run`, `dataviz`,

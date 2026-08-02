@@ -19,6 +19,9 @@ import com.autotrade.dashboard.indicator.MovingAverageRelation;
 import com.autotrade.dashboard.indicator.MovingAverageResult;
 import com.autotrade.dashboard.marketdata.TickerSummary;
 import com.autotrade.dashboard.notification.NotificationService;
+import com.autotrade.dashboard.risk.KillSwitchCancelSummary;
+import com.autotrade.dashboard.risk.KillSwitchEngagedException;
+import com.autotrade.dashboard.risk.KillSwitchService;
 import com.autotrade.dashboard.risk.RiskLimitExceededException;
 import com.autotrade.dashboard.risk.RiskLimitService;
 import com.autotrade.dashboard.risk.RiskLimitsProperties;
@@ -53,7 +56,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -81,6 +86,8 @@ class OrderServiceTest {
     private TradingModeService tradingModeService;
     @Mock
     private RiskLimitService riskLimitService;
+    @Mock
+    private KillSwitchService killSwitchService;
 
     private OrderService service;
     private final AtomicReference<Order> saved = new AtomicReference<>();
@@ -92,7 +99,7 @@ class OrderServiceTest {
     @BeforeEach
     void setUp() {
         service = new OrderService(signalService, router, brokerCredentialService, orderRepository,
-                signalCallEntryRepository, notificationService, tradingModeService, riskLimitService);
+                signalCallEntryRepository, notificationService, tradingModeService, riskLimitService, killSwitchService);
         lenient().when(tradingModeService.current()).thenReturn(TradingMode.PAPER);
         lenient().when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
             Order order = invocation.getArgument(0);
@@ -194,6 +201,17 @@ class OrderServiceTest {
 
         assertThrows(BrokerCredentialNotConfiguredException.class, () -> service.submitOrder("BTCUSDT", request));
         verify(orderRepository, never()).save(any());
+    }
+
+    @Test
+    void killSwitchEngaged_blocksSubmitOrder_zeroSideEffects() {
+        doThrow(new KillSwitchEngagedException()).when(killSwitchService).assertNotEngaged();
+
+        PlaceOrderRequest request = new PlaceOrderRequest(new BigDecimal("100"), BigDecimal.ONE,
+                new BigDecimal("110"), new BigDecimal("90"));
+
+        assertThrows(KillSwitchEngagedException.class, () -> service.submitOrder("BTCUSDT", request));
+        verifyNoInteractions(signalService, orderRepository, adapter);
     }
 
     @Test
@@ -378,7 +396,8 @@ class OrderServiceTest {
      * tests exercise genuine cap enforcement end to end, not just that {@code OrderService} calls its collaborator. */
     private OrderService serviceWithRealRiskLimits() {
         return new OrderService(signalService, router, brokerCredentialService, orderRepository,
-                signalCallEntryRepository, notificationService, tradingModeService, new RiskLimitService(REAL_RISK_LIMITS));
+                signalCallEntryRepository, notificationService, tradingModeService,
+                new RiskLimitService(REAL_RISK_LIMITS), killSwitchService);
     }
 
     @Test
@@ -435,6 +454,70 @@ class OrderServiceTest {
         TradeOrderResponse response = serviceWithRealCaps.submitOrder("BTCUSDT", request);
 
         assertEquals(OrderStatus.FILLED, response.status());
+    }
+
+    @Test
+    void cancelAllOpenOrders_nonTerminalAcrossBothBrokers_cancelsEachThroughItsAdapter() {
+        Ticker cryptoTicker = cryptoTicker();
+        Order cryptoOrder = persistedOrder(20L, cryptoTicker, "client-20");
+        cryptoOrder.setStatus(OrderStatus.SUBMITTED);
+
+        Ticker stockTicker = new Ticker("AAPL", AssetType.STOCK, "NASDAQ");
+        Order stockOrder = new Order(stockTicker, credential(), Broker.ALPACA, AssetType.STOCK, OrderSide.BUY,
+                new BigDecimal("1"), new BigDecimal("210"), new BigDecimal("190"), "client-21");
+        stockOrder.setOrderMode(TradingMode.PAPER);
+        stockOrder.setStatus(OrderStatus.PARTIALLY_PROTECTED);
+        ReflectionTestUtils.setField(stockOrder, "id", 21L);
+
+        when(orderRepository.findByStatusNotIn(any())).thenReturn(List.of(cryptoOrder, stockOrder));
+        when(orderRepository.findById(20L)).thenReturn(Optional.of(cryptoOrder));
+        when(orderRepository.findById(21L)).thenReturn(Optional.of(stockOrder));
+
+        BrokerAdapter alpacaAdapter = mock(BrokerAdapter.class);
+        when(router.forAssetType(AssetType.CRYPTO)).thenReturn(adapter);
+        when(router.forAssetType(AssetType.STOCK)).thenReturn(alpacaAdapter);
+
+        when(adapter.cancelOrder("BTCUSDT", "client-20", TradingMode.PAPER)).thenReturn(
+                new BrokerOrderResult("client-20", "broker-20", OrderStatus.CANCELLED, null, null,
+                        Instant.parse("2026-07-29T00:00:03Z")));
+        when(alpacaAdapter.cancelOrder("AAPL", "client-21", TradingMode.PAPER)).thenReturn(
+                new BrokerOrderResult("client-21", "broker-21", OrderStatus.CANCELLED, null, null,
+                        Instant.parse("2026-07-29T00:00:03Z")));
+
+        KillSwitchCancelSummary summary = service.cancelAllOpenOrders();
+
+        assertEquals(2, summary.attempted());
+        assertEquals(2, summary.cancelled());
+        assertEquals(0, summary.failed());
+        assertEquals(OrderStatus.CANCELLED, cryptoOrder.getStatus());
+        assertEquals(OrderStatus.CANCELLED, stockOrder.getStatus());
+    }
+
+    @Test
+    void cancelAllOpenOrders_oneOrderFails_othersStillCancelled_failureRecordedNotStatusOverwritten() {
+        Ticker ticker = cryptoTicker();
+        Order failingOrder = persistedOrder(30L, ticker, "client-30");
+        failingOrder.setStatus(OrderStatus.SUBMITTED);
+        Order succeedingOrder = persistedOrder(31L, ticker, "client-31");
+        succeedingOrder.setStatus(OrderStatus.SUBMITTED);
+
+        when(orderRepository.findByStatusNotIn(any())).thenReturn(List.of(failingOrder, succeedingOrder));
+        when(orderRepository.findById(31L)).thenReturn(Optional.of(succeedingOrder));
+        when(router.forAssetType(AssetType.CRYPTO)).thenReturn(adapter);
+        when(adapter.cancelOrder("BTCUSDT", "client-30", TradingMode.PAPER))
+                .thenThrow(new BrokerAdapterException(Broker.BINANCE, "outage"));
+        when(adapter.cancelOrder("BTCUSDT", "client-31", TradingMode.PAPER)).thenReturn(
+                new BrokerOrderResult("client-31", "broker-31", OrderStatus.CANCELLED, null, null,
+                        Instant.parse("2026-07-29T00:00:03Z")));
+
+        KillSwitchCancelSummary summary = service.cancelAllOpenOrders();
+
+        assertEquals(2, summary.attempted());
+        assertEquals(1, summary.cancelled());
+        assertEquals(1, summary.failed());
+        assertTrue(summary.failureMessages().get(0).contains("client-30"));
+        assertEquals(OrderStatus.SUBMITTED, failingOrder.getStatus());
+        assertEquals(OrderStatus.CANCELLED, succeedingOrder.getStatus());
     }
 
     @Test

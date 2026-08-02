@@ -1,6 +1,7 @@
 package com.autotrade.dashboard.order;
 
 import com.autotrade.dashboard.broker.Broker;
+import com.autotrade.dashboard.risk.KillSwitchEngagedException;
 import com.autotrade.dashboard.risk.RiskLimitExceededException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -115,6 +116,19 @@ class OrderControllerTest {
                         .content(validBody()))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("RISK_LIMIT_EXCEEDED"));
+    }
+
+    @Test
+    void placeOrder_killSwitchEngaged_returns403() throws Exception {
+        when(orderService.submitOrder(org.mockito.ArgumentMatchers.eq("BTCUSDT"),
+                org.mockito.ArgumentMatchers.any(PlaceOrderRequest.class)))
+                .thenThrow(new KillSwitchEngagedException());
+
+        mockMvc.perform(post("/api/tickers/BTCUSDT/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validBody()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("KILL_SWITCH_ENGAGED"));
     }
 
     @Test

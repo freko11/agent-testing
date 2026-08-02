@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
+import KillSwitchControl from '../killswitch/KillSwitchControl'
 import NotificationPanel from '../notification/NotificationPanel'
 import OrderHistory from '../order/OrderHistory'
 import TickerMetrics from '../signal/TickerMetrics'
@@ -20,6 +21,7 @@ function DashboardPage() {
           Log out
         </button>
       </header>
+      <KillSwitchControl />
       <TradingModeBanner />
       <h1>Auto-Trade Dashboard</h1>
       <NotificationPanel />

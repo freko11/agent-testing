@@ -2852,3 +2852,123 @@ validation currently only bounds leverage to the adapter's 1–20x range, not th
 story's stricter 5x default) and confirm the UI surfaces the 403 sensibly rather than
 a generic failure.
 
+## E6-F2-S2 — kill switch that cancels all open orders and blocks new submissions
+
+Design gate (`Plan` agent) settled the shape before any code. Key finding that
+changed the plan: `BrokerAdapter.cancelOrder(symbol, clientOrderId, mode)` already
+exists and is implemented (idempotently — a no-op on an already-terminal order) by
+both `AlpacaTradingAdapter` and `BinanceFuturesTradingAdapter`, so "cancel open
+orders on both adapters" needed zero changes to the `BrokerAdapter` interface or
+either concrete adapter — just iterating this app's own tracked `Order` rows and
+calling the existing per-order `cancelOrder` through `BrokerAdapterRouter`, the same
+posture `OrderService.refreshOrder`/`listOrders` already take (this app's `Order`
+table as the authoritative record of what it submitted, not a live broker query).
+
+Two product decisions the plan flagged, both confirmed with the user before writing
+code (mirroring E6-F2-S1's pattern):
+
+1. **Scope of "cancel all open orders"**: this app's own non-terminal `Order` rows
+   only, via the existing per-order `cancelOrder` call — explicitly *not* flattening
+   already-filled positions or closing resting TP/SL legs. Binance's `cancelOrder`
+   javadoc already documents this as deliberate ("cancel the order, not the
+   position") from E4-F3-S2's own anti-auto-flatten decision; extending the kill
+   switch to flatten positions would have reversed that and required a genuinely new
+   adapter capability. Confirmed: stay scoped to tracked orders.
+2. **Race tolerance**: best-effort, no locking — an order already past the
+   kill-switch pre-flight check when `engage()` commits completes normally and isn't
+   swept by that pass; pressing engage again (idempotent) catches it on a second
+   pass. This matches `TradingModeService.switchTo`'s existing read-then-write
+   pattern with no transaction spanning the check and the write. Confirmed: accepted
+   as consistent with the rest of the codebase rather than adding new
+   `SELECT...FOR UPDATE`-style locking found nowhere else in this app.
+
+Backend: new sibling classes in the `risk` package (not folded into
+`RiskLimitService` — this is stateful/event-sourced, `RiskLimitService` is
+stateless/config-only) —
+- `KillSwitchState` (`ENGAGED`/`CLEARED`), `KillSwitchEvent` + `KillSwitchEventRepository`
+  (append-only, `findTopByOrderByIdDesc()`, identical pattern to `TradingModeEvent`),
+  `KillSwitchEngagedException`, `KillSwitchResponse`/`KillSwitchCancelSummary`/
+  `EngageKillSwitchResponse` DTOs.
+- `KillSwitchService` — `currentState()`/`isEngaged()`/`assertNotEngaged()`/
+  `engage(changedBy)`/`clear(changedBy)`, defaults to `CLEARED` on empty history
+  (same "no history = safe default" convention as `TradingModeService`), idempotent
+  switch (no duplicate row on a same-state call).
+- `KillSwitchController` — `GET /api/kill-switch`, `POST /api/kill-switch/engage`
+  (flips state to `ENGAGED` via `KillSwitchService` *then* calls
+  `OrderService.cancelAllOpenOrders()`, in that order — so "block new submissions"
+  never depends on cancellation succeeding), `POST /api/kill-switch/clear`. Reads the
+  current username from `SecurityContextHolder.getContext().getAuthentication()`
+  directly rather than an `Authentication` method parameter — both are equivalent
+  against the real Spring Security filter chain, but only the former is populated by
+  `@WithMockUser` in this codebase's established `@WebMvcTest`
+  `@AutoConfigureMockMvc(addFilters = false)` slice-test convention (a plain
+  `Authentication` parameter resolves via `request.getUserPrincipal()`, which only
+  the disabled filter chain populates — found by a failing `KillSwitchControllerTest`
+  during this story, not anticipated by the design gate).
+- `RiskExceptionHandler` gains a `KillSwitchEngagedException` → 403
+  `KILL_SWITCH_ENGAGED` mapping, same advice class as `RiskLimitExceededException`.
+- `OrderService`: `killSwitchService.assertNotEngaged()` is the very first line of
+  `submitOrder()` — before signal recomputation, cheaper than `RiskLimitService`'s
+  placement and avoids wasted work when blocked. New `cancelAllOpenOrders()` queries
+  `orderRepository.findByStatusNotIn(FILLED, CANCELLED, REJECTED, FAILED)` —
+  deliberately broader than a literal "open" filter, so `PARTIALLY_PROTECTED`/
+  `SUBMISSION_UNKNOWN` rows are attempted too, relying on each adapter's own
+  idempotent terminal-order no-op rather than re-deriving "cancellable" per status.
+  Each order's cancel is caught independently (`BrokerAdapterException`) so one
+  broker's outage doesn't stop the sweep for the rest; a failed cancel leaves that
+  `Order` row untouched (same "don't overwrite a known status with a failed-read
+  guess" rule `refreshOrder` already follows) rather than guessing at its new state.
+  Successful cancels reuse the existing private `applyResult`, so notifications fire
+  on genuine transitions same as every other order-outcome path.
+- `OrderRepository` gains `findByStatusNotIn(Collection<OrderStatus>)`.
+- Migration `V12__add_kill_switch_events.sql` — `kill_switch_events` table
+  (`kill_switch_state`, `changed_at`, `changed_by`), copying V10's pattern exactly
+  including the "don't name it bare `state`, avoid the reserved-word risk given the
+  documented `MODE` gotcha" discipline (not asserting `STATE` is reserved, just not
+  worth risking it).
+
+Frontend: new `frontend/src/killswitch/` — `api.ts` mirrors `tradingmode/api.ts`'s
+shape exactly. `KillSwitchControl.tsx`, mounted in `DashboardPage` above
+`TradingModeBanner`. Deliberately *asymmetric* interaction: engaging is one click
+with no confirmation dialog (a confirm step would defeat "stop everything
+instantly"), while clearing (which re-opens live risk) uses the `<dialog>`
+confirm-dialog idiom mirroring `TradeForm`/`TradingModeBanner`'s existing pattern —
+this is the opposite of `TradingModeBanner`'s own LIVE-mode consent flow, and is a
+deliberate choice for this control, not an oversight. `TradeForm` also fetches kill
+switch state independently on mount (same self-contained-fetch pattern
+`TradingModeBanner` already uses, not new global-state plumbing — the form remounts
+per looked-up ticker anyway, so this naturally reflects state at time of lookup) and
+proactively disables its submit button plus shows an inline message when engaged;
+the backend's 403 remains the actual enforcement boundary, this is UX only.
+
+Tests: `KillSwitchServiceTest` (8 cases — default-`CLEARED` on empty history,
+`assertNotEngaged` throws only when engaged, idempotent engage/clear with no
+duplicate row). Found and fixed a stubbing bug while writing these: a redundant
+`when(repository.findTopByOrderByIdDesc()).thenReturn(Optional.empty())` placed
+*after* a dynamic `thenAnswer` stub permanently overrode it for the rest of the
+test (Mockito's last `when()` wins), silently making `currentState()` always see
+"no history" even after a save — three tests failed with confusing
+assertion/verification mismatches until this was spotted and the redundant lines
+removed. `KillSwitchControllerTest` (3 cases, `@WebMvcTest` + `@WithMockUser`) plus
+one `OrderControllerTest` addition for the `KILL_SWITCH_ENGAGED` 403 mapping. Two
+`OrderServiceTest` additions for `cancelAllOpenOrders` — one proving both brokers get
+called (a crypto order routed through the mocked Binance-side adapter, a stock order
+through a separate mocked Alpaca-side adapter, both cancelled), one proving per-order
+fault isolation (one adapter throws, the other still succeeds, the failed order's
+status is left untouched rather than overwritten) — plus one proving
+`submitOrder` blocks with zero side effects (`verifyNoInteractions` on
+`signalService`/`orderRepository`/`adapter`) when the kill switch is engaged. Full
+`./mvnw verify` green (54 test classes, no regressions). Frontend `npm run build`
+(typecheck+build), `npm run lint` (pre-existing unrelated warning in
+`AuthContext.tsx` only), and `npm test` (13 tests, 2 files) all clean.
+
+Not verified live in a running browser: Docker wasn't running in this session
+either, so the Oracle-backed full stack wasn't brought up for a click-through of
+the actual `KillSwitchControl` UI or a real HTTP round-trip through
+`/api/kill-switch/*`. Verification rests on the unit/contract-test suite above.
+Worth a follow-up manual check once Docker's available: engage the kill switch with
+at least one open crypto and one open stock order outstanding, confirm both get
+cancelled and the summary message renders sensibly, confirm `TradeForm`'s submit
+button disables and a fresh order attempt is blocked, then clear it via the
+confirm dialog and confirm trading resumes.
+

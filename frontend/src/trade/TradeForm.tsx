@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { fetchKillSwitchState } from '../killswitch/api'
 import { MarketDataError } from '../marketdata/api'
 import type { SignalResponse } from '../signal/api'
 import { placeOrder, type PlaceOrderPayload, type TradeOrderResponse } from './api'
@@ -76,6 +77,7 @@ interface TradeFormProps {
 function TradeForm({ signal, onOrderPlaced }: TradeFormProps) {
   const [values, setValues] = useState<TradeFormValues>(DEFAULT_VALUES)
   const [submitState, setSubmitState] = useState<SubmitState>({ kind: 'idle' })
+  const [killSwitchEngaged, setKillSwitchEngaged] = useState(false)
   const dialogRef = useRef<HTMLDialogElement>(null)
 
   const { call, ticker, indicators } = signal
@@ -89,6 +91,19 @@ function TradeForm({ signal, onOrderPlaced }: TradeFormProps) {
       dialog.close()
     }
   }, [submitState.kind])
+
+  // Independent fetch on mount, same pattern TradingModeBanner uses for its own state — this
+  // component remounts per looked-up ticker (see TickerMetrics' `key`), so it reflects
+  // whatever the kill switch's state is at the time of each lookup. Purely a proactive UX
+  // disable; the backend's own KILL_SWITCH_ENGAGED 403 is still the real enforcement boundary.
+  useEffect(() => {
+    fetchKillSwitchState()
+      .then((state) => setKillSwitchEngaged(state.state === 'ENGAGED'))
+      .catch(() => {
+        // Best-effort UX hint only — leave the form enabled and let a real submit attempt
+        // surface the backend's authoritative 403 if the kill switch turns out to be engaged.
+      })
+  }, [])
 
   if (call === 'HOLD') return null
 
@@ -195,7 +210,15 @@ function TradeForm({ signal, onOrderPlaced }: TradeFormProps) {
         </p>
       )}
 
-      <button type="submit" disabled={!isValid || submitState.kind === 'submitting' || submitState.kind === 'confirming'}>
+      {killSwitchEngaged && (
+        <p className="trade-form__error" role="alert">
+          The kill switch is engaged — new trades are blocked until it's cleared.
+        </p>
+      )}
+      <button
+        type="submit"
+        disabled={!isValid || killSwitchEngaged || submitState.kind === 'submitting' || submitState.kind === 'confirming'}
+      >
         {submitState.kind === 'submitting' ? 'Submitting…' : 'Trade'}
       </button>
       {submitState.kind === 'result' && (

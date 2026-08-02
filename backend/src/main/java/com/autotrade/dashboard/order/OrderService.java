@@ -13,6 +13,8 @@ import com.autotrade.dashboard.brokeradapter.BrokerOrderRequest;
 import com.autotrade.dashboard.brokeradapter.BrokerOrderResult;
 import com.autotrade.dashboard.common.TradingMode;
 import com.autotrade.dashboard.notification.NotificationService;
+import com.autotrade.dashboard.risk.KillSwitchCancelSummary;
+import com.autotrade.dashboard.risk.KillSwitchService;
 import com.autotrade.dashboard.risk.RiskLimitService;
 import com.autotrade.dashboard.signal.SignalCall;
 import com.autotrade.dashboard.signal.SignalCallEntry;
@@ -30,6 +32,7 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -58,9 +61,10 @@ import java.util.stream.Collectors;
  * then finalized in a second short write. Every outcome — filled, a business
  * rejection, a partially-protected fill, or an infrastructure failure — is
  * written onto that row as a normal value; only pre-flight failures (bad
- * ticker/request, no actionable signal, no credential configured, or a
- * breached {@link RiskLimitService risk cap}, E6-F2-S1) skip creating an
- * {@code Order} row at all.
+ * ticker/request, no actionable signal, no credential configured, an engaged
+ * {@link KillSwitchService kill switch} (E6-F2-S2), or a breached {@link
+ * RiskLimitService risk cap}, E6-F2-S1) skip creating an {@code Order} row at
+ * all.
  *
  * <p>Also serves order status/history (E5-F3-S1): {@link #listOrders} reads
  * straight from the DB (every order already reflects its final synchronous
@@ -80,6 +84,12 @@ public class OrderService {
      * accepted, flagged triple duplication of the same crypto leverage ceiling across FE/BE-adapter/BE-service. */
     public static final int MAX_CRYPTO_LEVERAGE = 20;
 
+    /** Statuses {@link #cancelAllOpenOrders} treats as already-resolved and skips. Deliberately narrow — {@code
+     * PARTIALLY_PROTECTED}/{@code SUBMISSION_UNKNOWN} rows are still attempted, relying on each adapter's own
+     * idempotent no-op on an already-terminal order rather than this list re-deriving "cancellable" per status. */
+    private static final List<OrderStatus> TERMINAL_STATUSES =
+            List.of(OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.REJECTED, OrderStatus.FAILED);
+
     private final SignalService signalService;
     private final BrokerAdapterRouter router;
     private final BrokerCredentialService brokerCredentialService;
@@ -88,11 +98,13 @@ public class OrderService {
     private final NotificationService notificationService;
     private final TradingModeService tradingModeService;
     private final RiskLimitService riskLimitService;
+    private final KillSwitchService killSwitchService;
 
     public OrderService(SignalService signalService, BrokerAdapterRouter router,
                          BrokerCredentialService brokerCredentialService, OrderRepository orderRepository,
                          SignalCallEntryRepository signalCallEntryRepository, NotificationService notificationService,
-                         TradingModeService tradingModeService, RiskLimitService riskLimitService) {
+                         TradingModeService tradingModeService, RiskLimitService riskLimitService,
+                         KillSwitchService killSwitchService) {
         this.signalService = signalService;
         this.router = router;
         this.brokerCredentialService = brokerCredentialService;
@@ -101,9 +113,11 @@ public class OrderService {
         this.notificationService = notificationService;
         this.tradingModeService = tradingModeService;
         this.riskLimitService = riskLimitService;
+        this.killSwitchService = killSwitchService;
     }
 
     public TradeOrderResponse submitOrder(String symbol, PlaceOrderRequest request) {
+        killSwitchService.assertNotEngaged();
         SignalService.SignalComputation computation = signalService.computeSignalWithProvenance(symbol, SIGNAL_LIMIT);
         SignalResponse signal = computation.response();
 
@@ -160,6 +174,31 @@ public class OrderService {
         } catch (BrokerAdapterException e) {
             return TradeOrderResponse.from(applyOutcome(orderId, OrderStatus.FAILED, e.getMessage(), null));
         }
+    }
+
+    /**
+     * Best-effort cancels every non-terminal {@code Order} this app has submitted, across both brokers
+     * (E6-F2-S2's kill switch). One order's broker-adapter failure never stops the sweep for the rest — each
+     * is caught independently so, say, a Binance outage doesn't leave Alpaca orders uncancelled. A failed
+     * cancel leaves that {@code Order} row untouched (same "don't overwrite a known status with a failed-read
+     * guess" rule {@link #refreshOrder} already follows) rather than guessing at its new state.
+     */
+    public KillSwitchCancelSummary cancelAllOpenOrders() {
+        List<Order> candidates = orderRepository.findByStatusNotIn(TERMINAL_STATUSES);
+        int cancelled = 0;
+        List<String> failures = new ArrayList<>();
+        for (Order order : candidates) {
+            try {
+                BrokerAdapter adapter = router.forAssetType(order.getAssetType());
+                BrokerOrderResult result = adapter.cancelOrder(order.getTicker().getSymbol(), order.getClientOrderId(),
+                        order.getOrderMode());
+                applyResult(order.getId(), result);
+                cancelled++;
+            } catch (BrokerAdapterException e) {
+                failures.add(order.getClientOrderId() + ": " + e.getMessage());
+            }
+        }
+        return new KillSwitchCancelSummary(candidates.size(), cancelled, failures.size(), failures);
     }
 
     public List<OrderResponse> listOrders(int limit) {

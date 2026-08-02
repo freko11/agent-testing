@@ -19,4 +19,10 @@ public class RiskExceptionHandler {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(new ApiErrorResponse("RISK_LIMIT_EXCEEDED", e.getMessage(), null));
     }
+
+    @ExceptionHandler(KillSwitchEngagedException.class)
+    public ResponseEntity<ApiErrorResponse> handleKillSwitchEngaged(KillSwitchEngagedException e) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new ApiErrorResponse("KILL_SWITCH_ENGAGED", e.getMessage(), null));
+    }
 }
