@@ -12,6 +12,8 @@ import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import tools.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpMethod;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
@@ -108,6 +110,8 @@ import java.util.regex.Pattern;
  * terminal composite status, including {@code PARTIALLY_PROTECTED}.
  */
 public class BinanceFuturesTradingAdapter implements BrokerAdapter {
+
+    private static final Logger log = LoggerFactory.getLogger(BinanceFuturesTradingAdapter.class);
 
     private static final String API_KEY_HEADER = "X-MBX-APIKEY";
     private static final long RECV_WINDOW_MILLIS = 5_000;
@@ -371,8 +375,14 @@ public class BinanceFuturesTradingAdapter implements BrokerAdapter {
                 return true;
             } catch (RuntimeException e) {
                 if (attempt >= EXIT_LEG_MAX_ATTEMPTS || !pauseBeforeRetry()) {
+                    log.warn("broker=BINANCE symbol={} legClientOrderId={} orderType={} attempt={}/{} - exit leg "
+                                    + "could not be placed, giving up; position may be left unprotected",
+                            symbol, legClientOrderId, orderType, attempt, EXIT_LEG_MAX_ATTEMPTS, e);
                     return false;
                 }
+                log.warn("broker=BINANCE symbol={} legClientOrderId={} orderType={} attempt={}/{} - exit leg "
+                                + "placement failed, retrying",
+                        symbol, legClientOrderId, orderType, attempt, EXIT_LEG_MAX_ATTEMPTS, e);
             }
         }
         return false;
@@ -405,6 +415,8 @@ public class BinanceFuturesTradingAdapter implements BrokerAdapter {
             throw e;
         } catch (BrokerAdapterException e) {
             // Order became not-cancelable between our status check and this call (e.g. just filled) — idempotent no-op, same convention as AlpacaTradingAdapter.
+            log.debug("broker=BINANCE symbol={} origClientOrderId={} - cancel rejected, treating as "
+                    + "already-terminal (idempotent no-op)", symbol, origClientOrderId, e);
         }
     }
 

@@ -12,6 +12,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import tools.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.HttpStatusCodeException;
@@ -54,6 +56,8 @@ import java.util.Optional;
  * directly injectable).
  */
 public class AlpacaTradingAdapter implements BrokerAdapter {
+
+    private static final Logger log = LoggerFactory.getLogger(AlpacaTradingAdapter.class);
 
     private static final String API_KEY_HEADER = "APCA-API-KEY-ID";
     private static final String API_SECRET_HEADER = "APCA-API-SECRET-KEY";
@@ -186,6 +190,8 @@ public class AlpacaTradingAdapter implements BrokerAdapter {
                     .toBodilessEntity();
         } catch (HttpClientErrorException.UnprocessableEntity e) {
             // Order became not-cancelable between our status check and this call (e.g. just filled) — idempotent no-op.
+            log.debug("broker=ALPACA symbol={} clientOrderId={} - cancel rejected as unprocessable, treating as "
+                    + "already-terminal (idempotent no-op)", symbol, clientOrderId);
         } catch (HttpClientErrorException.TooManyRequests e) {
             throw new BrokerAdapterRateLimitedException(Broker.ALPACA, retryAfterSeconds(e));
         } catch (RestClientException e) {

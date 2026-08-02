@@ -2,6 +2,8 @@ package com.autotrade.dashboard.risk;
 
 import com.autotrade.dashboard.order.OrderService;
 import com.autotrade.dashboard.ticker.AssetType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -20,6 +22,8 @@ import java.math.BigDecimal;
  */
 @Service
 public class RiskLimitService {
+
+    private static final Logger log = LoggerFactory.getLogger(RiskLimitService.class);
 
     private final RiskLimitsProperties limits;
 
@@ -43,6 +47,8 @@ public class RiskLimitService {
         BigDecimal notionalUsd = amountUsd.multiply(leverage);
 
         if (assetType == AssetType.CRYPTO && leverage.compareTo(limits.cryptoMaxLeverage()) > 0) {
+            log.warn("assetType={} leverage={}x exceeds cap {}x - order rejected pre-flight",
+                    assetType, leverage, limits.cryptoMaxLeverage());
             throw new RiskLimitExceededException(
                     "Leverage " + leverage + "x exceeds the configured cap of " + limits.cryptoMaxLeverage() + "x.");
         }
@@ -51,6 +57,8 @@ public class RiskLimitService {
                 ? limits.cryptoMaxPositionSizeUsd()
                 : limits.stockMaxPositionSizeUsd();
         if (notionalUsd.compareTo(maxPositionSizeUsd) > 0) {
+            log.warn("assetType={} positionSizeUsd={} exceeds cap ${} - order rejected pre-flight",
+                    assetType, notionalUsd, maxPositionSizeUsd);
             throw new RiskLimitExceededException(
                     "Position size $" + notionalUsd + " exceeds the configured cap of $" + maxPositionSizeUsd + ".");
         }
@@ -65,6 +73,9 @@ public class RiskLimitService {
     public void enforceAggregateExposureCap(BigDecimal currentOpenNotionalUsd, BigDecimal newOrderNotionalUsd) {
         BigDecimal projectedNotionalUsd = currentOpenNotionalUsd.add(newOrderNotionalUsd);
         if (projectedNotionalUsd.compareTo(limits.maxAggregateExposureUsd()) > 0) {
+            log.warn("projectedOpenNotionalUsd={} (existing {} + new {}) exceeds aggregate cap ${} - order "
+                            + "rejected pre-flight",
+                    projectedNotionalUsd, currentOpenNotionalUsd, newOrderNotionalUsd, limits.maxAggregateExposureUsd());
             throw new RiskLimitExceededException(
                     "Total open exposure $" + projectedNotionalUsd + " (existing $" + currentOpenNotionalUsd
                             + " open + $" + newOrderNotionalUsd + " for this order) would exceed the configured "

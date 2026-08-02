@@ -3187,3 +3187,91 @@ then) directly, with no join needed.
 With this story done, E6 (Risk & Safety Controls) is complete; E7 (Observability &
 Hardening) is next up.
 
+## E7-F1-S1 — structured logging across backend services
+
+Design gate (own analysis, entered plan mode given the story's breadth — it touches
+roughly 15 files across every backend package): read every catch block, `@RestControllerAdvice`,
+and retry/backoff loop before writing anything. Confirmed SLF4J/Logback was already on
+the classpath (transitively via `spring-boot-starter-webmvc`) and that four classes
+already used the `private static final Logger log = LoggerFactory.getLogger(...)`
+convention (`WatchlistSignalPoller`, `BrokerCredentialService`,
+`CredentialEncryptionService`, `NotificationService`) — extended that rather than
+introducing a JSON log encoder or MDC/correlation-id framework, matching this repo's
+established bias against a library where a small, consistent, hand-applied convention is
+enough (same reasoning as E2-F2-S1's hand-rolled indicators). No new Maven dependency.
+
+Found, by reading rather than guessing, that the two places that mattered most for the
+AC ("broker errors logged with context, never silently swallowed") were almost entirely
+silent: `RetryingBrokerAdapter` (the single retry/backoff chokepoint shared by both
+brokers) logged nothing at any retry, backoff, or terminal-failure point, and
+`OrderService.submitOrder`'s four broker-exception catch blocks turned a real order
+failure into a `FAILED`/`SUBMISSION_UNKNOWN` `Order` row with zero log line — the most
+operationally important code path in the app (money-moving) was completely silent.
+`BinanceFuturesTradingAdapter.ensureExitLeg` also swallowed every leg-placement failure
+with no log at all, meaning a missing stop-loss/take-profit on a filled leveraged entry
+(the exact "unprotected position" scenario that story's own Javadoc calls out as the
+crux of that design) had no trace anywhere.
+
+Backend: new `backend/src/main/resources/logback-spring.xml` — one console appender,
+one pattern (`%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%thread] %logger{36} - %msg%n`),
+applied to every profile (local/paper/prod) rather than a per-profile variant, since the
+AC asks for a *consistent* format. Added `Logger`s and log calls at: `RetryingBrokerAdapter`
+(WARN per retry/rate-limit backoff, ERROR when a transient failure exhausts retries or
+`reconcile()` produces `BrokerAdapterAmbiguousOrderException`); `OrderService.submitOrder`'s
+four catch blocks (ERROR for ambiguous/unavailable/generic, WARN for rate-limited, all
+with broker/symbol/clientOrderId/orderId) and `cancelAllOpenOrders`'s per-order cancel
+failure (WARN); `BinanceFuturesTradingAdapter.ensureExitLeg`'s swallowed leg failures
+(WARN — the unprotected-position case) and its/`AlpacaTradingAdapter.cancelOrder`'s
+"already terminal, idempotent no-op" swallows (DEBUG); `RetryHelper.withOneRetry`
+(WARN on the first-attempt failure that triggers its one retry — previously invisible
+even when the retry succeeded); all 5 `@RestControllerAdvice` classes
+(`MarketDataExceptionHandler`, `OrderExceptionHandler`, `RiskExceptionHandler`,
+`TradingModeExceptionHandler`, `NotificationExceptionHandler`), one log line per handler
+method; `KillSwitchService.switchTo` (WARN on a real engage/clear transition) and
+`RiskLimitService`'s two `enforce*` methods (WARN right before throwing
+`RiskLimitExceededException`, with the breached numbers already in the message).
+
+Log-level policy, applied consistently rather than per-file judgment calls: INFO for
+ordinary client-driven 4xx that reflect normal user interaction, not an operational
+problem (bad/unregistered ticker, validation, signal-not-actionable, order-not-found,
+market-closed, paper-trade-threshold/risk-consent gates); WARN for infra/operational
+statuses (429/503 — rate-limited, market-data/broker-credential/order-refresh
+unavailable) and safety-gate trips (kill switch engaged, risk-limit breach) since those
+are working-as-designed but still worth seeing; ERROR reserved for genuine
+order-submission failures in `OrderService`/`RetryingBrokerAdapter`. Deliberately did
+*not* add a second log line in the concrete adapters (`AlpacaTradingAdapter`,
+`BinanceFuturesTradingAdapter`) or market-data clients for failures that rethrow —
+every exception in this app terminates at exactly one of three sinks
+(`RetryingBrokerAdapter`'s retry handling, `OrderService.submitOrder`'s catch blocks, or
+a `@RestControllerAdvice` handler), confirmed by checking that `getAccountStatus`/
+`getPosition` aren't even wired to a controller yet, so logging at every intermediate
+rethrow site would just duplicate the same event under a different logger name — the
+AC's "never silently swallowed" is about failures having *a* trace, not every layer
+adding its own. Noted this "log once, at the sink" rule in CLAUDE.md's architecture
+section so it isn't relitigated per file next time.
+
+Out of scope, on purpose: no MDC/correlation-id request tracing, no log file
+rotation/shipping, no new logging library — none of those are in the AC, and adding them
+would be exactly the kind of scope creep the `simplify` skill exists to catch.
+
+Tests: no new test files — this is a logging-only change with no behavior change, so
+the existing suite (`RetryingBrokerAdapterTest`, `RetryingBrokerAdapterOutageTest`,
+`OrderServiceTest`, `AlpacaTradingAdapterTest`, `BinanceFuturesTradingAdapterTest`, the
+five `*ControllerTest` classes covering each exception handler, `RiskLimitServiceTest`)
+already exercises every one of the new log call sites, since they're all on pre-existing
+exception paths. `./mvnw verify` green with zero regressions, and the captured console
+output during that run is itself a live confirmation the new logging works exactly as
+designed: real `RetryingBrokerAdapter` ERROR lines with `broker=ALPACA attempt=3/3`,
+`OrderService` ERROR lines with real `clientOrderId`/`orderId` values for a forced
+Binance outage scenario, `RetryHelper` WARN lines on a forced 500, and INFO/WARN lines
+from every exception handler under test — all in the new consistent
+timestamp/level/thread/logger/message format.
+
+Not verified live in a running browser: Docker wasn't running in this session, so the
+real Oracle-backed stack wasn't brought up for a manual click-through. Given this story
+changes zero behavior (only adds logging to already-tested code paths) and the test run
+above already produced real console output at every new log site with correct context,
+verification rests on that rather than a live HTTP round-trip. Worth a follow-up once
+Docker's available: tail the console while placing a real paper order and confirm the
+format reads cleanly end-to-end outside a test harness.
+

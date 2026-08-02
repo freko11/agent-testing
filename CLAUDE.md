@@ -16,8 +16,8 @@ Testnet) with risk/safety guardrails (E6).
 
 ## Status
 
-All stories below are done. E6 (Risk & Safety Controls) is now complete; next up
-is E7 (Observability & Hardening).
+All stories below are done. E6 (Risk & Safety Controls) is complete; E7
+(Observability & Hardening) is in progress.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -160,6 +160,40 @@ is E7 (Observability & Hardening).
   `signal_call_id` FK, so the audit row is self-contained for a future
   audit-trail viewer. No config, no new endpoint, no frontend change.
 
+### E7 — Observability & Hardening (in progress)
+- E7-F1-S1: Structured logging across every backend service, via a single
+  `backend/src/main/resources/logback-spring.xml` console pattern
+  (timestamp/level/thread/logger/message) applied to every profile — no new
+  logging dependency, extending the SLF4J/Logback convention a few classes
+  already used. Closed the gap where the two places that mattered most for
+  "broker errors logged with context, never silently swallowed" were almost
+  entirely silent: `RetryingBrokerAdapter` (the shared retry/backoff
+  chokepoint for both brokers — now logs each retry/rate-limit backoff at
+  WARN and the terminal `BrokerAdapterUnavailableException`/
+  `BrokerAdapterAmbiguousOrderException` wrap at ERROR) and
+  `OrderService.submitOrder`'s four broker-exception catch blocks (now ERROR
+  for genuine submission failures, WARN for rate-limited, all with
+  broker/symbol/clientOrderId/orderId context — previously a failed order
+  went to a `FAILED`/`SUBMISSION_UNKNOWN` row with zero log line). Also
+  closed two genuinely-silent swallows flagged during design:
+  `BinanceFuturesTradingAdapter.ensureExitLeg` (a missing stop-loss/
+  take-profit leg on a filled entry — an unprotected leveraged position —
+  now logs WARN) and its `deleteOrder`/`AlpacaTradingAdapter.cancelOrder`
+  "already terminal" no-ops (DEBUG). All 5 `@RestControllerAdvice` classes
+  and `KillSwitchService`/`RiskLimitService` now log at the point they
+  translate an exception to a response or trip a safety gate — INFO for
+  ordinary client-driven 4xx (bad ticker, validation, not-found), WARN for
+  infra/operational statuses (429/503) and safety-gate trips (kill switch,
+  risk-limit breach), so routine user interaction doesn't drown out real
+  operational signal. Deliberately did *not* add a second log line in the
+  concrete adapters/market-data clients for failures that already get
+  logged once downstream (by `RetryingBrokerAdapter`, `OrderService`, or an
+  exception handler) — every exception in this app terminates at one of
+  those three sinks, so logging again at the throw site would just
+  duplicate the same event. Out of scope (kept tight to the AC): no
+  MDC/correlation-id tracing, no log file rotation/shipping, no new logging
+  library.
+
 ## Build / lint / test
 
 - **DB**: `docker compose up -d` (Oracle XE; first boot ~60-90s, poll with
@@ -212,6 +246,12 @@ is E7 (Observability & Hardening).
 - `watchlist`, `security` (session auth), `common` (`Clock`/`SchedulingConfig`).
 - Schema: Flyway `V1`–`V14` under `backend/src/main/resources/db/migration/` is the
   single source of truth; `spring.jpa.hibernate.ddl-auto=validate` everywhere.
+- Logging (E7-F1-S1): `backend/src/main/resources/logback-spring.xml` — one console
+  pattern across every profile. SLF4J `private static final Logger log` per class;
+  every exception either terminates in `RetryingBrokerAdapter`/`OrderService`
+  (broker/order failures) or a `@RestControllerAdvice` handler (everything surfaced
+  over HTTP) — that's the one place each failure gets logged, so don't add a second
+  log line further down the same call chain.
 
 **Frontend** (`frontend/src/`) mirrors the backend split: `marketdata`, `signal`,
 `chart`, `trade`, `order`, `watchlist`, `notification`, `tradingmode`, `killswitch`,

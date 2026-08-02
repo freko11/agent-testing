@@ -1,5 +1,7 @@
 package com.autotrade.dashboard.marketdata;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
@@ -15,6 +17,8 @@ import java.util.function.Supplier;
  */
 final class RetryHelper {
 
+    private static final Logger log = LoggerFactory.getLogger(RetryHelper.class);
+
     private static final long RETRY_DELAY_MILLIS = 250;
 
     private RetryHelper() {
@@ -24,6 +28,7 @@ final class RetryHelper {
         try {
             return call.get();
         } catch (ResourceAccessException | HttpServerErrorException | HttpClientErrorException.TooManyRequests firstFailure) {
+            log.warn("Market data request failed, retrying once: {}", firstFailure.toString());
             sleepBriefly();
             return call.get();
         }

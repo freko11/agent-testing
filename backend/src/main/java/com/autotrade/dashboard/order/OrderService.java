@@ -24,6 +24,8 @@ import com.autotrade.dashboard.signal.SignalService;
 import com.autotrade.dashboard.ticker.AssetType;
 import com.autotrade.dashboard.ticker.Ticker;
 import com.autotrade.dashboard.tradingmode.TradingModeService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
@@ -77,6 +79,8 @@ import java.util.stream.Collectors;
  */
 @Service
 public class OrderService {
+
+    private static final Logger log = LoggerFactory.getLogger(OrderService.class);
 
     private static final int SIGNAL_LIMIT = 200;
 
@@ -173,17 +177,25 @@ public class OrderService {
             BrokerOrderResult result = adapter.placeOrder(brokerRequest, mode);
             return TradeOrderResponse.from(recordAuditEntry(applyResult(orderId, result), signalCallEntry));
         } catch (BrokerAdapterAmbiguousOrderException e) {
+            log.error("broker={} symbol={} clientOrderId={} orderId={} - order submission outcome ambiguous, "
+                            + "marking SUBMISSION_UNKNOWN", broker, symbol, clientOrderId, orderId, e);
             return TradeOrderResponse.from(recordAuditEntry(
                     applyOutcome(orderId, OrderStatus.SUBMISSION_UNKNOWN, e.getMessage(), null), signalCallEntry));
         } catch (BrokerAdapterUnavailableException e) {
+            log.error("broker={} symbol={} clientOrderId={} orderId={} - broker unavailable after retries "
+                            + "exhausted, order not submitted", broker, symbol, clientOrderId, orderId, e);
             return TradeOrderResponse.from(recordAuditEntry(applyOutcome(orderId, OrderStatus.FAILED,
                     "Broker unavailable after retries exhausted: " + e.getMessage() + ". Order was not submitted; safe to retry.",
                     null), signalCallEntry));
         } catch (BrokerAdapterRateLimitedException e) {
             String suffix = e.retryAfterSeconds() != null ? "; retry after " + e.retryAfterSeconds() + "s" : "";
+            log.warn("broker={} symbol={} clientOrderId={} orderId={} - rate limited, order not submitted{}",
+                    broker, symbol, clientOrderId, orderId, suffix, e);
             return TradeOrderResponse.from(recordAuditEntry(applyOutcome(orderId, OrderStatus.FAILED,
                     "Rate limited by " + broker + suffix + ". Order was not submitted.", null), signalCallEntry));
         } catch (BrokerAdapterException e) {
+            log.error("broker={} symbol={} clientOrderId={} orderId={} - order submission failed",
+                    broker, symbol, clientOrderId, orderId, e);
             return TradeOrderResponse.from(
                     recordAuditEntry(applyOutcome(orderId, OrderStatus.FAILED, e.getMessage(), null), signalCallEntry));
         }
@@ -208,6 +220,9 @@ public class OrderService {
                 applyResult(order.getId(), result);
                 cancelled++;
             } catch (BrokerAdapterException e) {
+                log.warn("broker={} symbol={} clientOrderId={} orderId={} - kill-switch cancel failed, order left "
+                                + "untouched", order.getBroker(), order.getTicker().getSymbol(), order.getClientOrderId(),
+                        order.getId(), e);
                 failures.add(order.getClientOrderId() + ": " + e.getMessage());
             }
         }

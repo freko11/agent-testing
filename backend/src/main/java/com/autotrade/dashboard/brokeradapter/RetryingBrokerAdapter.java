@@ -3,6 +3,8 @@ package com.autotrade.dashboard.brokeradapter;
 import com.autotrade.dashboard.broker.Broker;
 import com.autotrade.dashboard.common.TradingMode;
 import com.autotrade.dashboard.ticker.AssetType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.Optional;
@@ -42,6 +44,8 @@ import java.util.function.Supplier;
  * was submitted.
  */
 public class RetryingBrokerAdapter implements BrokerAdapter {
+
+    private static final Logger log = LoggerFactory.getLogger(RetryingBrokerAdapter.class);
 
     private final BrokerAdapter delegate;
     private final BrokerAdapterRetryPolicy policy;
@@ -83,6 +87,9 @@ public class RetryingBrokerAdapter implements BrokerAdapter {
             BrokerAdapterAmbiguousOrderException ambiguous =
                     new BrokerAdapterAmbiguousOrderException(delegate.broker(), clientOrderId, original);
             ambiguous.addSuppressed(reconciliationFailure);
+            log.error("broker={} symbol={} clientOrderId={} - order submission ambiguous: original failure "
+                            + "could not be reconciled against broker order status",
+                    delegate.broker(), symbol, clientOrderId, ambiguous);
             throw ambiguous;
         }
         if (actual.isPresent()) {
@@ -119,14 +126,22 @@ public class RetryingBrokerAdapter implements BrokerAdapter {
             } catch (BrokerAdapterRateLimitedException rateLimited) {
                 Duration delay = delayFor(rateLimited, attempt);
                 if (attempt >= policy.maxAttempts() || delay.compareTo(policy.maxDelay()) > 0) {
+                    log.warn("broker={} attempt={}/{} - rate limited, giving up (delay {} exceeds policy)",
+                            delegate.broker(), attempt, policy.maxAttempts(), delay, rateLimited);
                     throw rateLimited;
                 }
+                log.warn("broker={} attempt={}/{} - rate limited, retrying after {}",
+                        delegate.broker(), attempt, policy.maxAttempts(), delay, rateLimited);
                 sleepOrRethrow(delay, rateLimited);
                 attempt++;
             } catch (BrokerAdapterTransientException transientFailure) {
                 if (!retryTransient || attempt >= policy.maxAttempts()) {
+                    log.error("broker={} attempt={}/{} - transient failure exhausted retries, marking unavailable",
+                            delegate.broker(), attempt, policy.maxAttempts(), transientFailure);
                     throw new BrokerAdapterUnavailableException(delegate.broker(), transientFailure);
                 }
+                log.warn("broker={} attempt={}/{} - transient failure, retrying",
+                        delegate.broker(), attempt, policy.maxAttempts(), transientFailure);
                 sleepOrRethrow(backoffFor(attempt), transientFailure);
                 attempt++;
             }
