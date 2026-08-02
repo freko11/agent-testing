@@ -34,3 +34,6 @@ yarn-error.log*
 # Oracle / Docker local data volumes
 oracle-data/
 *.dmp
+
+# graphify local cache (regenerable via `graphify update .`)
+graphify-out/cache/
