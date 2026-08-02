@@ -16,8 +16,8 @@ Testnet) with risk/safety guardrails (E6).
 
 ## Status
 
-All stories below are done unless noted. Current next-up story: **E6-F1-S2** (paper-trade
-threshold before live mode unlocks).
+All stories below are done unless noted. Current next-up story: **E6-F1-S3** (explicit
+risk-consent step before live mode unlocks).
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -65,8 +65,11 @@ threshold before live mode unlocks).
 - E5-F4-S1: In-app notifications (order outcomes, watchlist signal changes)
 
 ### E6 — Risk & Safety Controls (in progress)
-- E6-F1-S1: Global paper/live trading-mode switch (live mode still gated —
-  `switchTo(LIVE)` unconditionally throws until E6-F1-S2/S3 land)
+- E6-F1-S1: Global paper/live trading-mode switch
+- E6-F1-S2: Paper-trade threshold before live mode unlocks (configurable via
+  `trading-mode.paper-trade-threshold`, default 10 successful filled paper
+  orders; live mode still gated — E6-F1-S3's risk-consent step is a second,
+  independent check not yet implemented)
 
 ## Build / lint / test
 

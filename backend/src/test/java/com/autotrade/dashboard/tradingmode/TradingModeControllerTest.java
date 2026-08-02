@@ -29,29 +29,48 @@ class TradingModeControllerTest {
 
     @Test
     void current_noHistory_returnsPaperWithNullChangedAt() throws Exception {
-        when(tradingModeService.currentState()).thenReturn(new TradingModeResponse(TradingMode.PAPER, null));
+        when(tradingModeService.currentState())
+                .thenReturn(new TradingModeResponse(TradingMode.PAPER, null, 0, 10, false));
 
         mockMvc.perform(get("/api/trading-mode"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.mode").value("PAPER"))
-                .andExpect(jsonPath("$.changedAt").doesNotExist());
+                .andExpect(jsonPath("$.changedAt").doesNotExist())
+                .andExpect(jsonPath("$.successfulPaperTrades").value(0))
+                .andExpect(jsonPath("$.paperTradeThreshold").value(10))
+                .andExpect(jsonPath("$.liveModeUnlocked").value(false));
     }
 
     @Test
-    void switchToLive_returns403() throws Exception {
-        when(tradingModeService.switchTo(TradingMode.LIVE)).thenThrow(new LiveModeNotYetAvailableException());
+    void switchToLive_belowThreshold_returns403() throws Exception {
+        when(tradingModeService.switchTo(TradingMode.LIVE))
+                .thenThrow(new PaperTradeThresholdNotMetException(4, 10));
 
         mockMvc.perform(post("/api/trading-mode")
                         .contentType("application/json")
                         .content("{\"mode\":\"LIVE\"}"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.error").value("LIVE_MODE_NOT_YET_AVAILABLE"));
+                .andExpect(jsonPath("$.error").value("PAPER_TRADE_THRESHOLD_NOT_MET"));
+    }
+
+    @Test
+    void switchToLive_atThreshold_returns200() throws Exception {
+        Instant changedAt = Instant.parse("2026-07-30T00:00:00Z");
+        when(tradingModeService.switchTo(TradingMode.LIVE))
+                .thenReturn(new TradingModeResponse(TradingMode.LIVE, changedAt, 10, 10, true));
+
+        mockMvc.perform(post("/api/trading-mode")
+                        .contentType("application/json")
+                        .content("{\"mode\":\"LIVE\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mode").value("LIVE"));
     }
 
     @Test
     void switchToPaper_delegatesAndReturns200() throws Exception {
         Instant changedAt = Instant.parse("2026-07-30T00:00:00Z");
-        when(tradingModeService.switchTo(TradingMode.PAPER)).thenReturn(new TradingModeResponse(TradingMode.PAPER, changedAt));
+        when(tradingModeService.switchTo(TradingMode.PAPER))
+                .thenReturn(new TradingModeResponse(TradingMode.PAPER, changedAt, 0, 10, false));
 
         mockMvc.perform(post("/api/trading-mode")
                         .contentType("application/json")

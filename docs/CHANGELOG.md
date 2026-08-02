@@ -2651,3 +2651,81 @@ by design to when E2-F2 is actually picked up, not pre-build blockers. The
 `fewer-permission-prompts` skill is worth running once E1 scaffolding
 exists (not before — there's nothing to allowlist yet).
 
+## E6-F1-S2 — paper-trade threshold before live mode unlocks
+
+E6-F1-S2 (paper-trade threshold) is done. A `Plan`-agent design gate (this
+story's own precedent from E6-F1-S1) resolved the open questions before
+implementation. **What counts as a "successful paper trade"**: an `Order`
+row with `orderMode=PAPER` and `status=FILLED`, counted per-order with no
+distinct-ticker/distinct-day dedup — this is a solo-user app, not an
+adversarial multi-tenant system, and E5-F2-S2's explicit per-order
+confirmation step already adds real friction against "spamming" the
+threshold. `PARTIALLY_PROTECTED` (entry filled, TP/SL leg failed) does
+**not** count, confirmed with the user directly — the gate exists to prove
+the user has been through the complete, safely-protected bracket-order flow,
+not a degraded one. **Where the threshold lives**: a plain
+`@Value`-injected config property (`trading-mode.paper-trade-threshold`,
+default 10, overridable via `TRADING_MODE_PAPER_TRADE_THRESHOLD`), not a
+DB-editable value — matches this codebase's existing config-property
+precedent (`notification.watchlist-poll.*`) and this app's single-operator,
+ops-controlled-via-redeploy posture; a DB-backed admin-editable threshold
+would be a different, heavier feature this story doesn't need.
+
+`TradingModeService.switchTo` now checks idempotency (`current() ==
+requested`) *before* the threshold gate — a no-op `LIVE -> LIVE` shouldn't
+re-validate a threshold that's irrelevant to a state that's already true.
+The old unconditional-throw scaffolding (`LiveModeNotYetAvailableException`,
+per its own javadoc's explicit invitation to be *replaced*, not just
+deleted) is gone; a switch to `LIVE` now actually succeeds once
+`OrderRepository.countByOrderModeAndStatus(PAPER, FILLED)` meets the
+threshold — this is a deliberate incremental-delivery state: `LIVE` is
+genuinely reachable with no consent step until E6-F1-S3 lands a second,
+independent gate alongside this one (not a replacement of it). New
+`PaperTradeThresholdNotMetException` (403 `PAPER_TRADE_THRESHOLD_NOT_MET`,
+replacing `LiveModeNotYetAvailableException`'s handler in
+`TradingModeExceptionHandler`) carries `completed`/`required` counts.
+`TradingModeResponse` (shared by `GET`/`POST /api/trading-mode`) gained
+`successfulPaperTrades`/`paperTradeThreshold`/`liveModeUnlocked` fields,
+computed fresh on every read — same "correctness over performance for
+money-moving code" philosophy as the rest of this service. No Flyway
+migration needed: `orders.order_mode`/`orders.status` already exist and were
+already queried by mode.
+
+Frontend: `TradingModeState` mirrors the three new response fields.
+`TradingModeBanner`'s LIVE toggle is now proactively `disabled` (not just
+reactively failing on click) whenever `!liveModeUnlocked`, with inline
+explanatory text ("Live mode unlocks after 10 successful paper trades (N
+completed).") — the S1 banner's original doc comment claiming "this
+component needs no changes" was wrong for this story and has been corrected.
+The reactive 403-message path stays as a defense-in-depth fallback for stale
+client state, but is no longer the primary UX.
+
+No new automated frontend component test was added for the banner —
+`frontend/vitest.config.ts` is deliberately scoped to pure `.ts` logic
+(`environment: 'node'`, `include: ['src/**/*.test.ts']`, no jsdom/
+testing-library installed anywhere in the repo yet); adding a whole
+component-testing stack for one banner is a bigger infrastructure call than
+this story warrants. Verified live instead, per this repo's UI Definition of
+Done: brought up Oracle XE + backend + frontend, logged into the dashboard,
+and confirmed the "Switch to LIVE" button rendered visibly disabled with the
+"0 completed" progress text before any paper trades exist.
+
+A real bug surfaced only by running the full `./mvnw verify` suite (not
+caught by the two new/edited `tradingmode` test classes in isolation):
+`src/test/resources/application.properties` **replaces** the main
+`application.properties` for the test classpath rather than merging with
+it (Spring Boot loads whichever `application.properties` is highest-priority
+on the classpath, not both), so `TradingModeService`'s newly-mandatory
+`@Value("${trading-mode.paper-trade-threshold}")` failed to resolve in every
+`@SpringBootTest` context that didn't explicitly override it — a
+`PlaceholderResolutionException` at bean-creation time, cascading into 33
+unrelated test failures/errors across the suite (`ApplicationContext
+failure threshold exceeded`) since many contexts share the same
+`jdbc:h2:mem:testdb` in-memory instance. Fixed by adding the property to the
+test resource file too (default 10, same as prod), leaving
+`TradingModeServiceTest`'s own `@TestPropertySource(properties =
+"trading-mode.paper-trade-threshold=3")` to override it locally for fast,
+deterministic threshold tests. Full suite (`./mvnw verify`) passes: 350
+tests, 0 failures, 0 errors. Frontend `npm run build`/`lint`/`test` all
+clean.
+

@@ -17,4 +17,6 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     List<Order> findByCreatedAtBetweenOrderByCreatedAtAsc(Instant start, Instant end);
 
     List<Order> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
+    long countByOrderModeAndStatus(TradingMode orderMode, OrderStatus status);
 }

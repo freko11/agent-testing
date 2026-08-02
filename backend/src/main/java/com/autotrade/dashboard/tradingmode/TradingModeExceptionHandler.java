@@ -14,9 +14,9 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class TradingModeExceptionHandler {
 
-    @ExceptionHandler(LiveModeNotYetAvailableException.class)
-    public ResponseEntity<ApiErrorResponse> handleLiveModeNotYetAvailable(LiveModeNotYetAvailableException e) {
+    @ExceptionHandler(PaperTradeThresholdNotMetException.class)
+    public ResponseEntity<ApiErrorResponse> handlePaperTradeThresholdNotMet(PaperTradeThresholdNotMetException e) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(new ApiErrorResponse("LIVE_MODE_NOT_YET_AVAILABLE", e.getMessage(), null));
+                .body(new ApiErrorResponse("PAPER_TRADE_THRESHOLD_NOT_MET", e.getMessage(), null));
     }
 }

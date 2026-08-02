@@ -3,10 +3,16 @@ import { parseMarketDataError } from '../marketdata/api'
 
 export type TradingMode = 'PAPER' | 'LIVE'
 
-/** The global paper/live switch's current state (E6-F1-S1) — mirrors TradingModeResponse field-for-field. */
+/**
+ * The global paper/live switch's current state (E6-F1-S1) plus progress toward the paper-trade threshold
+ * that gates LIVE mode (E6-F1-S2) — mirrors TradingModeResponse field-for-field.
+ */
 export interface TradingModeState {
   mode: TradingMode
   changedAt: string | null
+  successfulPaperTrades: number
+  paperTradeThreshold: number
+  liveModeUnlocked: boolean
 }
 
 export async function fetchTradingMode(): Promise<TradingModeState> {

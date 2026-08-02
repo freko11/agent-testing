@@ -409,6 +409,12 @@ body {
   color: light-dark(#c2410c, #fb923c);
 }
 
+.trading-mode-banner__threshold {
+  flex-basis: 100%;
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+
 /* PAPER is calm/informational; LIVE is a deliberate, singular exception to this
    app's avoid-raw-red convention — it isn't part of a red/green comparison pair
    the way BUY/SELL is, and the word "LIVE" is always shown alongside the color. */
