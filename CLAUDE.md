@@ -16,8 +16,8 @@ Testnet) with risk/safety guardrails (E6).
 
 ## Status
 
-All stories below are done unless noted. Current next-up story: **E6-F2-S1** (hard
-server-side cap on leverage and position size).
+All stories below are done unless noted. Current next-up story: **E6-F2-S2** (kill
+switch that cancels all open orders and blocks new submissions).
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -76,6 +76,20 @@ server-side cap on leverage and position size).
   banner opens a disclaimer dialog (mirroring `TradeForm`'s confirm-dialog
   pattern) the first time a user tries to switch to LIVE once the threshold
   is met, and never asks again once consent is recorded.
+- E6-F2-S1: Hard server-side cap on leverage and position size, enforced by
+  the new `risk.RiskLimitService` regardless of what the frontend sent.
+  Configured via `risk-limits.*` (`stock-max-position-size-usd` default 5000,
+  `crypto-max-leverage` default 5, `crypto-max-position-size-usd` default
+  2000). "Position size" is notional exposure (`amountUsd * leverage`); stock
+  leverage is always 1x, so its notional equals the entered amount. Called
+  from `OrderService.submitOrder` right after the existing shape/bounds
+  `validate()` call, before any `Order` row is created or the broker is
+  called — a breach throws `RiskLimitExceededException` (403
+  `RISK_LIMIT_EXCEEDED`), the same pre-flight, no-row treatment as
+  `InvalidTradeRequestException`. `RiskLimitService`'s constructor fails
+  fast if `crypto-max-leverage` is ever configured above
+  `OrderService.MAX_CRYPTO_LEVERAGE` (20x) — a cap above the adapter's own
+  ceiling would never actually bind.
 
 ## Build / lint / test
 
@@ -119,6 +133,9 @@ server-side cap on leverage and position size).
 - `tradingmode` — `TradingModeService` (append-only `trading_mode_events`,
   latest row = current mode, gated by both E6-F1-S2's paper-trade threshold and
   E6-F1-S3's `risk_consents` one-time acknowledgment).
+- `risk` — `RiskLimitService` (E6-F2-S1's hard per-order leverage/position-size
+  caps, config-only via `RiskLimitsProperties`), called from `OrderService`
+  pre-flight, before any `Order` row exists.
 - `watchlist`, `security` (session auth), `common` (`Clock`/`SchedulingConfig`).
 - Schema: Flyway `V1`–`V11` under `backend/src/main/resources/db/migration/` is the
   single source of truth; `spring.jpa.hibernate.ddl-auto=validate` everywhere.
@@ -181,6 +198,13 @@ new is broken. Full detail/original story for each is in `docs/CHANGELOG.md`.
 - **Binance signed requests**: never rebuild the query string via
   `UriBuilder`/`UriComponentsBuilder` after signing — re-encoding breaks the HMAC
   signature. Send the literal, pre-built query string.
+- **`backend/src/test/resources/application.properties` shadows, not merges
+  with, main's `application.properties`** for every `@SpringBootTest` — a new
+  `@ConfigurationProperties`/`@Value` key added to main's file also needs a
+  literal (non-placeholder) default added there, or any bean whose
+  constructor reads it unconditionally fails context startup with a
+  confusing `NullPointerException` deep in bean instantiation, not an
+  obviously-missing-property error (bit E6-F2-S1's `RiskLimitService`).
 
 ## Mandatory workflow
 

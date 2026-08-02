@@ -1,6 +1,7 @@
 package com.autotrade.dashboard.order;
 
 import com.autotrade.dashboard.broker.Broker;
+import com.autotrade.dashboard.risk.RiskLimitExceededException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -101,6 +102,19 @@ class OrderControllerTest {
                         .content(body))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("INVALID_REQUEST"));
+    }
+
+    @Test
+    void placeOrder_overRiskLimit_returns403() throws Exception {
+        when(orderService.submitOrder(org.mockito.ArgumentMatchers.eq("BTCUSDT"),
+                org.mockito.ArgumentMatchers.any(PlaceOrderRequest.class)))
+                .thenThrow(new RiskLimitExceededException("Leverage 10x exceeds the configured cap of 5x."));
+
+        mockMvc.perform(post("/api/tickers/BTCUSDT/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validBody()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("RISK_LIMIT_EXCEEDED"));
     }
 
     @Test

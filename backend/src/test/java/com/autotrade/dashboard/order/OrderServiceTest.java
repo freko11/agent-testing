@@ -19,6 +19,9 @@ import com.autotrade.dashboard.indicator.MovingAverageRelation;
 import com.autotrade.dashboard.indicator.MovingAverageResult;
 import com.autotrade.dashboard.marketdata.TickerSummary;
 import com.autotrade.dashboard.notification.NotificationService;
+import com.autotrade.dashboard.risk.RiskLimitExceededException;
+import com.autotrade.dashboard.risk.RiskLimitService;
+import com.autotrade.dashboard.risk.RiskLimitsProperties;
 import com.autotrade.dashboard.signal.SignalCall;
 import com.autotrade.dashboard.signal.SignalCallEntry;
 import com.autotrade.dashboard.signal.SignalCallEntryRepository;
@@ -53,6 +56,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /** Proves signal recomputation, server-side re-validation, quantity conversion, adapter routing, and every placeOrder outcome map onto the persisted Order correctly. */
@@ -75,14 +79,20 @@ class OrderServiceTest {
     private NotificationService notificationService;
     @Mock
     private TradingModeService tradingModeService;
+    @Mock
+    private RiskLimitService riskLimitService;
 
     private OrderService service;
     private final AtomicReference<Order> saved = new AtomicReference<>();
 
+    /** Mirrors the conservative starter defaults in application.properties (E6-F2-S1). */
+    private static final RiskLimitsProperties REAL_RISK_LIMITS =
+            new RiskLimitsProperties(new BigDecimal("5000"), new BigDecimal("5"), new BigDecimal("2000"));
+
     @BeforeEach
     void setUp() {
         service = new OrderService(signalService, router, brokerCredentialService, orderRepository,
-                signalCallEntryRepository, notificationService, tradingModeService);
+                signalCallEntryRepository, notificationService, tradingModeService, riskLimitService);
         lenient().when(tradingModeService.current()).thenReturn(TradingMode.PAPER);
         lenient().when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
             Order order = invocation.getArgument(0);
@@ -362,6 +372,69 @@ class OrderServiceTest {
         verify(brokerCredentialService).find(Broker.BINANCE, TradingMode.LIVE);
         verify(adapter).placeOrder(any(BrokerOrderRequest.class), eq(TradingMode.LIVE));
         assertEquals(TradingMode.LIVE, saved.get().getOrderMode());
+    }
+
+    /** Uses a real {@link RiskLimitService} (not the class's mocked {@code riskLimitService} field) so these E6-F2-S1
+     * tests exercise genuine cap enforcement end to end, not just that {@code OrderService} calls its collaborator. */
+    private OrderService serviceWithRealRiskLimits() {
+        return new OrderService(signalService, router, brokerCredentialService, orderRepository,
+                signalCallEntryRepository, notificationService, tradingModeService, new RiskLimitService(REAL_RISK_LIMITS));
+    }
+
+    @Test
+    void overCapLeverage_forgedPlaceOrderRequest_rejectedNoOrderRowNoAdapterCall() {
+        Ticker ticker = cryptoTicker();
+        when(signalService.computeSignalWithProvenance("BTCUSDT", 200))
+                .thenReturn(buyComputation(ticker, new BigDecimal("100")));
+        OrderService serviceWithRealCaps = serviceWithRealRiskLimits();
+
+        // 10x is within OrderService.MAX_CRYPTO_LEVERAGE (20x) and within adapter-technical bounds, but above the
+        // configured 5x risk cap — a request never touched by frontend/src/trade/validation.ts, simulating a
+        // forged/direct API call that a UI bug or fat-finger could never reach through the form.
+        PlaceOrderRequest request = new PlaceOrderRequest(new BigDecimal("100"), new BigDecimal("10"),
+                new BigDecimal("110"), new BigDecimal("90"));
+
+        assertThrows(RiskLimitExceededException.class, () -> serviceWithRealCaps.submitOrder("BTCUSDT", request));
+        verify(orderRepository, never()).save(any());
+        verifyNoInteractions(adapter);
+    }
+
+    @Test
+    void overCapPositionSize_forgedPlaceOrderRequest_rejectedNoOrderRowNoAdapterCall() {
+        Ticker ticker = cryptoTicker();
+        when(signalService.computeSignalWithProvenance("BTCUSDT", 200))
+                .thenReturn(buyComputation(ticker, new BigDecimal("100")));
+        OrderService serviceWithRealCaps = serviceWithRealRiskLimits();
+
+        // Leverage (1x) is well within cap, but notional = amountUsd * leverage = 3000 exceeds the 2000 position-size cap.
+        PlaceOrderRequest request = new PlaceOrderRequest(new BigDecimal("3000"), BigDecimal.ONE,
+                new BigDecimal("110"), new BigDecimal("90"));
+
+        assertThrows(RiskLimitExceededException.class, () -> serviceWithRealCaps.submitOrder("BTCUSDT", request));
+        verify(orderRepository, never()).save(any());
+        verifyNoInteractions(adapter);
+    }
+
+    @Test
+    void atExactRiskCap_allowed_orderSubmittedNormally() {
+        Ticker ticker = cryptoTicker();
+        when(signalService.computeSignalWithProvenance("BTCUSDT", 200))
+                .thenReturn(buyComputation(ticker, new BigDecimal("100")));
+        when(router.forAssetType(AssetType.CRYPTO)).thenReturn(adapter);
+        when(adapter.broker()).thenReturn(Broker.BINANCE);
+        when(brokerCredentialService.find(Broker.BINANCE, TradingMode.PAPER)).thenReturn(Optional.of(credential()));
+        BrokerOrderResult result = new BrokerOrderResult("client-id", "broker-order-1", OrderStatus.FILLED,
+                new BigDecimal("100.5"), null, Instant.parse("2026-07-29T00:00:01Z"));
+        when(adapter.placeOrder(any(BrokerOrderRequest.class), eq(TradingMode.PAPER))).thenReturn(result);
+        OrderService serviceWithRealCaps = serviceWithRealRiskLimits();
+
+        // notional = 2000 * 1 = 2000, exactly at the configured crypto position-size cap — boundary-inclusive.
+        PlaceOrderRequest request = new PlaceOrderRequest(new BigDecimal("2000"), BigDecimal.ONE,
+                new BigDecimal("110"), new BigDecimal("90"));
+
+        TradeOrderResponse response = serviceWithRealCaps.submitOrder("BTCUSDT", request);
+
+        assertEquals(OrderStatus.FILLED, response.status());
     }
 
     @Test

@@ -13,6 +13,7 @@ import com.autotrade.dashboard.brokeradapter.BrokerOrderRequest;
 import com.autotrade.dashboard.brokeradapter.BrokerOrderResult;
 import com.autotrade.dashboard.common.TradingMode;
 import com.autotrade.dashboard.notification.NotificationService;
+import com.autotrade.dashboard.risk.RiskLimitService;
 import com.autotrade.dashboard.signal.SignalCall;
 import com.autotrade.dashboard.signal.SignalCallEntry;
 import com.autotrade.dashboard.signal.SignalCallEntryRepository;
@@ -57,8 +58,9 @@ import java.util.stream.Collectors;
  * then finalized in a second short write. Every outcome — filled, a business
  * rejection, a partially-protected fill, or an infrastructure failure — is
  * written onto that row as a normal value; only pre-flight failures (bad
- * ticker/request, no actionable signal, no credential configured) skip
- * creating an {@code Order} row at all.
+ * ticker/request, no actionable signal, no credential configured, or a
+ * breached {@link RiskLimitService risk cap}, E6-F2-S1) skip creating an
+ * {@code Order} row at all.
  *
  * <p>Also serves order status/history (E5-F3-S1): {@link #listOrders} reads
  * straight from the DB (every order already reflects its final synchronous
@@ -85,11 +87,12 @@ public class OrderService {
     private final SignalCallEntryRepository signalCallEntryRepository;
     private final NotificationService notificationService;
     private final TradingModeService tradingModeService;
+    private final RiskLimitService riskLimitService;
 
     public OrderService(SignalService signalService, BrokerAdapterRouter router,
                          BrokerCredentialService brokerCredentialService, OrderRepository orderRepository,
                          SignalCallEntryRepository signalCallEntryRepository, NotificationService notificationService,
-                         TradingModeService tradingModeService) {
+                         TradingModeService tradingModeService, RiskLimitService riskLimitService) {
         this.signalService = signalService;
         this.router = router;
         this.brokerCredentialService = brokerCredentialService;
@@ -97,6 +100,7 @@ public class OrderService {
         this.signalCallEntryRepository = signalCallEntryRepository;
         this.notificationService = notificationService;
         this.tradingModeService = tradingModeService;
+        this.riskLimitService = riskLimitService;
     }
 
     public TradeOrderResponse submitOrder(String symbol, PlaceOrderRequest request) {
@@ -112,6 +116,7 @@ public class OrderService {
         OrderSide side = signal.call() == SignalCall.BUY ? OrderSide.BUY : OrderSide.SELL;
 
         validate(request, ticker.getAssetType(), side, price);
+        riskLimitService.enforcePerOrderCaps(ticker.getAssetType(), request.amountUsd(), request.leverage());
 
         BigDecimal quantity = request.amountUsd().divide(price, 8, RoundingMode.DOWN);
         if (quantity.signum() <= 0) {

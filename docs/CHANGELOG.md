@@ -2,7 +2,7 @@
 
 Full per-story build history for this project: design-gate rationale, bugs
 found and fixed, and live-verification notes, in the order the stories were
-built (E1-F1-S1 → E6-F1-S1 so far). For current status, commands, and
+built (E1-F1-S1 → E6-F2-S1 so far). For current status, commands, and
 architecture, see `CLAUDE.md` instead — this file is historical detail, not
 a reference doc, and isn't loaded by default the way CLAUDE.md is.
 
@@ -2785,4 +2785,70 @@ PAPER and then to LIVE again went straight through with no dialog, confirming co
 persistence is honored on repeat switches. No console errors. Backend and Docker
 processes stopped afterward. Full `./mvnw verify` (20 new/updated tests in
 `tradingmode`, full suite green) and frontend `npm run build`/`lint`/`test` all clean.
+
+## E6-F2-S1 — hard server-side cap on leverage and position size
+
+Design gate (`Plan` agent) settled the shape before any code: a new `risk` package
+rather than folding into `OrderService.validate()`'s existing shape/bounds checks —
+this is a separately-configured *risk policy*, not adapter-technical validation, and
+gives E6-F2-S2 (kill switch) and E6-F2-S3 (aggregate exposure cap) an obvious shared
+home instead of `OrderService` accreting ad hoc private checks. Two product decisions
+the plan flagged rather than guessed, both confirmed with the user before writing
+code: "position size" means notional exposure (`amountUsd * leverage`, the actual
+market exposure taken for a leveraged instrument — not the raw dollar amount typed),
+and the starter cap defaults are conservative (stock $5,000, crypto 5x/$2,000),
+matching a small paper/testnet-scale account, env-overridable to raise later.
+
+Backend: new `risk` package — `RiskLimitsProperties` (`@ConfigurationProperties`
+record, `risk-limits.*` keys, mirroring `BinanceFuturesTradingProperties`'s pattern),
+`RiskLimitService.enforcePerOrderCaps(assetType, amountUsd, leverage)` (throws
+`RiskLimitExceededException` on breach), `RiskExceptionHandler` (403
+`RISK_LIMIT_EXCEEDED`, same per-domain-advice-class convention as
+`TradingModeExceptionHandler`), `RiskLimitConfig` (`@EnableConfigurationProperties`).
+`RiskLimitService`'s constructor fails fast (`IllegalStateException`) if
+`crypto-max-leverage` is ever configured above `OrderService.MAX_CRYPTO_LEVERAGE`
+(20x) — a cap set above the adapter's own technical ceiling would silently never
+bind, exactly the kind of bug this story exists to prevent. Wired into
+`OrderService.submitOrder()` immediately after the existing `validate(...)` call,
+before quantity computation, `Order` persistence, or any broker call — a breach gets
+the same pre-flight, no-row treatment as `InvalidTradeRequestException`, not the
+broker-rejection path (no reconciliation/idempotency concern, since nothing was ever
+submitted).
+
+Bug found running the full suite: `backend/src/test/resources/application.properties`
+completely shadows (not merges with) main's `application.properties` for every
+`@SpringBootTest` — same reason `trading-mode.paper-trade-threshold` is duplicated
+there as a literal `10` instead of the main file's placeholder syntax. Missed this
+initially, so `RiskLimitsProperties` bound with all-null fields in any full-context
+test, and `RiskLimitService`'s fail-fast constructor check threw a `NullPointerException`
+on `cryptoMaxLeverage().compareTo(...)` — a confusing failure mode (deep inside bean
+instantiation, `UnsatisfiedDependencyException` → `BeanCreationException` →
+`BeanInstantiationException` → NPE) for what was really just a missing test property.
+Fixed by adding the same three `risk-limits.*` keys (literal values, no placeholder)
+to the test-resources file. Documented as a new recurring gotcha in CLAUDE.md since
+it'll bite the next new config key too.
+
+Tests: `RiskLimitServiceTest` (7 cases — exact-boundary-inclusive caps, leverage
+breach, position-size breach independent of leverage, within-caps allowed, and the
+fail-fast startup check) plus three `OrderServiceTest` additions that construct a
+*real* `RiskLimitService` (not the class's mocked field) so they exercise genuine
+end-to-end enforcement, not just that `OrderService` calls its collaborator: a forged
+`PlaceOrderRequest` with leverage above the configured cap but within the adapter's
+20x technical ceiling, one with position size over cap at low leverage, and one
+exactly at the cap boundary — the first two assert `RiskLimitExceededException`, zero
+`orderRepository.save()` calls, and zero adapter interactions, the literal proof of
+"backend rejects regardless of what the frontend sent" since neither test goes
+anywhere near `frontend/src/trade/validation.ts`. Plus one `OrderControllerTest`
+addition proving the HTTP-level 403/`RISK_LIMIT_EXCEEDED` mapping. Full `./mvnw verify`
+green (39 tests in `OrderServiceTest` alone, no regressions elsewhere).
+
+Not verified live in a running browser: Docker wasn't running in this session, so the
+Oracle-backed full stack (backend + frontend) wasn't brought up for a click-through.
+Verification here rests on the unit-test suite (real `RiskLimitService` wired into
+`OrderService` in the new tests above, not just mocks) rather than an actual HTTP
+round-trip through a live server. Worth a follow-up manual check once Docker's
+available: type a crypto leverage of, say, 10 into the actual `TradeForm` (frontend
+validation currently only bounds leverage to the adapter's 1–20x range, not this
+story's stricter 5x default) and confirm the UI surfaces the 403 sensibly rather than
+a generic failure.
 
