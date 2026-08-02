@@ -95,6 +95,7 @@ public class OrderService {
     private final BrokerCredentialService brokerCredentialService;
     private final OrderRepository orderRepository;
     private final SignalCallEntryRepository signalCallEntryRepository;
+    private final OrderAuditEntryRepository orderAuditEntryRepository;
     private final NotificationService notificationService;
     private final TradingModeService tradingModeService;
     private final RiskLimitService riskLimitService;
@@ -102,7 +103,8 @@ public class OrderService {
 
     public OrderService(SignalService signalService, BrokerAdapterRouter router,
                          BrokerCredentialService brokerCredentialService, OrderRepository orderRepository,
-                         SignalCallEntryRepository signalCallEntryRepository, NotificationService notificationService,
+                         SignalCallEntryRepository signalCallEntryRepository,
+                         OrderAuditEntryRepository orderAuditEntryRepository, NotificationService notificationService,
                          TradingModeService tradingModeService, RiskLimitService riskLimitService,
                          KillSwitchService killSwitchService) {
         this.signalService = signalService;
@@ -110,6 +112,7 @@ public class OrderService {
         this.brokerCredentialService = brokerCredentialService;
         this.orderRepository = orderRepository;
         this.signalCallEntryRepository = signalCallEntryRepository;
+        this.orderAuditEntryRepository = orderAuditEntryRepository;
         this.notificationService = notificationService;
         this.tradingModeService = tradingModeService;
         this.riskLimitService = riskLimitService;
@@ -148,6 +151,10 @@ public class OrderService {
         BrokerCredential credential = brokerCredentialService.find(broker, mode)
                 .orElseThrow(() -> new BrokerCredentialNotConfiguredException(broker, mode));
 
+        SignalCallEntry signalCallEntry = signalCallEntryRepository
+                .findTopByIndicatorSnapshot_IdOrderByIdDesc(computation.snapshot().getId())
+                .orElseThrow(() -> new IllegalStateException("SignalCallEntry vanished right after being persisted"));
+
         String clientOrderId = UUID.randomUUID().toString();
         Order order = new Order(ticker, credential, broker, ticker.getAssetType(), side, quantity,
                 request.takeProfitPrice(), request.stopLossPrice(), clientOrderId);
@@ -164,19 +171,21 @@ public class OrderService {
 
         try {
             BrokerOrderResult result = adapter.placeOrder(brokerRequest, mode);
-            return TradeOrderResponse.from(applyResult(orderId, result));
+            return TradeOrderResponse.from(recordAuditEntry(applyResult(orderId, result), signalCallEntry));
         } catch (BrokerAdapterAmbiguousOrderException e) {
-            return TradeOrderResponse.from(applyOutcome(orderId, OrderStatus.SUBMISSION_UNKNOWN, e.getMessage(), null));
+            return TradeOrderResponse.from(recordAuditEntry(
+                    applyOutcome(orderId, OrderStatus.SUBMISSION_UNKNOWN, e.getMessage(), null), signalCallEntry));
         } catch (BrokerAdapterUnavailableException e) {
-            return TradeOrderResponse.from(applyOutcome(orderId, OrderStatus.FAILED,
+            return TradeOrderResponse.from(recordAuditEntry(applyOutcome(orderId, OrderStatus.FAILED,
                     "Broker unavailable after retries exhausted: " + e.getMessage() + ". Order was not submitted; safe to retry.",
-                    null));
+                    null), signalCallEntry));
         } catch (BrokerAdapterRateLimitedException e) {
             String suffix = e.retryAfterSeconds() != null ? "; retry after " + e.retryAfterSeconds() + "s" : "";
-            return TradeOrderResponse.from(applyOutcome(orderId, OrderStatus.FAILED,
-                    "Rate limited by " + broker + suffix + ". Order was not submitted.", null));
+            return TradeOrderResponse.from(recordAuditEntry(applyOutcome(orderId, OrderStatus.FAILED,
+                    "Rate limited by " + broker + suffix + ". Order was not submitted.", null), signalCallEntry));
         } catch (BrokerAdapterException e) {
-            return TradeOrderResponse.from(applyOutcome(orderId, OrderStatus.FAILED, e.getMessage(), null));
+            return TradeOrderResponse.from(
+                    recordAuditEntry(applyOutcome(orderId, OrderStatus.FAILED, e.getMessage(), null), signalCallEntry));
         }
     }
 
@@ -309,10 +318,24 @@ public class OrderService {
         return applyOutcome(orderId, result.status(), result.rejectionReason(), result);
     }
 
+    /** Writes the one, never-updated {@code OrderAuditEntry} row for an order (E6-F3-S1), capturing its first
+     * resolved outcome from {@link #submitOrder} only — deliberately not called from {@link #refreshOrder} or
+     * {@link #cancelAllOpenOrders}, so a later status change to {@code order} (e.g. {@code SUBMISSION_UNKNOWN}
+     * resolving to {@code FILLED}, or a cancellation) is never reflected here. This freezes the decision made at
+     * order-placement time; {@code Order}/{@code OrderResponse}/CSV export remain the source of truth for an
+     * order's current/live status. */
+    private Order recordAuditEntry(Order order, SignalCallEntry signalCallEntry) {
+        orderAuditEntryRepository.save(new OrderAuditEntry(order, signalCallEntry, order.getStatus(),
+                order.getRejectionReason(), order.getBrokerOrderId(), order.getEntryPrice()));
+        return order;
+    }
+
     /** Not {@code @Transactional} at the {@link #submitOrder} level — each of these two short writes gets its own
      * transaction via {@code SimpleJpaRepository}, so the DB connection is never held open across the broker HTTP call.
      * Notifies (E5-F4-S1) only on a genuine status transition — this is what stops a manual {@link #refreshOrder}
-     * re-poll of an already-terminal order (e.g. re-fetching an already-{@code FILLED} order) from re-notifying. */
+     * re-poll of an already-terminal order (e.g. re-fetching an already-{@code FILLED} order) from re-notifying.
+     * Also called by {@link #refreshOrder}/{@link #cancelAllOpenOrders} to keep updating {@code Order} after
+     * submission — unlike {@link #recordAuditEntry}, which only ever fires once, from {@link #submitOrder}. */
     private Order applyOutcome(Long orderId, OrderStatus status, String rejectionReason, BrokerOrderResult result) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new IllegalStateException("Order " + orderId + " vanished mid-submission"));

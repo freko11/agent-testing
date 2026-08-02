@@ -79,6 +79,8 @@ class OrderServiceTest {
     @Mock
     private SignalCallEntryRepository signalCallEntryRepository;
     @Mock
+    private OrderAuditEntryRepository orderAuditEntryRepository;
+    @Mock
     private BrokerAdapter adapter;
     @Mock
     private NotificationService notificationService;
@@ -99,7 +101,8 @@ class OrderServiceTest {
     @BeforeEach
     void setUp() {
         service = new OrderService(signalService, router, brokerCredentialService, orderRepository,
-                signalCallEntryRepository, notificationService, tradingModeService, riskLimitService, killSwitchService);
+                signalCallEntryRepository, orderAuditEntryRepository, notificationService, tradingModeService,
+                riskLimitService, killSwitchService);
         lenient().when(tradingModeService.current()).thenReturn(TradingMode.PAPER);
         lenient().when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
             Order order = invocation.getArgument(0);
@@ -111,6 +114,11 @@ class OrderServiceTest {
         });
         lenient().when(orderRepository.findById(1L)).thenAnswer(invocation -> Optional.ofNullable(saved.get()));
         lenient().when(orderRepository.sumOpenNotionalUsd(any(), any())).thenReturn(BigDecimal.ZERO);
+        // Default stub: most tests only care about Order/TradeOrderResponse outcomes, not the audit row itself
+        // (that's covered by dedicated tests below) -- any() here matches the null snapshot id most test fixtures
+        // construct IndicatorSnapshot with, same as this stub not caring which SignalCallEntry it hands back.
+        lenient().when(signalCallEntryRepository.findTopByIndicatorSnapshot_IdOrderByIdDesc(any()))
+                .thenReturn(Optional.of(mock(SignalCallEntry.class)));
     }
 
     private Ticker cryptoTicker() {
@@ -160,6 +168,7 @@ class OrderServiceTest {
 
         assertThrows(SignalNotActionableException.class, () -> service.submitOrder("BTCUSDT", request));
         verify(orderRepository, never()).save(any());
+        verifyNoInteractions(orderAuditEntryRepository);
     }
 
     @Test
@@ -247,6 +256,40 @@ class OrderServiceTest {
         verify(notificationService).recordOrderOutcome(any(Order.class), eq(OrderStatus.PENDING));
     }
 
+    /** E6-F3-S1: the immutable audit row is written exactly once, at the order's first resolved outcome, FK'd to
+     * both the persisted {@code Order} and the {@code SignalCallEntry} already saved for this signal computation. */
+    @Test
+    void filledOrder_recordsAuditEntryLinkedToOrderAndSignalCall() {
+        Ticker ticker = cryptoTicker();
+        when(signalService.computeSignalWithProvenance("BTCUSDT", 200))
+                .thenReturn(buyComputation(ticker, new BigDecimal("100")));
+        when(router.forAssetType(AssetType.CRYPTO)).thenReturn(adapter);
+        when(adapter.broker()).thenReturn(Broker.BINANCE);
+        when(brokerCredentialService.find(Broker.BINANCE, TradingMode.PAPER)).thenReturn(Optional.of(credential()));
+        SignalCallEntry signalCallEntry = mock(SignalCallEntry.class);
+        when(signalCallEntryRepository.findTopByIndicatorSnapshot_IdOrderByIdDesc(any()))
+                .thenReturn(Optional.of(signalCallEntry));
+
+        BrokerOrderResult result = new BrokerOrderResult("client-id", "broker-order-1", OrderStatus.FILLED,
+                new BigDecimal("100.5"), null, Instant.parse("2026-07-29T00:00:01Z"));
+        when(adapter.placeOrder(any(BrokerOrderRequest.class), eq(TradingMode.PAPER))).thenReturn(result);
+
+        PlaceOrderRequest request = new PlaceOrderRequest(new BigDecimal("1000"), BigDecimal.ONE,
+                new BigDecimal("110"), new BigDecimal("90"));
+
+        service.submitOrder("BTCUSDT", request);
+
+        ArgumentCaptor<OrderAuditEntry> auditCaptor = ArgumentCaptor.forClass(OrderAuditEntry.class);
+        verify(orderAuditEntryRepository).save(auditCaptor.capture());
+        OrderAuditEntry entry = auditCaptor.getValue();
+        assertEquals(saved.get(), entry.getOrder());
+        assertEquals(signalCallEntry, entry.getSignalCallEntry());
+        assertEquals(OrderStatus.FILLED, entry.getResultStatus());
+        assertEquals("broker-order-1", entry.getBrokerOrderId());
+        assertEquals(new BigDecimal("100.5"), entry.getEntryPrice());
+        assertNull(entry.getRejectionReason());
+    }
+
     @Test
     void rejectedOrder_persistsAsRejectedWithReason() {
         Ticker ticker = cryptoTicker();
@@ -267,6 +310,11 @@ class OrderServiceTest {
 
         assertEquals(OrderStatus.REJECTED, response.status());
         assertEquals("Insufficient margin", response.rejectionReason());
+
+        ArgumentCaptor<OrderAuditEntry> auditCaptor = ArgumentCaptor.forClass(OrderAuditEntry.class);
+        verify(orderAuditEntryRepository).save(auditCaptor.capture());
+        assertEquals(OrderStatus.REJECTED, auditCaptor.getValue().getResultStatus());
+        assertEquals("Insufficient margin", auditCaptor.getValue().getRejectionReason());
     }
 
     @Test
@@ -397,7 +445,7 @@ class OrderServiceTest {
      * tests exercise genuine cap enforcement end to end, not just that {@code OrderService} calls its collaborator. */
     private OrderService serviceWithRealRiskLimits() {
         return new OrderService(signalService, router, brokerCredentialService, orderRepository,
-                signalCallEntryRepository, notificationService, tradingModeService,
+                signalCallEntryRepository, orderAuditEntryRepository, notificationService, tradingModeService,
                 new RiskLimitService(REAL_RISK_LIMITS), killSwitchService);
     }
 
@@ -417,6 +465,7 @@ class OrderServiceTest {
         assertThrows(RiskLimitExceededException.class, () -> serviceWithRealCaps.submitOrder("BTCUSDT", request));
         verify(orderRepository, never()).save(any());
         verifyNoInteractions(adapter);
+        verifyNoInteractions(orderAuditEntryRepository);
     }
 
     @Test
@@ -601,6 +650,9 @@ class OrderServiceTest {
         assertEquals("broker-7", response.brokerOrderId());
         assertEquals(new BigDecimal("101.0"), response.entryPrice());
         verify(notificationService).recordOrderOutcome(any(Order.class), eq(OrderStatus.SUBMISSION_UNKNOWN));
+        // E6-F3-S1 scope boundary: refreshOrder resolving a status further never touches the audit log --
+        // that row was already frozen at submitOrder time and stays frozen.
+        verifyNoInteractions(orderAuditEntryRepository);
     }
 
     @Test

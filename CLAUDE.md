@@ -16,8 +16,8 @@ Testnet) with risk/safety guardrails (E6).
 
 ## Status
 
-All stories below are done unless noted. Current next-up story: **E6-F3-S1**
-(append-only audit log of every order and the signal that triggered it).
+All stories below are done unless noted. Current next-up story: **E6-F3-S2**
+(record the rule-table version alongside the signal snapshot in the audit log).
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -128,6 +128,26 @@ All stories below are done unless noted. Current next-up story: **E6-F3-S1**
   would always breach the aggregate cap on its own, even with zero other
   open exposure, the same "a cap that can never bind is a config bug"
   reasoning as E6-F2-S1's leverage-ceiling check.
+- E6-F3-S1: Immutable audit log of every order and the signal that triggered
+  it, via a new `order_audit_entries` table/`OrderAuditEntry` entity
+  (insert-only, no setters, no `@PreUpdate`) written once by
+  `OrderService.submitOrder`, right after that order's first resolved
+  outcome (`FILLED`/`REJECTED`/`FAILED`/`SUBMISSION_UNKNOWN`/etc), FK'd to
+  both the `Order` row and the `SignalCallEntry` already persisted for that
+  submission's signal computation (looked up via a new
+  `SignalCallEntryRepository.findTopByIndicatorSnapshot_IdOrderByIdDesc`,
+  the single-snapshot version of the existing batched CSV-export lookup —
+  chosen over widening `SignalService.computeSignalWithProvenance`'s return
+  shape, to avoid touching its other two callers).  Deliberately scoped to
+  submission time only: unlike `Order` itself (mutated in place by
+  `applyOutcome`/`refreshOrder`/`cancelAllOpenOrders` as a real order's
+  status resolves further), the audit row is never updated after that first
+  write, so it freezes the decision made at order-placement time rather than
+  tracking the order's live/current status — `Order`/`OrderResponse`/CSV
+  export remain the source of truth for that. No new config, no new
+  read endpoint (existing `listOrders`/CSV export already serve as review
+  surfaces); a dedicated audit-trail viewer is left for a future story once
+  E6-F3-S2 adds the rule-table-version column alongside it.
 
 ## Build / lint / test
 
@@ -165,7 +185,9 @@ All stories below are done unless noted. Current next-up story: **E6-F3-S1**
   (retry/backoff/outage-reconciliation), `AlpacaTradingAdapter`,
   `BinanceFuturesTradingAdapter`, `BrokerAdapterRouter` (routes by asset type).
 - `order` — `OrderService` (bracket-order submission, re-derives signal
-  server-side, never trusts client-cached data), status polling, CSV export.
+  server-side, never trusts client-cached data), status polling, CSV export,
+  `OrderAuditEntry` (E6-F3-S1's write-once, never-updated audit log of an
+  order's submission-time decision).
 - `notification` — `WatchlistSignalPoller` (scheduled job, the app's first
   background task), `NotificationService`.
 - `tradingmode` — `TradingModeService` (append-only `trading_mode_events`,
@@ -177,7 +199,7 @@ All stories below are done unless noted. Current next-up story: **E6-F3-S1**
   `KillSwitchController` (E6-F2-S2's global kill switch, append-only
   `kill_switch_events`).
 - `watchlist`, `security` (session auth), `common` (`Clock`/`SchedulingConfig`).
-- Schema: Flyway `V1`–`V12` under `backend/src/main/resources/db/migration/` is the
+- Schema: Flyway `V1`–`V13` under `backend/src/main/resources/db/migration/` is the
   single source of truth; `spring.jpa.hibernate.ddl-auto=validate` everywhere.
 
 **Frontend** (`frontend/src/`) mirrors the backend split: `marketdata`, `signal`,

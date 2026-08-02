@@ -18,4 +18,10 @@ public interface SignalCallEntryRepository extends JpaRepository<SignalCallEntry
      * is restart-safe for free since it's a real persisted row, not in-memory state. {@code id desc} breaks ties on
      * {@code created_at} collisions (same-instant saves). */
     Optional<SignalCallEntry> findTopByTickerOrderByCreatedAtDescIdDesc(Ticker ticker);
+
+    /** Single-snapshot version of {@link #findByIndicatorSnapshot_IdIn} -- looked up by {@code OrderService} (E6-F3-S1)
+     * right after a signal computation to FK the resulting {@code OrderAuditEntry} to the {@code SignalCallEntry} that
+     * was just persisted for it. Same "not DB-enforced 1:1, tie-break to the highest id" tolerance as that method,
+     * matching the pattern {@code OrderCsvExporter} already applies manually for the same ambiguity. */
+    Optional<SignalCallEntry> findTopByIndicatorSnapshot_IdOrderByIdDesc(Long indicatorSnapshotId);
 }

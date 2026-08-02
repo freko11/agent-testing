@@ -3054,3 +3054,82 @@ though its own amount/leverage are well within the per-order caps, and confirm a
 similarly-sized order still succeeds if submitted against the *other* trading mode
 (proving the mode-scoping actually holds against a live backend, not just mocks).
 
+## E6-F3-S1 — immutable audit log of every order and the signal that triggered it
+
+Design gate (`Plan` agent) settled the shape before any code, because the obvious-looking
+answer was wrong: `Order` already carries `ticker`, `indicator_snapshot_id`,
+`requestedAmountUsd`, `leverage`, and a `status`/`rejectionReason`/`brokerOrderId`
+outcome — but `applyOutcome` mutates that same row in place as an order resolves
+(`PENDING` → `FILLED`/`REJECTED`/etc, and later again via `refreshOrder`/
+`cancelAllOpenOrders`). So `orders` itself is not append-only; the actual gap this story
+closes is a row that's genuinely written once and never touched again. The plan
+considered and rejected mirroring `trading_mode_events`/`kill_switch_events`'s
+"append-only events, latest row = current state" pattern — that pattern tracks *current
+state of one global switch*, not *a decision made about one order*, and the acceptance
+criteria's "result" is singular, not a transition history. Settled on: one new
+`order_audit_entries` row per `Order`, written by `OrderService.submitOrder` at that
+order's first resolved outcome only (not from `refreshOrder`/`cancelAllOpenOrders`,
+which keep mutating `orders` afterward) — a deliberate scope cut flagged explicitly
+rather than silently dropped, since it means an audit row can go stale relative to an
+order's later-resolved real status. Also settled: reuse the `SignalCallEntry` already
+persisted by `SignalService.computeSignalWithProvenance` for every signal computation
+(FK it, don't duplicate its columns) via a new single-snapshot repository lookup, rather
+than widening `computeSignalWithProvenance`'s return record — the latter would have
+forced mechanical edits to `WatchlistSignalPoller` and ~15 direct
+`SignalComputation` constructions in `OrderServiceTest`, for a change three unrelated
+stories already depend on. And: no new read endpoint in this story — `listOrders` and
+the existing CSV export already serve as review surfaces, and a dedicated audit-trail
+viewer is better built once E6-F3-S2 lands the rule-table-version column right next to
+it, rather than twice.
+
+Backend: `V13__add_order_audit_entries.sql` — `order_audit_entries` table with FKs to
+`orders` (`UNIQUE`, enforcing the 1:1 write-once intent at the DB level, not just in
+application code), `tickers`, and `signal_calls`, plus `result_status` with a `CHECK`
+constraint whose value list is copied verbatim from `orders.ck_orders_status` (V8) — a
+comment in the migration flags that widening one without the other is a bug. New
+`OrderAuditEntry` entity: no setters, no `@PreUpdate`, a single constructor, matching
+`SignalCallEntry`'s immutable-entity style rather than `Order`'s mutable one. New
+`OrderAuditEntryRepository` (plain `JpaRepository`, no custom finders needed yet — a
+future audit-viewer story adds `findByOrderId`/whatever it needs then).
+`SignalCallEntryRepository` gains
+`findTopByIndicatorSnapshot_IdOrderByIdDesc(indicatorSnapshotId)` — the single-snapshot
+version of the existing `findByIndicatorSnapshot_IdIn` batched lookup `OrderCsvExporter`
+already uses, same "not DB-enforced 1:1, tie-break to the highest id" tolerance.
+`OrderService.submitOrder` looks up the `SignalCallEntry` once, right after resolving
+the broker credential (i.e. after every pre-flight reject path — `HOLD`, invalid
+request, risk-cap breach, kill switch engaged, no credential — has already had its
+chance to throw, so none of them ever touch the new repository), then a new private
+`recordAuditEntry(Order, SignalCallEntry)` helper wraps each of the four
+`applyResult`/`applyOutcome` call sites inside `submitOrder`'s try/catch, saving one
+`OrderAuditEntry` populated from the just-resolved `Order`'s outcome fields before
+returning the `TradeOrderResponse`. Added a javadoc note on both `applyOutcome` (which
+`refreshOrder`/`cancelAllOpenOrders` also call, but never followed by an audit write)
+and `recordAuditEntry` itself cross-referencing the scope boundary, so a future reader
+doesn't assume the audit log stays current after submission.
+
+Tests: `OrderServiceTest` gains a mocked `OrderAuditEntryRepository` collaborator (now
+threaded through both `OrderService` constructors in the file) with a lenient default
+stub for the new `SignalCallEntryRepository` lookup, so every pre-existing test — none
+of which know about this new repository — keeps working unchanged. New/updated cases:
+`filledOrder_recordsAuditEntryLinkedToOrderAndSignalCall` (captures the saved
+`OrderAuditEntry` and asserts it's FK'd to the actual persisted `Order` and the actual
+stubbed `SignalCallEntry`, with `resultStatus`/`brokerOrderId`/`entryPrice` matching the
+broker result), `rejectedOrder_persistsAsRejectedWithReason` extended to also assert the
+audit row's `resultStatus`/`rejectionReason`, `holdSignal_throwsSignalNotActionable_...`
+and `overCapLeverage_forgedPlaceOrderRequest_...` extended with
+`verifyNoInteractions(orderAuditEntryRepository)` to prove pre-flight rejects never
+write an audit row, and `refreshOrder_brokerConfirmsFilled_persistsUpdatedStatus`
+extended with the same `verifyNoInteractions` to prove the deliberate scope boundary —
+a later status resolution through `refreshOrder` does not touch the audit log. Full
+`./mvnw verify` green, including Flyway schema validation of V13 against H2 in
+Oracle-compatibility mode, no regressions.
+
+Not verified live in a running browser: Docker wasn't running in this session, so (same
+as every E6 story so far) no actual HTTP round-trip through a live server or a real
+Oracle instance. Verification rests on the unit-test suite and `./mvnw verify`'s
+H2-backed Flyway validation of the new migration. Worth a follow-up manual check once
+Docker's available: place a paper order through the real UI, confirm exactly one
+`order_audit_entries` row appears for it with the right `signal_call_id`/`ticker_id`
+FKs, then `refreshOrder` or cancel it and confirm the audit row is unchanged while the
+`orders` row itself updates — the concrete behavior this story's scope cut predicts.
+
