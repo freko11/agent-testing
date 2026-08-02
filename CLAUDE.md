@@ -193,6 +193,39 @@ All stories below are done. E6 (Risk & Safety Controls) is complete; E7
   duplicate the same event. Out of scope (kept tight to the AC): no
   MDC/correlation-id tracing, no log file rotation/shipping, no new logging
   library.
+- E7-F2-S1: `security-review` run against credential-storage
+  (`broker.CredentialEncryptionService`/`BrokerCredentialService`, the
+  credential bootstraps) and order-submission code (`OrderService`,
+  `AlpacaTradingAdapter`, `BinanceFuturesTradingAdapter`, `RiskLimitService`,
+  `KillSwitchService`, `TradingModeService`, `OrderAuditEntry`, and
+  `SecurityConfig`'s auth/CSRF setup). One confirmed finding, fixed: the
+  dashboard operator password and the credential-encryption key both had an
+  insecure, source-visible dev-only fallback (`SecurityConfig`'s
+  `DEV_FALLBACK_PASSWORD`, `CredentialEncryptionService`'s
+  `DEV_FALLBACK_KEY`) that silently activated whenever their env vars were
+  unset — logged at WARN, but never refused to start, unlike
+  `spring.datasource.url`'s own no-default `${DB_URL}` placeholder, which
+  already fails paper/prod startup outright on the same kind of gap. Fixed
+  by making both fail fast (`IllegalStateException` at startup) under the
+  `paper`/`prod` Spring profile specifically, leaving the `local`/test
+  fallback behavior unchanged; `CredentialEncryptionService` gained an
+  `activeProfile` constructor parameter (`@Value("${spring.profiles.active}")`,
+  needed an explicit `@Autowired` once a second constructor made Spring's
+  implicit single-constructor autowiring inapplicable) and
+  `SecurityConfig.userDetailsService`'s hash-resolution logic was extracted
+  into a plain, no-Spring-context-needed static method
+  (`resolvePasswordHash`) specifically so this fail-fast branch is
+  unit-testable the same way `CredentialEncryptionService`'s constructor
+  already was. Everything else reviewed clean: Binance's adapter already had
+  a documented, implemented `SYMBOL_PATTERN` guard against query-string
+  injection via an unvalidated ticker symbol (`TickerController` only
+  enforces `@Size(max=20)`, no character-class check, so the adapter is the
+  actual injection boundary); Alpaca's adapter sends structured JSON
+  bodies/URI-templated params, no string-built requests; the live-mode gate
+  (paper-trade threshold + risk consent) and the kill switch/risk caps are
+  enforced entirely server-side with no request-body bypass; the audit log
+  (`OrderAuditEntry`) has no setters and its repository exposes no
+  update/delete path from any controller. No frontend changes.
 
 ## Build / lint / test
 

@@ -3275,3 +3275,112 @@ verification rests on that rather than a live HTTP round-trip. Worth a follow-up
 Docker's available: tail the console while placing a real paper order and confirm the
 format reads cleanly end-to-end outside a test harness.
 
+## E7-F2-S1 — security review of credential-storage and order-submission code
+
+Ran the `security-review` skill's generic pass plus this repo's own project-specific
+checklist against every file the checklist calls out, reading source directly rather than
+trusting docstrings: `broker.CredentialEncryptionService`/`BrokerCredentialService` and
+the two credential bootstraps (E1-F3-S1); `AlpacaTradingAdapter`/
+`BinanceFuturesTradingAdapter` and the HTTP requests they build from ticker/amount/leverage
+input (E4.2/E4.3); `security.SecurityConfig`/`AuthController` (F1.3-S2); `TradingModeService`/
+`TradingModeController` (E6.1's live-mode gate); `RiskLimitService`/`KillSwitchService`
+(E6.2's guardrails); `OrderAuditEntry`/`OrderAuditEntryRepository` (E6.3's audit log).
+
+One confirmed finding. `CredentialEncryptionService` and `SecurityConfig` each have an
+insecure, hardcoded, checked-into-source-control dev-only fallback — a fallback encryption
+key and a fallback dashboard password respectively — that activates whenever their real
+env var (`CREDENTIAL_ENC_KEY_<ID>`, `DASHBOARD_PASSWORD`/`DASHBOARD_PASSWORD_HASH`) is
+unset. Both already logged a WARN when this happened, and both are explicitly documented
+as "never for paper/prod" in their own Javadoc/CLAUDE.md — but neither actually *refused*
+to start on that condition. That's a real gap against this app's own stated posture:
+`application-prod.properties`'s header comment promises "No defaults on purpose: every
+value must come from the environment, so live mode can never start on placeholder
+config," and that promise is genuinely enforced for `spring.datasource.url`/`DB_USERNAME`/
+`DB_PASSWORD` (unguarded `${VAR}` placeholders with no default, so Spring's own property
+resolution fails startup) but not for these two secrets, which read through a
+`:`-defaulted `@Value` (`SecurityConfig`) or directly via `System.getenv()`
+(`CredentialEncryptionService`), bypassing that mechanism entirely. Concretely: a paper/prod
+deploy that forgets to set `CREDENTIAL_ENC_KEY_V1` would start up looking completely
+healthy and would encrypt every real broker API secret at rest with a key that's public in
+this git repository — silent, not loud, exactly the kind of gap this story exists to catch
+before a live account is ever connected.
+
+Fixed both, narrowly, rather than just flagging them: added an `activeProfile` parameter to
+`CredentialEncryptionService`'s constructor (`@Value("${spring.profiles.active:local}")`,
+now needs an explicit `@Autowired` since a second/third constructor made Spring's implicit
+single-constructor autowiring inapplicable — first attempt at `./mvnw test` failed context
+startup with "No default constructor found" until that was added) and a matching
+`activeProfile` field on `SecurityConfig`; under the `paper`/`prod` profile specifically,
+both now throw `IllegalStateException` at startup instead of silently falling back — same
+fail-fast posture as `RiskLimitService`'s constructor checks from E6-F2-S1/E6-F2-S3, and
+now genuinely mirroring `${DB_URL}`'s behavior rather than just being documented to.
+`local`/test behavior is unchanged (still falls back, still just warns) since the whole
+point of the dev-only fallback is to make local dev/tests work without any secrets
+configured. `SecurityConfig.userDetailsService`'s hash-resolution branch was extracted into
+a plain static method, `resolvePasswordHash(password, passwordHash, activeProfile,
+passwordEncoder)`, specifically so this fail-fast branch is unit-testable without a Spring
+context — the same reason `CredentialEncryptionService`'s constructor was already
+structured as plain Java taking an injectable `Map<String, String>` env.
+
+Everything else reviewed clean, no changes needed:
+- **Injection into adapter HTTP calls**: `BinanceFuturesTradingAdapter` already had a
+  documented, implemented `SYMBOL_PATTERN` (`^[A-Z0-9-]{1,20}$`) guard, with its own
+  Javadoc explicitly calling out that `TickerController`'s validation
+  (`@NotBlank @Size(max = 20)`) has no character-class restriction and that the adapter is
+  the actual injection boundary before a signed, literal (non-re-encoded) query string is
+  built — confirmed this fires fatally, pre-HTTP, on every entry point
+  (`placeOrder`/`getOrderStatus`/`getPosition`; `cancelOrder` reuses an already-validated
+  symbol via `getOrderStatus`). `AlpacaTradingAdapter` never string-builds a request at
+  all — Jackson-serialized JSON bodies and `RestClient` URI templating/`queryParam` for
+  every path/query value, both of which encode automatically. `BinanceMarketDataClient`'s
+  unauthenticated read-only klines endpoint also uses `queryParam`, not string
+  concatenation.
+- **Credential handling**: `BrokerCredentialService.DecryptedCredential` overrides
+  `toString()` to redact itself, so an accidental `log.info("{}", credential)` can't leak
+  plaintext; no `BrokerCredentialController` or any other HTTP-reachable path exposes a
+  decrypted credential; exception messages surfaced to the frontend
+  (`BrokerCredentialNotConfiguredException`, adapter rejection reasons) are built from
+  broker/mode enums and broker-returned error bodies, never from the credential itself.
+- **Auth/CSRF**: `SecurityConfig.securityFilterChain` is `.anyRequest().authenticated()`
+  with an explicit allowlist of only `/health`, `/actuator/health`, `/api/auth/csrf`,
+  `/api/auth/login` — enforced server-side by Spring Security, not just hidden by the
+  frontend router. CSRF stays enabled (cookie-based double-submit via
+  `CookieCsrfTokenRepository` + a `SpaCsrfTokenRequestHandler` that reads the raw
+  `X-XSRF-TOKEN` header), matching Spring Security's own documented pattern for a
+  cookie-reading SPA.
+- **Live-mode gate (E6.1)**: `TradingModeService.switchTo` checks the paper-trade
+  threshold and risk-consent gates itself before writing a new `TradingModeEvent`row;
+  `TradingModeController` has no path that sets mode/threshold/consent directly, so there's
+  no request-body field that could skip the gates via a direct API call.
+- **Guardrails (E6.2)**: `RiskLimitService.enforcePerOrderCaps`/`enforceAggregateExposureCap`
+  and `KillSwitchService.assertNotEngaged` are both called from
+  `OrderService.submitOrder` pre-flight, reading only server-side config/DB state — nothing
+  in `PlaceOrderRequest` can override them. `RiskLimitService`'s constructor already
+  fail-fast checks (from E6-F2-S1/E6-F2-S3) that no cap can be configured above the
+  ceiling it's supposed to enforce.
+- **Audit log (E6.3)**: `OrderAuditEntry` has no setters at all (only a package-visible
+  no-arg JPA constructor and the one all-args constructor used at write time);
+  `OrderAuditEntryRepository` is a bare `JpaRepository` with no custom update/delete query,
+  and no controller anywhere exposes it — `OrderService.recordAuditEntry` is the only write
+  path in the app, called exactly once per order from `submitOrder`.
+
+Tests: added `CredentialEncryptionServiceTest.noKeysConfigured_underPaperProfile_failsFastInsteadOfUsingDevKey`/
+`..._underProdProfile_...`/`..._underLocalProfile_fallsBackToDevOnlyKey`, and a new
+`SecurityConfigPasswordFallbackTest` (4 cases: paper/prod fail fast, local falls back,
+an explicit password-hash is used as-is regardless of profile) exercising
+`SecurityConfig.resolvePasswordHash` directly with no Spring context. `./mvnw verify` green
+end-to-end — full suite, not just the touched tests — confirming the new `@Autowired`
+constructor and the extracted static method didn't regress anything else wiring through
+`CredentialEncryptionService`/`SecurityConfig` (adapter tests, `OrderServiceTest`, the full
+`SecurityConfigTest` login/logout flow, etc.).
+
+Not verified live in a running browser: same as E7-F1-S1, Docker wasn't running in this
+session. This story is a review-plus-narrow-fix, not a UI change, so there's nothing new to
+click through — the fail-fast behavior itself was verified by unit test (constructing each
+service under the `paper`/`prod` profile with no secret configured and asserting it throws)
+rather than by an actual failed `spring-boot:run` startup, which would need an env swap this
+session didn't have Docker/Oracle up for. Worth a follow-up once Docker's available: start
+the app under `SPRING_PROFILES_ACTIVE=paper` with `CREDENTIAL_ENC_KEY_V1`/
+`DASHBOARD_PASSWORD_HASH` deliberately unset and confirm it refuses to boot instead of
+silently succeeding.
+

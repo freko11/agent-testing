@@ -45,9 +45,9 @@
     "semantic_hash": "d554dd2a489a3b8c3e5f6f1e4e7d6b43"
   },
   "backend/src/main/java/com/autotrade/dashboard/broker/CredentialEncryptionService.java": {
-    "mtime": 1785037622.207025,
-    "ast_hash": "0f50cd27e607df44fc435b7c014b4c0f",
-    "semantic_hash": "0f50cd27e607df44fc435b7c014b4c0f"
+    "mtime": 1785686465.2974412,
+    "ast_hash": "38348b7dc24620946d7e8b791d0530a9",
+    "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/brokeradapter/AlpacaTradingAdapter.java": {
     "mtime": 1785685346.4092555,
@@ -490,9 +490,9 @@
     "semantic_hash": "a3f1421faa50635963acdd317fc7435d"
   },
   "backend/src/main/java/com/autotrade/dashboard/security/SecurityConfig.java": {
-    "mtime": 1785038758.8942537,
-    "ast_hash": "a6204852d07ef3f26956f1e32acd6e2f",
-    "semantic_hash": "a6204852d07ef3f26956f1e32acd6e2f"
+    "mtime": 1785686377.151376,
+    "ast_hash": "a92c29bf497e2683638b99a6929230dd",
+    "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/signal/HoldTerm.java": {
     "mtime": 1785221915.5514328,
@@ -790,9 +790,9 @@
     "semantic_hash": "0df4f6699d080c0b31cab76cbd86545a"
   },
   "backend/src/test/java/com/autotrade/dashboard/broker/CredentialEncryptionServiceTest.java": {
-    "mtime": 1785037635.1444752,
-    "ast_hash": "e26a42bd12abdd8006875ce5dadce97c",
-    "semantic_hash": "e26a42bd12abdd8006875ce5dadce97c"
+    "mtime": 1785686383.5798323,
+    "ast_hash": "50b28d39f617e0677dc585dbfe8f29ff",
+    "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/brokeradapter/AlpacaTradingAdapterContractTest.java": {
     "mtime": 1785293486.6041968,
@@ -1280,8 +1280,8 @@
     "semantic_hash": "ba2aaaac807614916be42c0c7583990e"
   },
   "CLAUDE.md": {
-    "mtime": 1785685695.6574738,
-    "ast_hash": "37edf55a87b27ec93d046f661887d5e1",
+    "mtime": 1785686651.480429,
+    "ast_hash": "b2e1894b21d07944417d9cf40d6fad82",
     "semantic_hash": ""
   },
   "docker-compose.yml": {
@@ -1330,8 +1330,8 @@
     "semantic_hash": ""
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1785685741.5013306,
-    "ast_hash": "e9e9e3cdf4c53f7d8be8670bc836084f",
+    "mtime": 1785686716.2511966,
+    "ast_hash": "4becddfda46991ff9a35323b82f18d71",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/risk/RiskExceptionHandler.java": {
@@ -1472,6 +1472,11 @@
   "backend/src/main/resources/db/migration/V14__add_rule_table_version_to_order_audit_entries.sql": {
     "mtime": 1785684522.4559007,
     "ast_hash": "7289b124a3ba0579e7da397f8e4b5bc5",
+    "semantic_hash": ""
+  },
+  "backend/src/test/java/com/autotrade/dashboard/security/SecurityConfigPasswordFallbackTest.java": {
+    "mtime": 1785686397.875513,
+    "ast_hash": "794832ec2ac46f75103d408ffd2ea0dc",
     "semantic_hash": ""
   }
 }

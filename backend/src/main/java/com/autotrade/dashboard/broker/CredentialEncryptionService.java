@@ -2,6 +2,8 @@ package com.autotrade.dashboard.broker;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.Cipher;
@@ -31,7 +33,13 @@ import java.util.Map;
  *
  * <p>If no {@code CREDENTIAL_ENC_KEY_*} vars are set at all, falls back to a
  * single insecure dev-only key (id {@code v1}) with a logged warning —
- * acceptable for local/test only, never for paper/prod.
+ * acceptable for local/test only, never for paper/prod. Enforced, not just
+ * documented (E7-F2-S1 security review): under the {@code paper} or {@code
+ * prod} Spring profile, falling back throws {@link IllegalStateException} at
+ * startup instead of silently running with a key checked into this
+ * repository — mirroring how {@code spring.datasource.url}'s own
+ * no-default {@code ${DB_URL}} placeholder already fails those profiles'
+ * startup rather than guessing.
  */
 @Component
 public class CredentialEncryptionService {
@@ -45,16 +53,23 @@ public class CredentialEncryptionService {
     private static final String DEV_FALLBACK_KEY_ID = "v1";
     private static final String DEV_FALLBACK_KEY =
             "insecure-dev-only-fallback-key-do-not-use-in-paper-or-prod";
+    private static final String DEFAULT_PROFILE = "local";
 
     private final Map<String, SecretKeySpec> keyring = new HashMap<>();
     private final String activeKeyId;
 
-    public CredentialEncryptionService() {
-        this(System.getenv());
+    @Autowired
+    public CredentialEncryptionService(@Value("${spring.profiles.active:local}") String activeProfile) {
+        this(System.getenv(), activeProfile);
     }
 
     /** Package-private: lets tests supply a synthetic environment instead of the real one. */
     CredentialEncryptionService(Map<String, String> env) {
+        this(env, DEFAULT_PROFILE);
+    }
+
+    /** Package-private: lets tests supply both a synthetic environment and an active profile. */
+    CredentialEncryptionService(Map<String, String> env, String activeProfile) {
         env.forEach((name, value) -> {
             if (name.startsWith(ENV_KEY_PREFIX) && !value.isBlank()) {
                 String keyId = name.substring(ENV_KEY_PREFIX.length()).toLowerCase();
@@ -63,6 +78,11 @@ public class CredentialEncryptionService {
         });
 
         if (keyring.isEmpty()) {
+            if (isProductionLikeProfile(activeProfile)) {
+                throw new IllegalStateException("No CREDENTIAL_ENC_KEY_<ID> env var is set while running "
+                        + "under the '" + activeProfile + "' profile — refusing to start with the insecure "
+                        + "dev-only fallback key. Set CREDENTIAL_ENC_KEY_V1 and CREDENTIAL_ENC_ACTIVE_KEY_ID.");
+            }
             log.warn("No CREDENTIAL_ENC_KEY_<ID> env vars are set; using an insecure dev-only "
                     + "fallback key (id '{}'). Set CREDENTIAL_ENC_KEY_V1 and CREDENTIAL_ENC_ACTIVE_KEY_ID "
                     + "in paper/prod environments.", DEV_FALLBACK_KEY_ID);
@@ -85,6 +105,10 @@ public class CredentialEncryptionService {
                     "Multiple CREDENTIAL_ENC_KEY_<ID> env vars are set but CREDENTIAL_ENC_ACTIVE_KEY_ID "
                             + "is not — set it to name which key new writes should use.");
         }
+    }
+
+    private static boolean isProductionLikeProfile(String activeProfile) {
+        return "paper".equalsIgnoreCase(activeProfile) || "prod".equalsIgnoreCase(activeProfile);
     }
 
     private static SecretKeySpec deriveKey(String rawKey) {

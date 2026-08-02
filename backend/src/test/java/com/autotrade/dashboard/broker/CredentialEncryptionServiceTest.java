@@ -24,6 +24,24 @@ class CredentialEncryptionServiceTest {
     }
 
     @Test
+    void noKeysConfigured_underPaperProfile_failsFastInsteadOfUsingDevKey() {
+        assertThrows(IllegalStateException.class, () -> new CredentialEncryptionService(Map.of(), "paper"));
+    }
+
+    @Test
+    void noKeysConfigured_underProdProfile_failsFastInsteadOfUsingDevKey() {
+        assertThrows(IllegalStateException.class, () -> new CredentialEncryptionService(Map.of(), "prod"));
+    }
+
+    @Test
+    void noKeysConfigured_underLocalProfile_fallsBackToDevOnlyKey() {
+        CredentialEncryptionService service = new CredentialEncryptionService(Map.of(), "local");
+
+        String ciphertext = service.encrypt("secret-value");
+        assertEquals("secret-value", service.decrypt(service.activeKeyId(), ciphertext));
+    }
+
+    @Test
     void singleKeyConfigured_usedAsActiveWithoutExplicitSelection() {
         CredentialEncryptionService service = new CredentialEncryptionService(
                 Map.of("CREDENTIAL_ENC_KEY_V1", "test-key-one"));

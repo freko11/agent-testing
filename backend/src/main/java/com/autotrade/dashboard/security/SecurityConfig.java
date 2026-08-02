@@ -35,6 +35,14 @@ import java.util.function.Supplier;
  * personal, single-user tool, so one credential sourced from env vars is
  * enough; session cookie + CSRF cookie is the whole auth mechanism, no
  * JWT/OAuth complexity.
+ *
+ * <p>The dev-only fallback password below is enforced, not just documented
+ * (E7-F2-S1 security review): under the {@code paper} or {@code prod} Spring
+ * profile, falling back to it throws {@link IllegalStateException} at
+ * startup instead of silently starting with a password checked into this
+ * repository — mirroring {@code broker.CredentialEncryptionService}'s own
+ * dev-key fail-fast and {@code spring.datasource.url}'s no-default {@code
+ * ${DB_URL}} placeholder.
  */
 @Configuration
 @EnableWebSecurity
@@ -52,6 +60,9 @@ public class SecurityConfig {
     @Value("${dashboard.auth.password-hash:}")
     private String passwordHash;
 
+    @Value("${spring.profiles.active:local}")
+    private String activeProfile;
+
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
@@ -59,20 +70,38 @@ public class SecurityConfig {
 
     @Bean
     public UserDetailsService userDetailsService(PasswordEncoder passwordEncoder) {
-        String hash;
-        if (passwordHash != null && !passwordHash.isBlank()) {
-            hash = passwordHash;
-        } else if (password != null && !password.isBlank()) {
-            log.warn("DASHBOARD_PASSWORD_HASH is not set; hashing DASHBOARD_PASSWORD at startup instead. "
-                    + "Set DASHBOARD_PASSWORD_HASH in paper/prod.");
-            hash = passwordEncoder.encode(password);
-        } else {
-            log.warn("Neither DASHBOARD_PASSWORD nor DASHBOARD_PASSWORD_HASH is set; using an insecure "
-                    + "dev-only fallback password. Set DASHBOARD_PASSWORD_HASH in paper/prod.");
-            hash = passwordEncoder.encode(DEV_FALLBACK_PASSWORD);
-        }
+        String hash = resolvePasswordHash(password, passwordHash, activeProfile, passwordEncoder);
         UserDetails operator = User.withUsername(username).password(hash).roles("OPERATOR").build();
         return new InMemoryUserDetailsManager(operator);
+    }
+
+    /**
+     * Extracted as a plain static method (no Spring context needed) so E7-F2-S1's dev-fallback
+     * fail-fast behavior is directly unit-testable, the same posture as {@code
+     * CredentialEncryptionService}'s constructor.
+     */
+    static String resolvePasswordHash(String password, String passwordHash, String activeProfile,
+                                       PasswordEncoder passwordEncoder) {
+        if (passwordHash != null && !passwordHash.isBlank()) {
+            return passwordHash;
+        }
+        if (password != null && !password.isBlank()) {
+            log.warn("DASHBOARD_PASSWORD_HASH is not set; hashing DASHBOARD_PASSWORD at startup instead. "
+                    + "Set DASHBOARD_PASSWORD_HASH in paper/prod.");
+            return passwordEncoder.encode(password);
+        }
+        if (isProductionLikeProfile(activeProfile)) {
+            throw new IllegalStateException("Neither DASHBOARD_PASSWORD nor DASHBOARD_PASSWORD_HASH is set "
+                    + "while running under the '" + activeProfile + "' profile — refusing to start with the "
+                    + "insecure dev-only fallback password. Set DASHBOARD_PASSWORD_HASH.");
+        }
+        log.warn("Neither DASHBOARD_PASSWORD nor DASHBOARD_PASSWORD_HASH is set; using an insecure "
+                + "dev-only fallback password. Set DASHBOARD_PASSWORD_HASH in paper/prod.");
+        return passwordEncoder.encode(DEV_FALLBACK_PASSWORD);
+    }
+
+    private static boolean isProductionLikeProfile(String activeProfile) {
+        return "paper".equalsIgnoreCase(activeProfile) || "prod".equalsIgnoreCase(activeProfile);
     }
 
     @Bean
