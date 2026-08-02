@@ -27,9 +27,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * current()/switchTo() behavior for E6-F1-S1's global paper/live switch and E6-F1-S2's paper-trade threshold
- * gate, against a real (H2, Oracle-mode) datasource. The threshold is overridden to 3 so tests don't need to
- * seed dozens of fixture orders.
+ * current()/switchTo() behavior for E6-F1-S1's global paper/live switch, E6-F1-S2's paper-trade threshold
+ * gate, and E6-F1-S3's risk-consent gate, against a real (H2, Oracle-mode) datasource. The threshold is
+ * overridden to 3 so tests don't need to seed dozens of fixture orders.
  */
 @SpringBootTest
 @TestPropertySource(properties = "trading-mode.paper-trade-threshold=3")
@@ -46,6 +46,8 @@ class TradingModeServiceTest {
     private TickerRepository tickerRepository;
     @Autowired
     private BrokerCredentialRepository brokerCredentialRepository;
+    @Autowired
+    private RiskConsentEventRepository riskConsentEventRepository;
 
     private Ticker ticker;
     private BrokerCredential credential;
@@ -89,7 +91,49 @@ class TradingModeServiceTest {
     }
 
     @Test
-    void switchTo_live_atThreshold_succeeds_insertsNewRow() {
+    void switchTo_live_atThresholdButNoConsent_throwsRiskConsentNotGivenException_noHistoryPersisted() {
+        seedOrder(TradingMode.PAPER, OrderStatus.FILLED);
+        seedOrder(TradingMode.PAPER, OrderStatus.FILLED);
+        seedOrder(TradingMode.PAPER, OrderStatus.FILLED);
+
+        assertThrows(RiskConsentNotGivenException.class, () -> tradingModeService.switchTo(TradingMode.LIVE));
+
+        assertEquals(TradingMode.PAPER, tradingModeService.current());
+        assertEquals(0, repository.count());
+    }
+
+    @Test
+    void switchTo_live_atThresholdAndConsentGiven_succeeds_insertsNewRow() {
+        seedOrder(TradingMode.PAPER, OrderStatus.FILLED);
+        seedOrder(TradingMode.PAPER, OrderStatus.FILLED);
+        seedOrder(TradingMode.PAPER, OrderStatus.FILLED);
+        riskConsentEventRepository.save(new RiskConsentEvent());
+
+        TradingModeResponse response = tradingModeService.switchTo(TradingMode.LIVE);
+
+        assertEquals(TradingMode.LIVE, response.mode());
+        assertEquals(1, repository.count());
+    }
+
+    @Test
+    void giveRiskConsent_firstCall_insertsRow() {
+        TradingModeResponse response = tradingModeService.giveRiskConsent();
+
+        assertTrue(response.riskConsentGiven());
+        assertEquals(1, riskConsentEventRepository.count());
+    }
+
+    @Test
+    void giveRiskConsent_secondCall_isIdempotent_noSecondRowInserted() {
+        tradingModeService.giveRiskConsent();
+        tradingModeService.giveRiskConsent();
+
+        assertEquals(1, riskConsentEventRepository.count());
+    }
+
+    @Test
+    void giveRiskConsent_thenSwitchToLive_succeedsOnceThresholdAlsoMet() {
+        tradingModeService.giveRiskConsent();
         seedOrder(TradingMode.PAPER, OrderStatus.FILLED);
         seedOrder(TradingMode.PAPER, OrderStatus.FILLED);
         seedOrder(TradingMode.PAPER, OrderStatus.FILLED);
@@ -97,7 +141,6 @@ class TradingModeServiceTest {
         TradingModeResponse response = tradingModeService.switchTo(TradingMode.LIVE);
 
         assertEquals(TradingMode.LIVE, response.mode());
-        assertEquals(1, repository.count());
     }
 
     @Test
@@ -161,10 +204,18 @@ class TradingModeServiceTest {
 
         assertEquals(1, state.successfulPaperTrades());
         assertEquals(3, state.paperTradeThreshold());
+        assertFalse(state.paperTradeThresholdMet());
         assertFalse(state.liveModeUnlocked());
 
         seedOrder(TradingMode.PAPER, OrderStatus.FILLED);
         seedOrder(TradingMode.PAPER, OrderStatus.FILLED);
+
+        TradingModeResponse thresholdMetState = tradingModeService.currentState();
+        assertTrue(thresholdMetState.paperTradeThresholdMet());
+        assertFalse(thresholdMetState.riskConsentGiven());
+        assertFalse(thresholdMetState.liveModeUnlocked());
+
+        tradingModeService.giveRiskConsent();
 
         assertTrue(tradingModeService.currentState().liveModeUnlocked());
     }

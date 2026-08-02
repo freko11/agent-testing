@@ -4,8 +4,9 @@ package com.autotrade.dashboard.tradingmode;
  * Thrown by {@link TradingModeService#switchTo} when a switch to {@code
  * LIVE} is requested before the configured minimum number of successful
  * (filled, paper-mode) orders has been reached (E6-F1-S2). Distinct from
- * {@code E6-F1-S3}'s future risk-consent gate — this one is purely
- * data-driven and resolves itself as more paper trades fill.
+ * {@link RiskConsentNotGivenException}'s risk-consent gate (E6-F1-S3) —
+ * this one is purely data-driven and resolves itself as more paper trades
+ * fill.
  */
 public class PaperTradeThresholdNotMetException extends RuntimeException {
 

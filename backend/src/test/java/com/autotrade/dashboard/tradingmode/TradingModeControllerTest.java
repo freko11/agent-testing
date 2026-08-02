@@ -30,7 +30,7 @@ class TradingModeControllerTest {
     @Test
     void current_noHistory_returnsPaperWithNullChangedAt() throws Exception {
         when(tradingModeService.currentState())
-                .thenReturn(new TradingModeResponse(TradingMode.PAPER, null, 0, 10, false));
+                .thenReturn(new TradingModeResponse(TradingMode.PAPER, null, 0, 10, false, false, null, false));
 
         mockMvc.perform(get("/api/trading-mode"))
                 .andExpect(status().isOk())
@@ -38,6 +38,8 @@ class TradingModeControllerTest {
                 .andExpect(jsonPath("$.changedAt").doesNotExist())
                 .andExpect(jsonPath("$.successfulPaperTrades").value(0))
                 .andExpect(jsonPath("$.paperTradeThreshold").value(10))
+                .andExpect(jsonPath("$.paperTradeThresholdMet").value(false))
+                .andExpect(jsonPath("$.riskConsentGiven").value(false))
                 .andExpect(jsonPath("$.liveModeUnlocked").value(false));
     }
 
@@ -54,10 +56,22 @@ class TradingModeControllerTest {
     }
 
     @Test
+    void switchToLive_thresholdMetButNoConsent_returns403() throws Exception {
+        when(tradingModeService.switchTo(TradingMode.LIVE))
+                .thenThrow(new RiskConsentNotGivenException());
+
+        mockMvc.perform(post("/api/trading-mode")
+                        .contentType("application/json")
+                        .content("{\"mode\":\"LIVE\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("RISK_CONSENT_REQUIRED"));
+    }
+
+    @Test
     void switchToLive_atThreshold_returns200() throws Exception {
         Instant changedAt = Instant.parse("2026-07-30T00:00:00Z");
         when(tradingModeService.switchTo(TradingMode.LIVE))
-                .thenReturn(new TradingModeResponse(TradingMode.LIVE, changedAt, 10, 10, true));
+                .thenReturn(new TradingModeResponse(TradingMode.LIVE, changedAt, 10, 10, true, true, changedAt, true));
 
         mockMvc.perform(post("/api/trading-mode")
                         .contentType("application/json")
@@ -70,7 +84,7 @@ class TradingModeControllerTest {
     void switchToPaper_delegatesAndReturns200() throws Exception {
         Instant changedAt = Instant.parse("2026-07-30T00:00:00Z");
         when(tradingModeService.switchTo(TradingMode.PAPER))
-                .thenReturn(new TradingModeResponse(TradingMode.PAPER, changedAt, 0, 10, false));
+                .thenReturn(new TradingModeResponse(TradingMode.PAPER, changedAt, 0, 10, false, false, null, false));
 
         mockMvc.perform(post("/api/trading-mode")
                         .contentType("application/json")
@@ -87,5 +101,17 @@ class TradingModeControllerTest {
                         .contentType("application/json")
                         .content("{\"mode\":null}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void giveRiskConsent_returns200WithUpdatedState() throws Exception {
+        Instant consentedAt = Instant.parse("2026-08-02T00:00:00Z");
+        when(tradingModeService.giveRiskConsent())
+                .thenReturn(new TradingModeResponse(TradingMode.PAPER, null, 10, 10, true, true, consentedAt, true));
+
+        mockMvc.perform(post("/api/trading-mode/risk-consent"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.riskConsentGiven").value(true))
+                .andExpect(jsonPath("$.liveModeUnlocked").value(true));
     }
 }

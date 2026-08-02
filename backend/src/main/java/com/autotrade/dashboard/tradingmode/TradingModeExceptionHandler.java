@@ -19,4 +19,10 @@ public class TradingModeExceptionHandler {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(new ApiErrorResponse("PAPER_TRADE_THRESHOLD_NOT_MET", e.getMessage(), null));
     }
+
+    @ExceptionHandler(RiskConsentNotGivenException.class)
+    public ResponseEntity<ApiErrorResponse> handleRiskConsentNotGiven(RiskConsentNotGivenException e) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new ApiErrorResponse("RISK_CONSENT_REQUIRED", e.getMessage(), null));
+    }
 }

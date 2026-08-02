@@ -16,8 +16,8 @@ Testnet) with risk/safety guardrails (E6).
 
 ## Status
 
-All stories below are done unless noted. Current next-up story: **E6-F1-S3** (explicit
-risk-consent step before live mode unlocks).
+All stories below are done unless noted. Current next-up story: **E6-F2-S1** (hard
+server-side cap on leverage and position size).
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -68,8 +68,14 @@ risk-consent step before live mode unlocks).
 - E6-F1-S1: Global paper/live trading-mode switch
 - E6-F1-S2: Paper-trade threshold before live mode unlocks (configurable via
   `trading-mode.paper-trade-threshold`, default 10 successful filled paper
-  orders; live mode still gated — E6-F1-S3's risk-consent step is a second,
-  independent check not yet implemented)
+  orders)
+- E6-F1-S3: One-time risk-consent acknowledgment, independent of the
+  paper-trade threshold — both gates must pass before `switchTo(LIVE)`
+  succeeds. `TradingModeResponse.liveModeUnlocked` is true only when both
+  `paperTradeThresholdMet` and `riskConsentGiven` are true; the frontend
+  banner opens a disclaimer dialog (mirroring `TradeForm`'s confirm-dialog
+  pattern) the first time a user tries to switch to LIVE once the threshold
+  is met, and never asks again once consent is recorded.
 
 ## Build / lint / test
 
@@ -111,9 +117,10 @@ risk-consent step before live mode unlocks).
 - `notification` — `WatchlistSignalPoller` (scheduled job, the app's first
   background task), `NotificationService`.
 - `tradingmode` — `TradingModeService` (append-only `trading_mode_events`,
-  latest row = current mode; `LIVE` gated until E6-F1-S2/S3).
+  latest row = current mode, gated by both E6-F1-S2's paper-trade threshold and
+  E6-F1-S3's `risk_consents` one-time acknowledgment).
 - `watchlist`, `security` (session auth), `common` (`Clock`/`SchedulingConfig`).
-- Schema: Flyway `V1`–`V10` under `backend/src/main/resources/db/migration/` is the
+- Schema: Flyway `V1`–`V11` under `backend/src/main/resources/db/migration/` is the
   single source of truth; `spring.jpa.hibernate.ddl-auto=validate` everywhere.
 
 **Frontend** (`frontend/src/`) mirrors the backend split: `marketdata`, `signal`,

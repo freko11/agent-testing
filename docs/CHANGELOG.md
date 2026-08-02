@@ -2729,3 +2729,60 @@ deterministic threshold tests. Full suite (`./mvnw verify`) passes: 350
 tests, 0 failures, 0 errors. Frontend `npm run build`/`lint`/`test` all
 clean.
 
+## E6-F1-S3 — one-time risk-consent acknowledgment before LIVE unlocks
+
+Design gate (`Plan` agent) flagged one real correctness issue before any code was
+written: bolting `riskConsentGiven` onto `TradingModeResponse` without touching the
+existing `liveModeUnlocked` field would have broken S2's whole point — the LIVE
+toggle proactively re-enabling itself once the threshold passed, then reactively
+403-ing on the *new* consent check, exactly the UX S2 moved away from. Fix: split
+`liveModeUnlocked` into two fields — `paperTradeThresholdMet` (the old
+threshold-only computation) and `riskConsentGiven`/`riskConsentGivenAt`, with
+`liveModeUnlocked` redefined as `paperTradeThresholdMet && riskConsentGiven` — "would
+`switchTo(LIVE)` actually succeed right now." This forced every
+`new TradingModeResponse(...)` call site to be reconsidered at compile time (4 sites,
+all in `tradingmode/`), which is the point, not incidental churn.
+
+Backend: new append-only `risk_consents` table (migration `V11`, same "latest/only
+row = current state" audit pattern as `trading_mode_events`; `DEFAULT ... NOT NULL`
+column ordering per this repo's Oracle gotcha) plus `RiskConsentEvent` entity/
+repository, mirroring `TradingModeEvent` minus the `mode` column. `TradingModeService`
+gained `giveRiskConsent()` — idempotent, a repeat call doesn't insert a second row, so
+the audit table reflects one real consent event rather than one row per dialog
+confirm — and `switchTo(LIVE)` now checks the consent gate *after* the existing
+threshold gate (threshold error takes precedence, matching the AC's own framing "on
+top of the paper-trade threshold"). New `RiskConsentNotGivenException` (403
+`RISK_CONSENT_REQUIRED`, handled alongside `PaperTradeThresholdNotMetException` in the
+existing `TradingModeExceptionHandler`) carries no fields — unlike the threshold
+exception there's no progress metric to report, just a boolean. New endpoint
+`POST /api/trading-mode/risk-consent` records consent as its own explicit action,
+decoupled from `TradingModeChangeRequest` — consent stays an independently auditable
+event with its own timestamp regardless of *how* or *when* someone later tries to
+switch, and avoids polluting the switch-request DTO with a field that's meaningless
+for `PAPER`.
+
+Frontend: `TradingModeBanner`'s toggle now branches three ways instead of two —
+blocked by threshold (unchanged: disabled button + progress text), threshold met but
+no consent yet (new: clicking "Switch to LIVE" opens a `<dialog>` with the risk
+disclaimer instead of switching immediately, mirroring `TradeForm`'s confirm-dialog
+idiom — ref + `showModal()`/`close()`, `onCancel` for Esc), and fully unlocked
+(unchanged: direct switch). Confirming the dialog calls `giveRiskConsent()` then
+`switchTradingMode('LIVE')` as two sequential calls rather than one combined
+request — if the switch call fails after consent succeeds (e.g. a stale threshold
+read), the user doesn't have to re-consent on retry, only the switch itself needs
+retrying. Reused the existing `.trade-confirm-dialog` CSS classes as-is (generic
+dialog chrome despite the name) rather than duplicating near-identical rules. No new
+component test — same reasoning as S2 (`vitest.config.ts` is deliberately scoped to
+pure `.ts` logic, no jsdom/testing-library in the repo).
+
+Verified live end-to-end: brought up Oracle XE + backend + frontend, logged in,
+temporarily overrode `TRADING_MODE_PAPER_TRADE_THRESHOLD=0` for this session only (to
+exercise the consent gate in isolation rather than seeding ten fake filled orders) and
+confirmed all four paths — clicking "Switch to LIVE" opened the disclaimer dialog;
+Cancel closed it with no API call and mode stayed PAPER; confirming recorded consent
+and switched to LIVE mode (banner flipped red, timestamp shown); switching back to
+PAPER and then to LIVE again went straight through with no dialog, confirming consent
+persistence is honored on repeat switches. No console errors. Backend and Docker
+processes stopped afterward. Full `./mvnw verify` (20 new/updated tests in
+`tradingmode`, full suite green) and frontend `npm run build`/`lint`/`test` all clean.
+

@@ -21,14 +21,17 @@ public class TradingModeService {
 
     private final TradingModeEventRepository repository;
     private final OrderRepository orderRepository;
+    private final RiskConsentEventRepository riskConsentEventRepository;
     private final int paperTradeThreshold;
 
     public TradingModeService(
             TradingModeEventRepository repository,
             OrderRepository orderRepository,
+            RiskConsentEventRepository riskConsentEventRepository,
             @Value("${trading-mode.paper-trade-threshold}") int paperTradeThreshold) {
         this.repository = repository;
         this.orderRepository = orderRepository;
+        this.riskConsentEventRepository = riskConsentEventRepository;
         this.paperTradeThreshold = paperTradeThreshold;
     }
 
@@ -45,11 +48,11 @@ public class TradingModeService {
 
     /**
      * Switching to the mode already active is an idempotent no-op (no new history row) — checked before the
-     * LIVE gate below, since a no-op {@code LIVE -> LIVE} shouldn't re-validate a threshold that's irrelevant
-     * to a state that's already true. Switching to {@code PAPER} always succeeds. Switching to {@code LIVE}
-     * requires at least {@link #paperTradeThreshold} successful (filled, paper-mode) orders (E6-F1-S2) — see
-     * {@link PaperTradeThresholdNotMetException}. Note this is only one of two planned LIVE gates: E6-F1-S3's
-     * risk-consent step is a second, independent check layered on top, not yet implemented.
+     * LIVE gates below, since a no-op {@code LIVE -> LIVE} shouldn't re-validate gates that are irrelevant to
+     * a state that's already true. Switching to {@code PAPER} always succeeds. Switching to {@code LIVE}
+     * requires two independent gates to pass: at least {@link #paperTradeThreshold} successful (filled,
+     * paper-mode) orders (E6-F1-S2, see {@link PaperTradeThresholdNotMetException}), and a one-time
+     * risk-consent acknowledgment (E6-F1-S3, see {@link RiskConsentNotGivenException}).
      */
     public TradingModeResponse switchTo(TradingMode requested) {
         if (current() == requested) {
@@ -59,8 +62,33 @@ public class TradingModeService {
         if (requested == TradingMode.LIVE && completed < paperTradeThreshold) {
             throw new PaperTradeThresholdNotMetException(completed, paperTradeThreshold);
         }
+        if (requested == TradingMode.LIVE && !riskConsentGiven()) {
+            throw new RiskConsentNotGivenException();
+        }
         TradingModeEvent saved = repository.save(new TradingModeEvent(requested));
         return toResponse(saved.getMode(), saved.getChangedAt(), completed);
+    }
+
+    /**
+     * Records the one-time risk-consent acknowledgment (E6-F1-S3) gating LIVE mode, independent of the
+     * paper-trade threshold. Idempotent — a repeat call doesn't insert a second row, keeping the audit table
+     * honestly reflecting one real consent event rather than one row per dialog confirmation.
+     */
+    public TradingModeResponse giveRiskConsent() {
+        if (!riskConsentGiven()) {
+            riskConsentEventRepository.save(new RiskConsentEvent());
+        }
+        return currentState();
+    }
+
+    private boolean riskConsentGiven() {
+        return riskConsentEventRepository.findTopByOrderByIdDesc().isPresent();
+    }
+
+    private Instant riskConsentGivenAt() {
+        return riskConsentEventRepository.findTopByOrderByIdDesc()
+                .map(RiskConsentEvent::getConsentedAt)
+                .orElse(null);
     }
 
     private long successfulPaperTrades() {
@@ -68,6 +96,16 @@ public class TradingModeService {
     }
 
     private TradingModeResponse toResponse(TradingMode mode, Instant changedAt, long completed) {
-        return new TradingModeResponse(mode, changedAt, completed, paperTradeThreshold, completed >= paperTradeThreshold);
+        boolean thresholdMet = completed >= paperTradeThreshold;
+        boolean consentGiven = riskConsentGiven();
+        return new TradingModeResponse(
+                mode,
+                changedAt,
+                completed,
+                paperTradeThreshold,
+                thresholdMet,
+                consentGiven,
+                riskConsentGivenAt(),
+                thresholdMet && consentGiven);
     }
 }
