@@ -33,7 +33,12 @@ yarn-error.log*
 
 # Oracle / Docker local data volumes
 oracle-data/
+restore-test-data/
 *.dmp
+
+# Local DB backups (scripts/db-backup.sh) - copy off-disk periodically,
+# see docs/runbooks/oracle-backup-restore.md
+backups/
 
 # graphify local cache + dated pre-update backups (regenerable via `graphify update .`)
 graphify-out/cache/

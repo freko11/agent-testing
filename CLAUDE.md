@@ -16,8 +16,8 @@ Testnet) with risk/safety guardrails (E6).
 
 ## Status
 
-All stories below are done. E6 (Risk & Safety Controls) is complete; E7
-(Observability & Hardening) is in progress.
+All stories below are done, including E6 (Risk & Safety Controls) and E7
+(Observability & Hardening).
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -160,7 +160,7 @@ All stories below are done. E6 (Risk & Safety Controls) is complete; E7
   `signal_call_id` FK, so the audit row is self-contained for a future
   audit-trail viewer. No config, no new endpoint, no frontend change.
 
-### E7 — Observability & Hardening (in progress)
+### E7 — Observability & Hardening
 - E7-F1-S1: Structured logging across every backend service, via a single
   `backend/src/main/resources/logback-spring.xml` console pattern
   (timestamp/level/thread/logger/message) applied to every profile — no new
@@ -226,6 +226,33 @@ All stories below are done. E6 (Risk & Safety Controls) is complete; E7
   enforced entirely server-side with no request-body bypass; the audit log
   (`OrderAuditEntry`) has no setters and its repository exposes no
   update/delete path from any controller. No frontend changes.
+- E7-F3-S1: Documented and scripted backup/restore for the Oracle instance —
+  `scripts/db-backup.sh` (schema-scoped `expdp` export of the `autotrade`
+  schema via Oracle's own pre-existing `DATA_PUMP_DIR`, copied out to a
+  gitignored `./backups/` with a per-table row-count `.manifest.txt`
+  sidecar) and `scripts/db-restore.sh` (`impdp` into a target
+  instance/container, printing the same row-count query to diff against
+  that manifest). Chose Data Pump over a raw volume-level copy specifically
+  because the AC calls for a *restore tested against a fresh instance* —
+  a volume tar only proves bytes moved, not that the data imports cleanly
+  elsewhere. Actually exercised, not just written: backed up the live dev
+  instance (10 tables, 328 total rows across `INDICATOR_SNAPSHOTS`/
+  `SIGNAL_CALLS`/`TICKERS`/etc.), stood up a disposable second Oracle XE
+  instance via `docker-compose.restore-test.yml` (separate container/port/
+  volume, gitignored `./restore-test-data`, its own compose project name to
+  avoid orphan-container ambiguity with the main dev stack), restored into
+  it, and confirmed every table's row count matched the backup manifest
+  exactly, then tore the disposable instance down. `impdp` needs
+  `exclude=user` — the target's `APP_USER` already exists (created by the
+  container's own init), so only the schema's objects/data need importing,
+  not the user itself. On-demand only, no scheduled/cron backup — out of
+  scope per the story. Backups stay same-disk (`./backups/`, gitignored,
+  overridable via `BACKUP_DIR`); the runbook documents a manual step to copy
+  them off-disk periodically, since that's a location only the operator can
+  choose. New `docs/runbooks/oracle-backup-restore.md`; `.gitattributes`
+  added to force LF line endings on `scripts/*.sh` so Windows checkouts
+  don't silently corrupt them. This was E7's last story — the epic is now
+  complete.
 
 ## Build / lint / test
 

@@ -3384,3 +3384,107 @@ the app under `SPRING_PROFILES_ACTIVE=paper` with `CREDENTIAL_ENC_KEY_V1`/
 `DASHBOARD_PASSWORD_HASH` deliberately unset and confirm it refuses to boot instead of
 silently succeeding.
 
+## E7-F3-S1 — tested backup/restore procedure for the Oracle instance
+
+Design gate first (this is infra/tooling, not application code, but still non-trivial
+enough to warrant one): compared Data Pump (`expdp`/`impdp`) against a raw volume-level
+copy (stop the container, `tar` `./oracle-data`). Went with Data Pump. The story's AC
+specifically asks for a restore *tested against a fresh Oracle XE instance*, and a volume
+tar can't really prove that — it just proves bytes moved, tied to one exact datafile
+layout/version, and the only "restore" it supports is swapping a whole container's
+`/opt/oracle/oradata`, not a fresh instance receiving data. Data Pump is schema-scoped, is
+verifiable at the row level, and runs online against the live dev container with no
+downtime — confirmed `gvenzl/oracle-xe:21-slim` ships no built-in backup/restore helper
+scripts (unlike some other DB images), so there was no shortcut to skip past this
+comparison.
+
+Added:
+- `scripts/db-backup.sh` — schema-scoped `expdp` export of the `autotrade` schema
+  (`ORACLE_APP_USER` from `.env`), `docker cp`'d out to a gitignored `./backups/`
+  (override via `BACKUP_DIR`), plus a `.manifest.txt` sidecar recording one row-count line
+  per table so a later restore has something concrete to diff against.
+- `scripts/db-restore.sh` — takes a dump path and a target container name (defaults to
+  the restore-test container below), `impdp`s it in, and prints the same row-count query
+  for comparison against the backup's manifest.
+- `docker-compose.restore-test.yml` — a second, disposable Oracle XE service
+  (`autotrade-oracle-xe-restore-test`, its own host port/data volume
+  `./restore-test-data`, and its own compose project name `autotrade-restore-test` to
+  avoid Compose treating it as an "orphan" of the main `docker-compose.yml` project) used
+  only to prove a restore against a genuinely fresh instance, never against the live dev
+  database.
+- `docs/runbooks/oracle-backup-restore.md` — the documented procedure, matching
+  `credential-key-rotation.md`'s format (numbered procedure + a Notes section for
+  gotchas).
+- `.gitattributes` (new file) — forces `scripts/*.sh` to keep LF line endings on
+  checkout. Windows' `core.autocrlf` would otherwise silently convert them to CRLF,
+  which breaks bash heredocs/shebangs; this repo already has a related gotcha for
+  `mvnw`'s executable bit, so getting ahead of the line-ending version of the same class
+  of bug for the new scripts seemed worth the one-line file.
+- `.gitignore`: added `restore-test-data/` and `backups/` (the latter with a comment
+  pointing at the runbook's off-disk-copy step; `*.dmp` was already ignored, but the
+  `.log`/`.manifest.txt` siblings weren't).
+
+Bugs found and fixed while actually running this, not just writing it:
+- **First attempt at a Data Pump directory reliably failed.** Creating a fresh
+  `CREATE OR REPLACE DIRECTORY` object under `/tmp/autotrade-backup` (mkdir'd
+  immediately beforehand, owned by `oracle:oinstall`, world-readable) still made
+  `expdp` fail every time with `ORA-39002`/`ORA-39070`/`ORA-29283` ("unable to open the
+  log file... nonexistent file or path"), even though the directory demonstrably existed
+  and was writable (`touch` through a separate `docker exec` worked fine against the same
+  path outside of an `expdp` run). Rather than keep chasing that, switched both scripts to
+  use Oracle's own pre-existing `DATA_PUMP_DIR` directory object (under
+  `/opt/oracle/admin/XE/dpdump/<guid>/`, looked up dynamically via
+  `SELECT directory_path FROM dba_directories`) — which worked immediately, no
+  investigation into the exact root cause needed once the working alternative was
+  confirmed.
+- **`impdp` needs `exclude=user`.** The restore target's `APP_USER` already exists
+  (created by the container's own init from `APP_USER`/`APP_USER_PASSWORD`), so a plain
+  schema-scoped import tries to (re)create that user and fails with
+  `ORA-31684: Object type USER:"AUTOTRADE" already exists` — Data Pump treats this as a
+  logged, non-fatal warning but still exits non-zero, which `db-restore.sh`'s `set -e`
+  turned into a hard failure despite every table having actually imported correctly (row
+  counts already matched on that first, "failed" run). Added `exclude=user` to the
+  `impdp` invocation so the import is clean end-to-end with exit 0, since the target
+  schema/user is expected to pre-exist in this restore-test setup.
+- **Operational fumble, not a script bug**: mid-setup, force-removed
+  (`docker rm -f`) a restore-test container that was still mid-`uncompressing database
+  data files`, then reused the same `./restore-test-data` volume for a fresh container —
+  which left it crash-looping ("Break signaled" 3x, then exited 255) since the volume had
+  partial init state. Fixed by wiping `./restore-test-data` entirely and starting the
+  disposable instance fresh exactly once. Not a code change, but worth recording: the
+  runbook's Notes section calls out `restore-test-data/` needing a clean wipe if the
+  restore-test instance isn't torn down with `down -v` before a re-run.
+
+Live-tested end-to-end, against the real local dev Oracle container (not H2, not mocked):
+1. `docker compose up -d`, waited for `autotrade-oracle-xe` healthy (already had a
+   populated `./oracle-data` volume from prior sessions — 10 tables, real data, not an
+   empty schema).
+2. `bash scripts/db-backup.sh` — succeeded, `expdp` exported all 10 tables:
+   `INDICATOR_SNAPSHOTS` (152 rows), `SIGNAL_CALLS` (150), `flyway_schema_history` (11),
+   `TICKERS` (7), `WATCHLIST_ENTRIES` (3), `TRADING_MODE_EVENTS` (3), `NOTIFICATIONS` (1),
+   `RISK_CONSENTS` (1), `BROKER_CREDENTIALS` (0), `ORDERS` (0) — into
+   `backups/autotrade_20260803_202235.dmp` (~940 KB) plus its `.manifest.txt` recording
+   exactly those counts.
+3. `docker compose -f docker-compose.restore-test.yml up -d`, waited for
+   `autotrade-oracle-xe-restore-test` healthy (brand-new, empty `./restore-test-data`
+   volume).
+4. `bash scripts/db-restore.sh backups/autotrade_20260803_202235.dmp` — `impdp` completed
+   with `Job "SYSTEM"."SYS_IMPORT_SCHEMA_01" successfully completed`, exit 0. The
+   script's own row-count query against the restored instance printed the identical 10
+   rows/counts as the backup manifest — `INDICATOR_SNAPSHOTS` 152, `SIGNAL_CALLS` 150,
+   `flyway_schema_history` 11, `TICKERS` 7, `WATCHLIST_ENTRIES` 3, `TRADING_MODE_EVENTS`
+   3, `NOTIFICATIONS` 1, `RISK_CONSENTS` 1, `BROKER_CREDENTIALS` 0, `ORDERS` 0 — an exact
+   match, table for table, row for row.
+5. `docker compose -f docker-compose.restore-test.yml down -v` + removed
+   `./restore-test-data` to tear the disposable instance down completely. Confirmed the
+   real dev container (`autotrade-oracle-xe`) stayed healthy and untouched throughout.
+
+That row-count match against a genuinely fresh, empty Oracle XE instance is the "tested"
+evidence this story's AC asks for.
+
+Deliberately out of scope, per the story: no scheduled/cron backup (on-demand script
+only); backups land same-disk in `./backups/` by default rather than the script itself
+pushing to an external location, since only the operator knows what off-disk destination
+they actually have available — the runbook documents the manual off-disk-copy step
+instead of guessing one. This was E7's last remaining story; the epic is now complete.
+

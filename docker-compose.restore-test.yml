@@ -1,0 +1,20 @@
+name: autotrade-restore-test
+
+services:
+  oracle-xe-restore-test:
+    image: gvenzl/oracle-xe:21-slim
+    container_name: autotrade-oracle-xe-restore-test
+    ports:
+      - "${ORACLE_RESTORE_TEST_HOST_PORT:-1523}:1521"
+    environment:
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD}
+      APP_USER: ${ORACLE_APP_USER}
+      APP_USER_PASSWORD: ${ORACLE_APP_USER_PASSWORD}
+    volumes:
+      - ./restore-test-data:/opt/oracle/oradata
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
