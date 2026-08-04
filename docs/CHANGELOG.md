@@ -3594,3 +3594,68 @@ form), order history, and the login page. No backend changes. No new tests (same
 "no component-level test harness in this frontend" situation as the asset-type-selector
 change above — verified live in-browser instead).
 
+## Stock price chart no longer blanks out entirely when the market is closed
+
+Follow-up to E2-F1-S3/E3-F2-S1, prompted by the user noticing that a stock's price
+chart simply disappears outside regular trading hours. Investigated first (via the
+`Explore` agent) rather than assuming a bug: `MarketDataService.getPriceHistory`
+hard-blocks *any* stock fetch when `MarketHoursService.isRegularMarketOpen()` is
+false, throwing `MarketClosedException` → 409 `MARKET_CLOSED` before Alpaca is even
+called — by design, per E2-F1-S3's own rationale ("Alpaca is never called overnight/
+weekends — a free reliability win"). `IndicatorService.getChartData` inherits this
+from `MarketDataService` with no fallback, so `TickerMetrics.tsx`'s independent
+`Promise.allSettled` chart fetch fails and renders nothing but the error text —
+confirmed this is the actual, intended behavior of E2-F1-S3, not a regression.
+
+Key fact that made a fix worthwhile: `AlpacaMarketDataClient.fetchRecentCandles` requests
+`timeframe=1Day` — daily bars, not intraday. A daily candle fetched while the market was
+open earlier that day (or on a prior trading day) doesn't become *stale* the moment the
+market closes; it's the same historical data Alpaca would still return if asked. So the
+409 gate isn't protecting data quality for the chart, specifically — it's a blanket
+policy applied to every stock endpoint alike.
+
+Rather than loosen `MarketHoursService`'s gate itself (which would also loosen
+`/signal` and `/indicators` — the paths that actually feed trading decisions and that
+E2-F1-S3/E2-F2-S1 deliberately hardened), scoped the fix to the chart only, leaning on
+`IndicatorService.getChartData`'s own pre-existing Javadoc framing: "a read-only
+diagnostic view, not the audited signal-computation path." Added an in-memory
+`Map<String, ChartDataResponse> lastGoodChartData` (`ConcurrentHashMap`, keyed by the
+same `trim().toUpperCase()` normalization `TickerService` already uses, so case doesn't
+cause a cache miss) inside `IndicatorService`. On a successful fetch, the response
+(now carrying a new `stale` boolean, `false`) is cached before being returned; on
+`MarketClosedException`, the cache is checked first — a hit is returned with `stale=true`
+instead of propagating, a miss still 409s exactly as before (so a symbol never
+successfully fetched during market hours, e.g. right after a backend restart, still
+shows the existing `MARKET_CLOSED` error — there's nothing to fall back to yet).
+`/signal` and `/indicators` (`computeIndicators`/`computeForSignal`) were not touched —
+they still hard-block on a closed market, unchanged.
+
+`ChartDataResponse` gained the `stale` field (5th record component); `IndicatorController`
+needed no changes, it just returns whatever `IndicatorService.getChartData` gives it.
+Frontend: `ChartDataResponse` in `chart/api.ts` gained the matching `stale: boolean`;
+`TickerMetrics.tsx` renders a `.chart-note` (reusing the existing style, no new CSS)
+above the chart reading "The market is closed — showing the last available data as of
+&lt;last candle's timestamp, localized&gt;." when `stale` is true. Since the chart fetch
+now succeeds (200, not an error) when a cache entry exists, `chartError` no longer fires
+for this case — only the independent `/signal` fetch still surfaces the `MARKET_CLOSED`
+message for the stat tiles/signal badge, which remain correctly blocked.
+
+Tested: `IndicatorServiceTest` gained
+`chartData_marketClosed_withPriorSuccessfulFetch_returnsStaleCachedResponse` (populate
+cache via a successful call, then assert a subsequent `MarketClosedException` returns
+the cached candles/indicators with `stale=true`) and
+`chartData_marketClosed_cacheKeyedCaseInsensitively`; the pre-existing
+`chartData_marketClosed_propagates` was renamed
+`chartData_marketClosed_noPriorFetch_propagates` to make clear it's specifically the
+no-cache-yet case that still 409s. `IndicatorControllerTest` gained
+`chartData_marketClosedWithCachedFallback_returns200Stale` and the existing green-path
+test now asserts `stale=false`. All 399 backend tests pass (`./mvnw verify`); frontend
+`npm run build`/`lint`/`test` all clean. No schema change (in-memory cache only, not
+persisted — a backend restart during a closed market means the very next stock chart
+request still 409s once, same as today, until the market reopens and repopulates the
+cache). Not live-verified against the real running stack this time — doing so
+meaningfully would require the dev backend to already hold a pre-close cache entry for
+a real symbol, which isn't reliably reproducible from a fresh session; relied on the
+unit test coverage above (cache hit/miss/case-insensitivity at the service layer, JSON
+shape at the controller layer) instead.
+

@@ -1,6 +1,7 @@
 package com.autotrade.dashboard.indicator;
 
 import com.autotrade.dashboard.marketdata.Candle;
+import com.autotrade.dashboard.marketdata.MarketClosedException;
 import com.autotrade.dashboard.marketdata.MarketDataService;
 import com.autotrade.dashboard.marketdata.PriceHistoryResult;
 import com.autotrade.dashboard.marketdata.TickerSummary;
@@ -10,6 +11,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class IndicatorService {
@@ -19,6 +22,15 @@ public class IndicatorService {
 
     private final MarketDataService marketDataService;
     private final IndicatorSnapshotRepository indicatorSnapshotRepository;
+
+    /**
+     * Last successful {@link #getChartData} response per (normalized) ticker symbol, in-memory only. Alpaca's
+     * candles are daily bars, not intraday, so the last fetch made while the market was open is still legitimate
+     * historical data once it closes — not actually "stale" in the data-quality sense, just not fresh. Lets the
+     * read-only chart survive {@link MarketClosedException} instead of blanking out; deliberately scoped to this
+     * diagnostic view only — {@code /signal} and {@code /indicators} keep the hard market-hours gate untouched.
+     */
+    private final Map<String, ChartDataResponse> lastGoodChartData = new ConcurrentHashMap<>();
 
     public IndicatorService(MarketDataService marketDataService, IndicatorSnapshotRepository indicatorSnapshotRepository) {
         this.marketDataService = marketDataService;
@@ -66,9 +78,24 @@ public class IndicatorService {
      * {@link InsufficientPriceHistoryException} — below {@link #MIN_CANDLES_FOR_INDICATORS} candles, {@code indicators}
      * is simply empty, since a candles-only chart render is still meaningful. No {@link IndicatorSnapshot} is persisted;
      * this is a read-only diagnostic view, not the audited signal-computation path.
+     *
+     * <p>On {@link MarketClosedException} (stock ticker, market currently closed), falls back to the last
+     * successful response for this symbol with {@code stale=true} rather than propagating — see
+     * {@link #lastGoodChartData}. Only when no prior successful fetch exists for the symbol does the exception
+     * still propagate, matching the pre-existing 409 {@code MARKET_CLOSED} behavior.
      */
     public ChartDataResponse getChartData(String symbol, int limit) {
-        PriceHistoryResult priceHistory = marketDataService.getPriceHistory(symbol, limit);
+        String cacheKey = normalizeSymbol(symbol);
+        PriceHistoryResult priceHistory;
+        try {
+            priceHistory = marketDataService.getPriceHistory(symbol, limit);
+        } catch (MarketClosedException e) {
+            ChartDataResponse cached = lastGoodChartData.get(cacheKey);
+            if (cached != null) {
+                return new ChartDataResponse(cached.ticker(), cached.source(), cached.candles(), cached.indicators(), true);
+            }
+            throw e;
+        }
         List<Candle> candles = priceHistory.candles();
 
         List<ChartIndicatorPoint> points = new ArrayList<>();
@@ -80,7 +107,14 @@ public class IndicatorService {
             points.add(new ChartIndicatorPoint(candles.get(i).timestamp(), rsi, ma.shortMa(), ma.longMa()));
         }
 
-        return new ChartDataResponse(TickerSummary.from(priceHistory.ticker()), priceHistory.source(), candles, points);
+        ChartDataResponse response = new ChartDataResponse(TickerSummary.from(priceHistory.ticker()), priceHistory.source(),
+                candles, points, false);
+        lastGoodChartData.put(cacheKey, response);
+        return response;
+    }
+
+    private static String normalizeSymbol(String symbol) {
+        return symbol == null ? null : symbol.trim().toUpperCase();
     }
 
     private BigDecimalIndicators compute(List<Candle> candles) {

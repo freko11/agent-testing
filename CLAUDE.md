@@ -67,7 +67,20 @@ All stories below are done, including E6 (Risk & Safety Controls) and E7
   `ASSET_TYPE_CONFLICT`'s backend message rather than silently relabeling
   it.
 - E3-F1-S2: Buy/Sell/Hold badge + hold-term, color-coded
-- E3-F2-S1: Price chart with MA/RSI overlays (`lightweight-charts`)
+- E3-F2-S1: Price chart with MA/RSI overlays (`lightweight-charts`). Stock
+  charts no longer hard-block when the market is closed: `IndicatorService`
+  caches the last successful `getChartData` response per ticker in-memory
+  and, on `MarketClosedException`, serves it back with `stale=true` instead
+  of propagating the 409 — Alpaca's candles are daily bars, so a fetch made
+  while the market was open is still legitimate data once it closes, just
+  not fresh. Only the first-ever request for a ticker after a closed-market
+  start (no prior cache entry) still 409s `MARKET_CLOSED`, unchanged from
+  before. Deliberately scoped to this read-only chart endpoint only —
+  `/signal` and `/indicators` (which feed trading decisions) keep the
+  original hard market-hours gate untouched. Frontend: `ChartDataResponse`
+  gained a `stale` field; `TickerMetrics.tsx` shows a "market is closed,
+  showing last available data as of &lt;timestamp&gt;" note above the chart
+  when set, reusing the existing `.chart-note` style.
 - E3-F3-S1: Watchlist
 
 ### E4 — Broker Adapter Layer

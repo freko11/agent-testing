@@ -269,6 +269,12 @@ function TickerMetrics({ lookupRequest, onWatchlistChanged, onOrderPlaced }: Tic
       {chartError && <p role="alert">{chartError}</p>}
       {chartData && chartData.candles.length > 0 && (
         <div className="price-chart-container">
+          {chartData.stale && (
+            <p className="chart-note" role="status">
+              The market is closed — showing the last available data as of{' '}
+              {new Date(chartData.candles[chartData.candles.length - 1].timestamp).toLocaleString()}.
+            </p>
+          )}
           <PriceChart candles={chartData.candles} indicators={chartData.indicators} />
           {chartData.indicators.length === 0 && (
             <p className="chart-note">Showing price only — not enough history yet for indicator overlays.</p>

@@ -160,12 +160,45 @@ class IndicatorServiceTest {
     }
 
     @Test
-    void chartData_marketClosed_propagates() {
+    void chartData_marketClosed_noPriorFetch_propagates() {
         when(marketDataService.getPriceHistory(eq("AAPL"), eq(200)))
                 .thenThrow(new MarketClosedException("AAPL"));
 
         assertThrows(MarketClosedException.class, () -> service.getChartData("AAPL", 200));
 
         verify(indicatorSnapshotRepository, never()).save(any());
+    }
+
+    @Test
+    void chartData_marketClosed_withPriorSuccessfulFetch_returnsStaleCachedResponse() {
+        Ticker ticker = new Ticker("AAPL", AssetType.STOCK, "NASDAQ");
+        List<Candle> candles = IndicatorTestFixtures.candles40();
+        when(marketDataService.getPriceHistory(eq("AAPL"), eq(200)))
+                .thenReturn(new PriceHistoryResult(ticker, Broker.ALPACA, candles))
+                .thenThrow(new MarketClosedException("AAPL"));
+
+        ChartDataResponse fresh = service.getChartData("AAPL", 200);
+        ChartDataResponse stale = service.getChartData("AAPL", 200);
+
+        assertEquals(false, fresh.stale());
+        assertEquals(true, stale.stale());
+        assertEquals(fresh.candles(), stale.candles());
+        assertEquals(fresh.indicators(), stale.indicators());
+        assertEquals(fresh.ticker(), stale.ticker());
+    }
+
+    @Test
+    void chartData_marketClosed_cacheKeyedCaseInsensitively() {
+        Ticker ticker = new Ticker("AAPL", AssetType.STOCK, "NASDAQ");
+        List<Candle> candles = IndicatorTestFixtures.candles40();
+        when(marketDataService.getPriceHistory(eq("aapl"), eq(200)))
+                .thenReturn(new PriceHistoryResult(ticker, Broker.ALPACA, candles));
+        when(marketDataService.getPriceHistory(eq("AAPL"), eq(200)))
+                .thenThrow(new MarketClosedException("AAPL"));
+
+        service.getChartData("aapl", 200);
+        ChartDataResponse stale = service.getChartData("AAPL", 200);
+
+        assertEquals(true, stale.stale());
     }
 }

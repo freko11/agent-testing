@@ -16,6 +16,8 @@ export interface ChartDataResponse {
   source: Broker
   candles: Candle[]
   indicators: ChartIndicatorPoint[]
+  /** True when the market is closed and this is the last successfully fetched response, not a fresh one. */
+  stale: boolean
 }
 
 /**

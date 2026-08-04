@@ -118,7 +118,7 @@ class IndicatorControllerTest {
         ChartIndicatorPoint point = new ChartIndicatorPoint(candle.timestamp(), new BigDecimal("77.8751"),
                 new BigDecimal("111.92000000"), new BigDecimal("108.94000000"));
         ChartDataResponse response = new ChartDataResponse(TickerSummary.from(ticker), Broker.ALPACA,
-                List.of(candle), List.of(point));
+                List.of(candle), List.of(point), false);
         when(indicatorService.getChartData(eq("AAPL"), anyInt())).thenReturn(response);
 
         mockMvc.perform(get("/api/tickers/AAPL/chart-data").param("limit", "200"))
@@ -128,7 +128,23 @@ class IndicatorControllerTest {
                 .andExpect(jsonPath("$.candles[0].close").value(113.10))
                 .andExpect(jsonPath("$.indicators[0].rsi").value(77.8751))
                 .andExpect(jsonPath("$.indicators[0].maShort").value(111.92000000))
-                .andExpect(jsonPath("$.indicators[0].maLong").value(108.94000000));
+                .andExpect(jsonPath("$.indicators[0].maLong").value(108.94000000))
+                .andExpect(jsonPath("$.stale").value(false));
+    }
+
+    @Test
+    void chartData_marketClosedWithCachedFallback_returns200Stale() throws Exception {
+        Ticker ticker = new Ticker("AAPL", AssetType.STOCK, "NASDAQ");
+        Candle candle = new Candle(Instant.parse("2026-02-09T00:00:00Z"), new BigDecimal("113.10"),
+                new BigDecimal("113.10"), new BigDecimal("113.10"), new BigDecimal("113.10"), BigDecimal.valueOf(1_000_000));
+        ChartDataResponse response = new ChartDataResponse(TickerSummary.from(ticker), Broker.ALPACA,
+                List.of(candle), List.of(), true);
+        when(indicatorService.getChartData(eq("AAPL"), anyInt())).thenReturn(response);
+
+        mockMvc.perform(get("/api/tickers/AAPL/chart-data"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stale").value(true))
+                .andExpect(jsonPath("$.candles[0].close").value(113.10));
     }
 
     @Test
