@@ -1,5 +1,7 @@
 import { apiFetch } from '../auth/api'
 
+export type AssetType = 'STOCK' | 'CRYPTO'
+
 export interface Candle {
   timestamp: string
   open: string
@@ -12,7 +14,7 @@ export interface Candle {
 export interface TickerSummary {
   id: number
   symbol: string
-  assetType: 'STOCK' | 'CRYPTO'
+  assetType: AssetType
   exchange: string | null
 }
 
@@ -80,4 +82,24 @@ export async function fetchPriceHistory(symbol: string): Promise<PriceHistoryRes
   }
 
   return (await response.json()) as PriceHistoryResponse
+}
+
+/**
+ * Idempotent — registering an already-registered symbol under the same asset type just
+ * returns the existing ticker (200, not 201). Registering it under a *different* asset type
+ * throws ASSET_TYPE_CONFLICT (see TickerAssetTypeConflictException) rather than silently
+ * relabeling it.
+ */
+export async function registerTicker(symbol: string, assetType: AssetType): Promise<TickerSummary> {
+  const response = await apiFetch('/api/tickers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ symbol, assetType }),
+  })
+
+  if (!response.ok) {
+    throw await parseMarketDataError(response)
+  }
+
+  return (await response.json()) as TickerSummary
 }

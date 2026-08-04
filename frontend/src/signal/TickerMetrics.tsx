@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { fetchChartData, type ChartDataResponse } from '../chart/api'
 import PriceChart from '../chart/PriceChart'
-import { MarketDataError } from '../marketdata/api'
+import { MarketDataError, registerTicker, type AssetType } from '../marketdata/api'
 import TradeForm from '../trade/TradeForm'
 import { addToWatchlist } from '../watchlist/api'
 import { fetchSignal, type MovingAverageResult, type SignalResponse } from './api'
@@ -9,6 +9,7 @@ import { fetchSignal, type MovingAverageResult, type SignalResponse } from './ap
 const ERROR_MESSAGES: Record<string, (symbol: string, backendMessage: string) => string> = {
   TICKER_NOT_REGISTERED: (symbol) =>
     `"${symbol}" isn't a registered ticker yet. Register it before looking up its signal.`,
+  ASSET_TYPE_CONFLICT: (_symbol, backendMessage) => backendMessage,
   NO_PRICE_DATA: (symbol) => `No price data is available for "${symbol}" right now.`,
   MARKET_CLOSED: (symbol) =>
     `The stock market is closed right now, so "${symbol}"'s metrics aren't shown as current data. Try again during regular hours (9:30am-4:00pm ET, Mon-Fri).`,
@@ -136,6 +137,7 @@ interface TickerMetricsProps {
 
 function TickerMetrics({ lookupRequest, onWatchlistChanged, onOrderPlaced }: TickerMetricsProps) {
   const [symbol, setSymbol] = useState('')
+  const [assetType, setAssetType] = useState<AssetType>('STOCK')
   const [result, setResult] = useState<SignalResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [chartData, setChartData] = useState<ChartDataResponse | null>(null)
@@ -176,9 +178,35 @@ function TickerMetrics({ lookupRequest, onWatchlistChanged, onOrderPlaced }: Tic
     setLoading(false)
   }
 
+  // The symbol-only lookup form doesn't know a ticker's asset type on its own (unlike a
+  // watchlist revisit, where it's already fixed by the existing registration) — so the form
+  // asks for it and registers/resolves the ticker under that type before looking it up.
+  // registerTicker is idempotent for a matching asset type; a mismatched one surfaces
+  // ASSET_TYPE_CONFLICT instead of silently relabeling an existing ticker.
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    await runLookup(symbol)
+    const trimmed = symbol.trim()
+    if (!trimmed) return
+
+    setLoading(true)
+    setError(null)
+    setResult(null)
+    setChartError(null)
+    setChartData(null)
+
+    try {
+      await registerTicker(trimmed, assetType)
+    } catch (reason) {
+      setLoading(false)
+      setError(
+        reason instanceof MarketDataError
+          ? describeError(trimmed, reason)
+          : 'Could not register the ticker. Please try again.',
+      )
+      return
+    }
+
+    await runLookup(trimmed)
   }
 
   useEffect(() => {
@@ -203,6 +231,29 @@ function TickerMetrics({ lookupRequest, onWatchlistChanged, onOrderPlaced }: Tic
             required
           />
         </label>
+        <fieldset>
+          <legend>Asset type</legend>
+          <label>
+            <input
+              type="radio"
+              name="assetType"
+              value="STOCK"
+              checked={assetType === 'STOCK'}
+              onChange={() => setAssetType('STOCK')}
+            />
+            Stock
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="assetType"
+              value="CRYPTO"
+              checked={assetType === 'CRYPTO'}
+              onChange={() => setAssetType('CRYPTO')}
+            />
+            Crypto
+          </label>
+        </fieldset>
         <button type="submit" disabled={loading}>
           {loading ? 'Looking up…' : 'Look up'}
         </button>

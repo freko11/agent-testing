@@ -3488,3 +3488,41 @@ pushing to an external location, since only the operator knows what off-disk des
 they actually have available — the runbook documents the manual off-disk-copy step
 instead of guessing one. This was E7's last remaining story; the epic is now complete.
 
+## E3-F1-S1 follow-up — asset-type selector on the ticker lookup form
+
+Discovered during manual live-verification (all epics were already "done"): the
+dashboard's "Ticker lookup" form had no way to register a new ticker at all, let alone
+pick its asset type. `TickerController.register` (`POST /api/tickers`, `AssetType`
+required, no symbol-shape inference per E1-F1-S1's convention) existed only as an
+API-only path with zero frontend caller — the lookup form just called
+`GET /api/tickers/{symbol}/price-history` and surfaced `TICKER_NOT_REGISTERED` for
+anything not already registered via curl. Every ticker in the running dev instance had
+been registered that way in earlier sessions, which is how this gap stayed unnoticed
+until someone tried the form on a genuinely new symbol.
+
+Fix: the form now has a Stock/Crypto radio selector (`TickerMetrics.tsx`, defaults to
+Stock) and, on submit, calls a new `registerTicker` (`marketdata/api.ts`, mirrors
+`watchlist/api.ts`'s `addToWatchlist` pattern) before the existing signal/chart fetch —
+`POST /api/tickers` is idempotent for a symbol already registered under the same type
+(200, not 201), so this is a no-op for tickers that already exist. Requesting a
+*different* type than what's already registered surfaces
+`TickerAssetTypeConflictException`'s `ASSET_TYPE_CONFLICT` message (added to
+`TickerMetrics.tsx`'s `ERROR_MESSAGES` map, passed straight through since the backend
+message is already specific) instead of silently relabeling the ticker. The watchlist's
+"revisit" path (`Watchlist.tsx` → `lookupRequest`) deliberately does *not* register —
+that ticker's type is already fixed by its existing registration, and threading the
+form's currently-selected radio value through would incorrectly attempt to
+re-register a saved ticker under whatever type the form happens to be showing.
+
+Live-verified via the running dev stack (Docker Desktop was down; started it, brought up
+Oracle XE/backend/frontend): registered a never-before-seen symbol (`DOGEUSDT`) as
+CRYPTO through the form and got back its signal in one submit (no separate
+registration step needed), then re-submitted the same symbol as Stock and confirmed the
+exact `ASSET_TYPE_CONFLICT` message rendered inline rather than silently switching it.
+No backend change — `POST /api/tickers` and its conflict handling already existed;
+this was purely a missing frontend caller. No new tests added (this frontend has no
+`@testing-library/react` dependency; component-level behavior here was verified live
+in-browser rather than with a unit test, consistent with how `TradeForm`/`Watchlist`
+etc. are also untested at the component level — only pure logic modules like
+`validation.ts` get Vitest coverage).
+

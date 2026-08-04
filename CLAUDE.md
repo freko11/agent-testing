@@ -41,7 +41,17 @@ All stories below are done, including E6 (Risk & Safety Controls) and E7
 - E2-F4-S1: Backtest harness
 
 ### E3 — Dashboard/Frontend
-- E3-F1-S1: Ticker lookup + metrics display
+- E3-F1-S1: Ticker lookup + metrics display. The lookup form includes a
+  Stock/Crypto asset-type radio selector — since a symbol's asset type can't
+  be inferred from its shape (per E1-F1-S1's ticker-registration
+  convention), the form now registers/resolves the ticker under the
+  selected type (`POST /api/tickers`, idempotent for a matching type) before
+  fetching its signal, rather than requiring pre-registration via the API
+  with no frontend path. A watchlist revisit skips this — its asset type is
+  already fixed by the existing registration — and looks up directly as
+  before. Selecting the wrong type for an already-registered symbol surfaces
+  `ASSET_TYPE_CONFLICT`'s backend message rather than silently relabeling
+  it.
 - E3-F1-S2: Buy/Sell/Hold badge + hold-term, color-coded
 - E3-F2-S1: Price chart with MA/RSI overlays (`lightweight-charts`)
 - E3-F3-S1: Watchlist
