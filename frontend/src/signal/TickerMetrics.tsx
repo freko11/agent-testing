@@ -221,7 +221,7 @@ function TickerMetrics({ lookupRequest, onWatchlistChanged, onOrderPlaced }: Tic
   return (
     <section>
       <h2>Ticker lookup</h2>
-      <form onSubmit={handleSubmit}>
+      <form className="ticker-lookup-form" onSubmit={handleSubmit}>
         <label>
           Ticker symbol
           <input

@@ -14,28 +14,34 @@ function DashboardPage() {
   const [lookupRequest, setLookupRequest] = useState<{ symbol: string; nonce: number } | null>(null)
 
   return (
-    <main>
-      <header>
-        <span>Signed in as {username}</span>
-        <button type="button" onClick={() => logout()}>
-          Log out
-        </button>
+    <>
+      <header className="app-header">
+        <h1 className="app-header__brand">Auto-Trade Dashboard</h1>
+        <div className="app-header__user">
+          <span>Signed in as {username}</span>
+          <button type="button" onClick={() => logout()}>
+            Log out
+          </button>
+        </div>
       </header>
-      <KillSwitchControl />
-      <TradingModeBanner />
-      <h1>Auto-Trade Dashboard</h1>
-      <NotificationPanel />
-      <Watchlist
-        refreshKey={watchlistRefreshKey}
-        onSelect={(symbol) => setLookupRequest({ symbol, nonce: Date.now() })}
-      />
-      <TickerMetrics
-        lookupRequest={lookupRequest}
-        onWatchlistChanged={() => setWatchlistRefreshKey((key) => key + 1)}
-        onOrderPlaced={() => setOrderHistoryRefreshKey((key) => key + 1)}
-      />
-      <OrderHistory refreshKey={orderHistoryRefreshKey} />
-    </main>
+      <main className="app-main">
+        <div className="app-toolbar">
+          <KillSwitchControl />
+          <TradingModeBanner />
+        </div>
+        <NotificationPanel />
+        <Watchlist
+          refreshKey={watchlistRefreshKey}
+          onSelect={(symbol) => setLookupRequest({ symbol, nonce: Date.now() })}
+        />
+        <TickerMetrics
+          lookupRequest={lookupRequest}
+          onWatchlistChanged={() => setWatchlistRefreshKey((key) => key + 1)}
+          onOrderPlaced={() => setOrderHistoryRefreshKey((key) => key + 1)}
+        />
+        <OrderHistory refreshKey={orderHistoryRefreshKey} />
+      </main>
+    </>
   )
 }
 

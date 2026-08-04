@@ -5,16 +5,301 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  --color-bg: light-dark(#eef1f5, #14171c);
+  --color-surface: light-dark(#ffffff, #1c2027);
+  --color-surface-alt: light-dark(#f3f4f6, #262b33);
+  --color-border: light-dark(#dde1e6, #2e333c);
+  --color-text: light-dark(#1a1d23, #e8eaed);
+  --color-text-muted: light-dark(#5b6270, #9aa1ac);
+  --color-accent: light-dark(#2563eb, #60a5fa);
+  --color-accent-contrast: #ffffff;
+  --color-danger: light-dark(#b91c1c, #f87171);
+
+  --radius-sm: 0.4rem;
+  --radius-md: 0.75rem;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 6%);
+  --shadow-md: 0 8px 24px rgb(0 0 0 / 12%);
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
 }
 
 #root {
   max-width: 100%;
   min-height: 100svh;
   box-sizing: border-box;
+}
+
+h1, h2, h3, h4 {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+/* Section headings read as small-caps eyebrow labels, matching .stat-tile__label's
+   established convention — keeps every top-level dashboard card visually consistent. */
+h2 {
+  margin: 0 0 1rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+
+h3 {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+}
+
+h4 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+p {
+  margin: 0 0 0.5rem;
+}
+
+a {
+  color: var(--color-accent);
+}
+
+/* ---------- Form controls ---------- */
+
+input,
+select,
+textarea {
+  font: inherit;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+input[type='radio'],
+input[type='checkbox'] {
+  width: auto;
+  padding: 0;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+/* Direct children only: fieldset's own radio/checkbox labels (below) stay inline,
+   not stacked, so this must not cascade into them. */
+form > label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+fieldset {
+  margin: 0 0 0.75rem;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+fieldset legend {
+  padding: 0 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+fieldset label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-right: 1.25rem;
+  font-size: 0.95rem;
+  font-weight: 400;
+}
+
+/* ---------- Buttons ---------- */
+
+button {
+  font: inherit;
+  cursor: pointer;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-alt);
+  color: var(--color-text);
+  transition: border-color 120ms ease, filter 120ms ease, transform 120ms ease;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* The primary call-to-action in every plain form (Look up, Trade, Sign in) and in
+   every confirm-dialog (Confirm trade, I understand and accept the risk, Clear kill
+   switch) — the dialogs mark their one true CTA with autoFocus already, so reusing
+   that as the style hook avoids a second "which button is primary" source of truth. */
+form button[type='submit'],
+.trade-confirm-dialog__actions button[autofocus] {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-weight: 600;
+}
+
+form button[type='submit']:hover:not(:disabled),
+.trade-confirm-dialog__actions button[autofocus]:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+/* ---------- App shell ---------- */
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.9rem 1.5rem;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+}
+
+.app-header__brand {
+  font-size: 1.15rem;
+}
+
+.app-header__user {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}
+
+.app-main {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 1.5rem 1.5rem 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.app-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+.app-toolbar > * {
+  flex: 1 1 auto;
+}
+
+/* Every top-level dashboard block (Notifications, Watchlist, Ticker lookup, Order
+   history) is a bare <section> — styling that structural position once here keeps
+   every card visually uniform without a className on each component. */
+.app-main > section {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 1.25rem 1.5rem 1.5rem;
+  box-shadow: var(--shadow-sm);
+}
+
+/* ---------- Login page ---------- */
+
+.login-page {
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 22rem;
+  padding: 2rem 2rem 2.25rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+.login-card h1 {
+  margin: 0 0 1.25rem;
+  font-size: 1.35rem;
+}
+
+.login-card__error {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  color: light-dark(#c2410c, #fb923c);
+}
+
+.login-card button[type='submit'] {
+  width: 100%;
+  margin-top: 0.25rem;
+}
+
+/* ---------- Ticker lookup ---------- */
+
+.ticker-lookup-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.ticker-lookup-form > label {
+  flex: 1 1 12rem;
+  margin-bottom: 0;
+}
+
+.ticker-lookup-form fieldset {
+  margin-bottom: 0;
+  flex: 0 0 auto;
+}
+
+.ticker-lookup-form button[type='submit'] {
+  flex: 0 0 auto;
 }
 
 .stat-tile-grid {
@@ -29,9 +314,9 @@ body {
   flex-direction: column;
   gap: 0.25rem;
   padding: 0.75rem 1rem;
-  border: 1px solid light-dark(#d0d0d0, #3a3a3a);
+  border: 1px solid var(--color-border);
   border-radius: 0.5rem;
-  background: light-dark(#f7f7f7, #1e1e1e);
+  background: var(--color-surface-alt);
 }
 
 .stat-tile__label {
@@ -108,7 +393,7 @@ body {
 .price-chart {
   width: 100%;
   height: 420px;
-  border: 1px solid light-dark(#d0d0d0, #3a3a3a);
+  border: 1px solid var(--color-border);
   border-radius: 0.5rem;
 }
 
@@ -131,14 +416,20 @@ body {
   align-items: center;
   gap: 0.75rem;
   padding: 0.5rem 0.75rem;
-  border: 1px solid light-dark(#d0d0d0, #3a3a3a);
+  border: 1px solid var(--color-border);
   border-radius: 0.5rem;
-  background: light-dark(#f7f7f7, #1e1e1e);
+  background: var(--color-surface-alt);
 }
 
 .watchlist-item__symbol {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
 }
 
 .watchlist-item__asset-type {
@@ -154,9 +445,9 @@ body {
   max-width: 24rem;
   margin: 1rem 0;
   padding: 1rem 1.25rem;
-  border: 1px solid light-dark(#d0d0d0, #3a3a3a);
+  border: 1px solid var(--color-border);
   border-radius: 0.5rem;
-  background: light-dark(#f7f7f7, #1e1e1e);
+  background: var(--color-surface-alt);
 }
 
 .trade-form label {
@@ -205,12 +496,13 @@ body {
 }
 
 .trade-confirm-dialog {
-  border: 1px solid light-dark(#d0d0d0, #3a3a3a);
+  border: 1px solid var(--color-border);
   border-radius: 0.5rem;
   padding: 1.25rem 1.5rem;
   max-width: 22rem;
-  background: light-dark(#ffffff, #1e1e1e);
-  color: light-dark(#1a1a1a, #e6e6e6);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow-md);
 }
 
 .trade-confirm-dialog::backdrop {
@@ -280,8 +572,16 @@ body {
 .order-history-table td {
   padding: 0.4rem 0.6rem;
   text-align: left;
-  border-bottom: 1px solid light-dark(#d0d0d0, #3a3a3a);
+  border-bottom: 1px solid var(--color-border);
   white-space: nowrap;
+}
+
+.order-history-table th {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-muted);
+  font-weight: 600;
 }
 
 .order-status {
@@ -348,9 +648,9 @@ body {
   justify-content: space-between;
   gap: 0.75rem;
   padding: 0.5rem 0.75rem;
-  border: 1px solid light-dark(#d0d0d0, #3a3a3a);
+  border: 1px solid var(--color-border);
   border-radius: 0.5rem;
-  background: light-dark(#f7f7f7, #1e1e1e);
+  background: var(--color-surface-alt);
 }
 
 .notification-panel__item--unread {
@@ -380,15 +680,85 @@ body {
   color: light-dark(#666666, #999999);
 }
 
+/* ---------- Kill switch ---------- */
+/* Previously referenced by KillSwitchControl.tsx with no rules at all — the
+   safety-critical control rendered as unstyled text. ENGAGED reuses the same
+   danger red as .trading-mode-banner--live; CLEARED stays a neutral card so it
+   doesn't compete with the paper/live banner next to it. */
+
+.kill-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 0.9rem;
+  padding: 0.6rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.kill-switch button {
+  background: var(--color-surface);
+}
+
+.kill-switch--cleared .kill-switch__status {
+  color: var(--color-text-muted);
+}
+
+.kill-switch--engaged {
+  background: light-dark(#fdecec, #3a1414);
+  border-color: light-dark(#b91c1c, #f87171);
+  color: light-dark(#b91c1c, #fca5a5);
+}
+
+.kill-switch__status {
+  font-weight: 700;
+}
+
+.kill-switch__since,
+.kill-switch__summary {
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+
+.kill-switch__error {
+  margin: 0;
+  flex-basis: 100%;
+  font-size: 0.85rem;
+  color: light-dark(#c2410c, #fb923c);
+}
+
+/* The one-click, no-confirmation "stop everything" action — a deliberate, singular
+   exception to this app's avoid-raw-red-for-buttons convention, since it needs to
+   read as more urgent than any other button on the page. Selector is bumped to
+   `button.kill-switch__engage` (element+class, matching .kill-switch button's own
+   specificity) so it wins on source order — plain `.kill-switch__engage` loses this
+   fight to the contrast-background rule above and silently ends up white-on-white. */
+button.kill-switch__engage {
+  border-color: var(--color-danger);
+  background: var(--color-danger);
+  color: #ffffff;
+  font-weight: 700;
+}
+
+button.kill-switch__engage:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
 .trading-mode-banner {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
-  margin: 0.5rem 0 1rem;
   padding: 0.6rem 1rem;
-  border-radius: 0.5rem;
+  border-radius: var(--radius-md);
   border: 1px solid;
+  box-shadow: var(--shadow-sm);
+}
+
+.trading-mode-banner button {
+  background: var(--color-surface);
 }
 
 .trading-mode-banner__mode {

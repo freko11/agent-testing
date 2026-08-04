@@ -41,6 +41,20 @@ All stories below are done, including E6 (Risk & Safety Controls) and E7
 - E2-F4-S1: Backtest harness
 
 ### E3 — Dashboard/Frontend
+- Frontend visual pass: design tokens (`index.css` `:root` custom
+  properties — surface/border/text/accent/danger colors, radius, shadow,
+  reusing the existing light-dark() palette), a sticky `.app-header` +
+  centered `.app-main` content column, every top-level dashboard `<section>`
+  styled uniformly as a card via the `.app-main > section` structural
+  selector (no per-component className needed), consistent button/input/
+  fieldset styling, and a centered `.login-card` for the login page. Found
+  and fixed a real gap while at it: `KillSwitchControl.tsx` referenced
+  `.kill-switch*` classes that had zero CSS at all, so the kill switch — one
+  of the most safety-critical controls in the app — rendered as unstyled
+  text. See `docs/CHANGELOG.md` for the specificity bug hit while fixing
+  that (`.kill-switch button`'s contrast-background rule outranked
+  `.kill-switch__engage`'s red one, producing invisible white-on-white
+  text) and how it was fixed.
 - E3-F1-S1: Ticker lookup + metrics display. The lookup form includes a
   Stock/Crypto asset-type radio selector — since a symbol's asset type can't
   be inferred from its shape (per E1-F1-S1's ticker-registration

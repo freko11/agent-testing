@@ -3526,3 +3526,71 @@ in-browser rather than with a unit test, consistent with how `TradeForm`/`Watchl
 etc. are also untested at the component level — only pure logic modules like
 `validation.ts` get Vitest coverage).
 
+## Frontend visual pass — design tokens, layout, and a missing-CSS bug fix
+
+Requested as a general "make the UI look more professional" pass, not tied to a
+specific story. Audited every component file first rather than guessing: most of the
+per-feature color/badge work from E3/E5/E6 (signal badges, trade-form result tones,
+order-status colors, trading-mode banner) was already solid and left alone. What was
+actually missing was app-shell-level: no design tokens, no consistent card/section
+treatment, unstyled `<button>`/`<input>`/`<fieldset>` elements (browser defaults), a
+non-sticky plain-text header, and a completely unstyled login page.
+
+Added to `index.css`:
+- A `:root` design-token layer (`--color-bg/surface/surface-alt/border/text/
+  text-muted/accent/danger`, `--radius-sm/md`, `--shadow-sm/md`) built from colors
+  already in use elsewhere in the file (the existing signal-badge/trading-mode-banner
+  teal/orange/slate/blue palette), rather than inventing a new one.
+- Global base styles for headings (h2 restyled as a small-caps "eyebrow" label —
+  reusing `.stat-tile__label`'s existing convention — so every section heading reads
+  consistently), buttons (base + `form button[type="submit"]` / dialog-autofocus
+  primary variant), and form controls (`input`/`select`/`fieldset`/`legend`, with
+  `form > label` stacked vertically but `fieldset label` kept inline so radio/checkbox
+  groups don't also get stacked).
+- `.app-header` (sticky top bar) / `.app-main` (centered 1000px column) / `.app-toolbar`
+  — new layout classes requiring small JSX restructuring in `DashboardPage.tsx` (the
+  page title moved from a standalone `<h1>` into the header as its brand element; kill
+  switch + trading-mode banner grouped into one toolbar row).
+- `.app-main > section` — a single structural selector that gives every top-level
+  dashboard block (Notifications/Watchlist/Ticker lookup/Order history — all bare
+  `<section>` elements already) uniform card styling with zero per-component
+  className changes needed.
+- `.login-card` / `.login-page` for `LoginPage.tsx` (previously fully unstyled,
+  top-left plain browser form) and `.ticker-lookup-form` for the ticker-lookup row
+  (symbol input + asset-type pills + submit button now sit inline instead of stacking).
+
+Real bug found and fixed along the way, not just cosmetic gap-filling:
+`KillSwitchControl.tsx` has referenced `.kill-switch`/`.kill-switch__*` classes since
+E6-F2-S2 shipped, but `index.css` never defined *any* of them — this app's most
+safety-critical single control (the one-click "stop everything" kill switch) has been
+rendering as completely unstyled text/buttons this whole time. Added the missing
+rules, including a deliberate one-off exception to this app's "avoid raw red for
+buttons" convention for `.kill-switch__engage` (danger red, matching
+`.trading-mode-banner--live`), since this is the one action in the app that needs to
+read as more urgent than everything else on the page.
+
+That fix immediately surfaced a second bug via live-verification (caught by actually
+looking at the rendered page, not just by the CSS parsing/building cleanly): the
+"Kill switch" button rendered as an empty box with a visible red border but no visible
+label. Root cause was a CSS specificity collision — `.kill-switch button { background:
+var(--color-surface) }` (added so buttons keep contrast against the tinted
+`.trading-mode-banner`-style container backgrounds) is class+element specificity
+(0,1,1), which outranks single-class `.kill-switch__engage`'s (0,1,0) regardless of
+source order, silently overriding its red `background` while leaving its `border-color`
+and explicit `color: #ffffff` untouched — white text on a white background. Fixed by
+bumping the engage-button selector to `button.kill-switch__engage` (element+class,
+same specificity as the conflicting rule, so source order — which already put it
+later in the file — now correctly decides the tie). Confirmed via
+`getComputedStyle()` in-browser before and after: `background`/`color` both read
+`rgb(255, 255, 255)` beforehand (invisible), `background` reads the danger red and
+text is legible after.
+
+Live-verified the whole page in both color schemes (light default, and dark via
+`document.documentElement.style.colorScheme = 'dark'` — this app has never had a
+dark-mode-specific test before now) across every section: header, kill switch
+(cleared and — implicitly, same CSS path — engaged), trading-mode banner, notifications,
+watchlist, ticker lookup (form row, stat tiles, signal badge, price chart, trade
+form), order history, and the login page. No backend changes. No new tests (same
+"no component-level test harness in this frontend" situation as the asset-type-selector
+change above — verified live in-browser instead).
+
