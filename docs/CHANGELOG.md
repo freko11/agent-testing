@@ -3815,3 +3815,70 @@ status reporting — cross-check via a direct signed call to
 `/fapi/v3/positionRisk`, same technique used in E4-F3-S2's follow-up), and
 specifically GET with a bogus `clientAlgoId` first to capture the real
 not-found error code before relying on the current placeholder.
+
+## E4-F3-S3 follow-up — live verification against the real Binance Futures Testnet
+
+The prior entry above shipped the Algo Order API migration with every param name,
+response field name, status vocabulary value, and the not-found error code marked as
+best-effort design, not verified facts, since this project's Binance integration
+targets a fictional/project-internal API surface with no real docs to check against.
+The user asked to close that gap directly against the real testnet rather than leave
+it as a documented risk.
+
+**Method.** Real, signed HTTP calls to `https://testnet.binancefuture.com` using the
+`BINANCE_TRADING_API_KEY`/`BINANCE_TRADING_API_SECRET` already in `.env` (the same
+credentials `BinanceFuturesTradingAdapter` uses), driven from a standalone bash+openssl
+script rather than the full app — bypasses Oracle/Spring entirely, mirrors the "direct
+signed call" cross-check technique already used in E4-F3-S2's follow-up. Proceeded in
+stages, confirming with the user before each escalation in blast radius (read-only
+account/lookup calls first, then one real order placement against an existing test
+position, then one real trigger-and-fire):
+
+1. `GET /fapi/v3/account` — confirmed the credentials are live and found a pre-existing
+   open BTCUSDT short (`positionAmt: -0.0010`), left over from an earlier story's live
+   verification run.
+2. `GET /fapi/v1/algoOrder` with a bogus `clientAlgoId` — confirmed the endpoint exists
+   at all, and returned `{"code":-2013,"msg":"Order does not exist."}`, identical to
+   `/fapi/v1/order`'s own not-found response. `ALGO_ORDER_DOES_NOT_EXIST_CODE`'s
+   placeholder value was correct on the first guess.
+3. `POST /fapi/v1/algoOrder` with `symbol`/`side`/`algoType=CONDITIONAL`/`type=
+   STOP_MARKET`/`triggerPrice`/`closePosition=true`/`clientAlgoId` (a real protective
+   order against the existing short, trigger price set safely far from market so it
+   wouldn't fire) — accepted. Response: `{"algoId":...,"clientAlgoId":...,
+   "algoType":"CONDITIONAL","orderType":"STOP_MARKET",...,"algoStatus":"NEW",
+   "triggerPrice":"96301.40",...}`. Every param name was accepted as-is; the response
+   field names (`algoId`/`algoStatus`) matched the guess, but the resting status is
+   `NEW`, not the guessed `WORKING`.
+4. `GET`/`DELETE /fapi/v1/algoOrder` against that same order — GET matched the POST
+   response shape; DELETE returned `{"algoId":...,"clientAlgoId":...,"code":"200",
+   "msg":"success"}` and a follow-up GET showed `"algoStatus":"CANCELED"` (one L) —
+   not the guessed `CANCELLED` (two L's).
+5. A second real order, this time with a trigger price close enough to current market
+   price to fire from natural price drift (confirmed first that an already-satisfied
+   trigger is rejected outright with `-2021 "Order would immediately trigger."`,
+   matching real Binance's standard STOP_MARKET safety check) — polled every 3s for
+   ~2.5 minutes. It fired: `"algoStatus":"FINISHED"`, `"actualOrderId":"28280966309"`,
+   `"actualPrice":"64155.600000"`, and the account's BTCUSDT position went flat
+   (confirmed via a follow-up `GET /fapi/v3/positionRisk` returning `[]`) — closing out
+   the leftover test position as a side effect, not a problem. `FINISHED` was the one
+   status value guessed correctly on the first try.
+
+**Fixed from these findings.** `BinanceFuturesTradingAdapter.isMissingProtection`'s
+`"CANCELLED"` check corrected to `"CANCELED"`; `FakeBinanceFuturesTradingServer`'s
+`handlePlaceAlgoOrder` now stores/returns `"NEW"` instead of `"WORKING"`;
+`BinanceFuturesTradingAdapterTest`'s exit-leg fixtures across all affected tests moved
+from `"WORKING"`/`"CANCELLED"` to `"NEW"`/`"CANCELED"`. `isTriggered`'s `"FINISHED"`
+check, every request param name, both response field names, and
+`ALGO_ORDER_DOES_NOT_EXIST_CODE`'s `-2013` value needed no changes — confirmed correct
+as originally coded. The class Javadoc's E4-F3-S3 paragraph, and CLAUDE.md's E4-F3-S3
+status entry, were updated to state these as live-confirmed facts rather than
+unverified assumptions. All 402 backend tests still pass (`./mvnw verify`) after the
+fix — same count as before, since this was a values-only correction, not a new test.
+
+**Scope note.** This verification exercised the exit-leg placement/lookup/cancel path
+directly (steps 2-5 above), not a full `OrderService.submitOrder` round trip through
+the running Spring Boot app — the app itself wasn't started for this pass (no Oracle
+container was brought up). The adapter-level behavior this story is actually about
+(the Algo Order API's real shape) is now proven against the live testnet; a
+full-stack, entry-plus-both-legs bracket order through the running dashboard remains
+untested end-to-end, matching the scope of what was asked.

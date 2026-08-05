@@ -65,8 +65,8 @@
     "semantic_hash": "3875330a04b3aa69c1c9150e7332ce81"
   },
   "backend/src/main/java/com/autotrade/dashboard/brokeradapter/BinanceFuturesTradingAdapter.java": {
-    "mtime": 1785685367.5738125,
-    "ast_hash": "a05c003c85779489a36bee0299f81de9",
+    "mtime": 1785912001.10136,
+    "ast_hash": "4071ed9599176a63a383e580038e5a67",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/brokeradapter/BinanceFuturesTradingProperties.java": {
@@ -810,9 +810,9 @@
     "semantic_hash": "11a458c12c15b3610f45bb712baba650"
   },
   "backend/src/test/java/com/autotrade/dashboard/brokeradapter/BinanceFuturesTradingAdapterTest.java": {
-    "mtime": 1785316619.9434502,
-    "ast_hash": "53a0938ffe243b69eb6414d97a02228c",
-    "semantic_hash": "53a0938ffe243b69eb6414d97a02228c"
+    "mtime": 1785912173.17662,
+    "ast_hash": "d97bd88bc6625abf67b84ad16b1d180f",
+    "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/brokeradapter/BrokerAdapterContractTest.java": {
     "mtime": 1785308103.1158347,
@@ -830,9 +830,9 @@
     "semantic_hash": "2433b4cf79bc296a062df492aa8b950a"
   },
   "backend/src/test/java/com/autotrade/dashboard/brokeradapter/FakeBinanceFuturesTradingServer.java": {
-    "mtime": 1785316031.2813318,
-    "ast_hash": "a1cf9559d1733a940250f77137acbd29",
-    "semantic_hash": "a1cf9559d1733a940250f77137acbd29"
+    "mtime": 1785912052.8237865,
+    "ast_hash": "51eb3e5393497692f90f5504f2082b27",
+    "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/brokeradapter/MockBrokerAdapter.java": {
     "mtime": 1785308090.7234347,
@@ -1280,8 +1280,8 @@
     "semantic_hash": "ba2aaaac807614916be42c0c7583990e"
   },
   "CLAUDE.md": {
-    "mtime": 1785849779.6883276,
-    "ast_hash": "e5ec6f6763867a0fd817374184401970",
+    "mtime": 1785912319.8037896,
+    "ast_hash": "c1cb8c21da66b4c31dbd50742108560d",
     "semantic_hash": ""
   },
   "docker-compose.yml": {
@@ -1290,9 +1290,9 @@
     "semantic_hash": "227d1ccfa21fcc14d6fc4533529d3cee"
   },
   "docs/agile-plan.md": {
-    "mtime": 1784984344.6060386,
-    "ast_hash": "d1922bda36de4a8ec60354d8d7b3c31a",
-    "semantic_hash": "d1922bda36de4a8ec60354d8d7b3c31a"
+    "mtime": 1785910931.149544,
+    "ast_hash": "a0ef216d85b86f4719cb158ea8e6dc7c",
+    "semantic_hash": ""
   },
   "docs/runbooks/credential-key-rotation.md": {
     "mtime": 1785037569.3345845,
@@ -1330,8 +1330,8 @@
     "semantic_hash": ""
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1785849815.5194871,
-    "ast_hash": "9fe2c98b79428651db4042a156fb51d3",
+    "mtime": 1785912443.017123,
+    "ast_hash": "d3411fabd55d214583d15b1744103024",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/risk/RiskExceptionHandler.java": {

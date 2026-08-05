@@ -123,17 +123,18 @@ import java.util.regex.Pattern;
  * order on {@code /fapi/v1/order}, and so does {@code cancelOrder} (still
  * entry-only scope, confirmed unchanged: by the time exit legs exist the
  * entry already filled and is no longer cancelable, so there was never a
- * gap here to close). This project's Binance integration targets a
- * fictional/project-internal API surface with no real docs to verify
- * against, so the Algo Order API's exact param/response names ({@code
- * clientAlgoId}, {@code triggerPrice}, {@code algoId}, {@code algoStatus}),
- * its status vocabulary ({@code WORKING}/{@code FINISHED}/{@code
- * CANCELLED}/{@code EXPIRED}/{@code REJECTED}), and {@link
- * #ALGO_ORDER_DOES_NOT_EXIST_CODE} (assumed to match the entry endpoint's
- * {@code -2013}) are this story's best-effort design, not verified facts —
- * flagged for confirmation against the real Binance Futures Testnet before
- * this is trusted with real paper-mode capital, per the AC's own "not just
- * mocks" requirement.
+ * gap here to close). Every param name, response field name, the status
+ * vocabulary ({@code NEW}/{@code FINISHED}/{@code CANCELED}/{@code
+ * EXPIRED}/{@code REJECTED} — the latter two not directly observed,
+ * low-risk since they're unambiguous spellings), and {@link
+ * #ALGO_ORDER_DOES_NOT_EXIST_CODE} were live-verified against the real
+ * Binance Futures Testnet (a real signed {@code POST}/{@code GET}/{@code
+ * DELETE /fapi/v1/algoOrder} round trip, including watching a conditional
+ * order actually fire and close a position) rather than left as guesses —
+ * see {@code docs/CHANGELOG.md}'s E4-F3-S3 entry for the raw request/
+ * response bodies. Two initial guesses were wrong and corrected from that
+ * live run: the resting status is {@code NEW}, not {@code WORKING}, and the
+ * cancelled status is {@code CANCELED} (one L), not {@code CANCELLED}.
  */
 public class BinanceFuturesTradingAdapter implements BrokerAdapter {
 
@@ -146,8 +147,8 @@ public class BinanceFuturesTradingAdapter implements BrokerAdapter {
     private static final int EXIT_LEG_MAX_ATTEMPTS = 2;
     private static final long EXIT_LEG_RETRY_PAUSE_MILLIS = 200;
     private static final String ALGO_TYPE_CONDITIONAL = "CONDITIONAL";
-    // Assumed to match the entry endpoint's -2013 "Order does not exist" — unverified
-    // against a real Algo Order API response, see the E4-F3-S3 class-Javadoc paragraph.
+    // Live-verified against the real Binance Futures Testnet (E4-F3-S3) — matches the
+    // entry endpoint's -2013 "Order does not exist" exactly, see the class Javadoc.
     private static final long ALGO_ORDER_DOES_NOT_EXIST_CODE = -2013L;
     // Hyphen allowed only for this codebase's own "-NOACTIVITY" test-symbol convention
     // (see BrokerAdapterContractTest); real Binance symbols are plain alphanumeric.
@@ -545,7 +546,7 @@ public class BinanceFuturesTradingAdapter implements BrokerAdapter {
         if (leg == null) {
             return true;
         }
-        return "CANCELLED".equals(leg.algoStatus()) || "EXPIRED".equals(leg.algoStatus()) || "REJECTED".equals(leg.algoStatus());
+        return "CANCELED".equals(leg.algoStatus()) || "EXPIRED".equals(leg.algoStatus()) || "REJECTED".equals(leg.algoStatus());
     }
 
     private static boolean isTerminal(OrderStatus status) {

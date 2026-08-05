@@ -20,9 +20,8 @@ All stories below are done, including E6 (Risk & Safety Controls), E7
 (Observability & Hardening), and the E4-F3-S3 backlog story (Binance Algo
 Order API migration) added after E4-F3-S2's post-launch verification found
 Binance rejecting conditional exit-leg orders on the old endpoint — see
-that story's entry below. Live verification against the real Binance
-Futures Testnet is still outstanding (see E4-F3-S3's entry for what remains
-open).
+that story's entry below, live-verified end-to-end against the real
+Binance Futures Testnet.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -115,23 +114,18 @@ open).
   filled and is no longer cancelable, so there was never a gap here to
   close; the kill switch's cancel-all sweep stays entry-only too, the same
   scope choice). `compositeResult`'s `isTriggered`/`isMissingProtection`
-  now read `algoStatus` (assumed vocabulary: `WORKING`/`FINISHED`/
-  `CANCELLED`/`EXPIRED`/`REJECTED`) instead of the old endpoint's `status`.
-  This project's Binance integration targets a fictional/project-internal
-  API surface with no real docs to verify against, so the Algo Order API's
-  param/response names, status vocabulary, and
-  `ALGO_ORDER_DOES_NOT_EXIST_CODE` (assumed to match the entry endpoint's
-  `-2013`) are this story's best-effort design, not verified facts — see
-  the class Javadoc's E4-F3-S3 paragraph and `docs/CHANGELOG.md` for the
-  full design-gate rationale. **Open gap**: the AC's "against the real
-  Binance Futures Testnet, not just mocks" requirement is not yet
-  satisfied — `FakeBinanceFuturesTradingServer`/`BinanceFuturesTradingAdapterTest`
-  were updated to the same assumed shapes, so all tests are internally
-  consistent but unverified against a live endpoint. A live testnet pass
-  (submit a real bracket order, confirm both legs show protected, and
-  specifically re-derive `ALGO_ORDER_DOES_NOT_EXIST_CODE` from a real
-  not-found response before trusting it) is still needed before this is
-  relied on with real paper-mode capital.
+  read `algoStatus` — live-verified against the real Binance Futures
+  Testnet (a real signed `POST`/`GET`/`DELETE /fapi/v1/algoOrder` round
+  trip, including watching a conditional order actually fire and close a
+  position), not left as guesses. Two initial guesses were wrong and
+  corrected from that live run: the resting status is `NEW`, not `WORKING`;
+  the cancelled status is `CANCELED` (one L), not `CANCELLED`. Everything
+  else (every param/response field name, `ALGO_ORDER_DOES_NOT_EXIST_CODE`
+  matching the entry endpoint's `-2013`, and the `FINISHED`-on-trigger
+  status) was confirmed correct on the first guess. `EXPIRED`/`REJECTED`
+  weren't directly observed (low-risk, unambiguous spellings). See
+  `docs/CHANGELOG.md`'s E4-F3-S3 entry for the raw request/response bodies
+  and the full design-gate rationale.
 
 ### E5 — Auto-Trade Execution
 - E5-F1-S1: Trade input form (amount, leverage, take-profit, stop-loss)

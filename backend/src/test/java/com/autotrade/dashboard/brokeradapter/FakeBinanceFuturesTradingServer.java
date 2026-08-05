@@ -141,10 +141,11 @@ class FakeBinanceFuturesTradingServer {
     }
 
     private ClientHttpResponse handlePlaceAlgoOrder(MultiValueMap<String, String> query) {
+        // "NEW" (not "WORKING") — live-verified against the real Binance Futures Testnet, E4-F3-S3.
         String clientAlgoId = query.getFirst("clientAlgoId");
         long algoId = nextAlgoId++;
-        algoOrdersByClientAlgoId.put(clientAlgoId, new StoredAlgoOrder(algoId, clientAlgoId, "WORKING"));
-        return jsonResponse(HttpStatus.OK, algoOrderJson(algoId, "WORKING"));
+        algoOrdersByClientAlgoId.put(clientAlgoId, new StoredAlgoOrder(algoId, clientAlgoId, "NEW"));
+        return jsonResponse(HttpStatus.OK, algoOrderJson(algoId, "NEW"));
     }
 
     private ClientHttpResponse handleGetAlgoOrder(MultiValueMap<String, String> query) {

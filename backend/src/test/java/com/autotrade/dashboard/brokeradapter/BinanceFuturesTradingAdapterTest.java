@@ -287,7 +287,7 @@ class BinanceFuturesTradingAdapterTest {
                 .andExpect(queryParam("side", "SELL"))
                 .andExpect(queryParam("closePosition", "true"))
                 .andExpect(queryParam("triggerPrice", "50000"))
-                .andRespond(withSuccess(algoOrderJson(556, "WORKING"), MediaType.APPLICATION_JSON));
+                .andRespond(withSuccess(algoOrderJson(556, "NEW"), MediaType.APPLICATION_JSON));
         expectAlgoOrderCheckNotFound();
         server.expect(method(HttpMethod.POST))
                 .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/algoOrder?")))
@@ -296,7 +296,7 @@ class BinanceFuturesTradingAdapterTest {
                 .andExpect(queryParam("side", "SELL"))
                 .andExpect(queryParam("closePosition", "true"))
                 .andExpect(queryParam("triggerPrice", "70000"))
-                .andRespond(withSuccess(algoOrderJson(557, "WORKING"), MediaType.APPLICATION_JSON));
+                .andRespond(withSuccess(algoOrderJson(557, "NEW"), MediaType.APPLICATION_JSON));
 
         BrokerOrderResult result = adapter.placeOrder(request, TradingMode.PAPER);
 
@@ -332,13 +332,13 @@ class BinanceFuturesTradingAdapterTest {
                 .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/algoOrder?")))
                 .andExpect(queryParam("type", "STOP_MARKET"))
                 .andExpect(queryParam("triggerPrice", "65500.9"))
-                .andRespond(withSuccess(algoOrderJson(556, "WORKING"), MediaType.APPLICATION_JSON));
+                .andRespond(withSuccess(algoOrderJson(556, "NEW"), MediaType.APPLICATION_JSON));
         expectAlgoOrderCheckNotFound();
         server.expect(method(HttpMethod.POST))
                 .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/algoOrder?")))
                 .andExpect(queryParam("type", "TAKE_PROFIT_MARKET"))
                 .andExpect(queryParam("triggerPrice", "63000.1"))
-                .andRespond(withSuccess(algoOrderJson(557, "WORKING"), MediaType.APPLICATION_JSON));
+                .andRespond(withSuccess(algoOrderJson(557, "NEW"), MediaType.APPLICATION_JSON));
 
         BrokerOrderResult result = adapter.placeOrder(request, TradingMode.PAPER);
 
@@ -421,7 +421,7 @@ class BinanceFuturesTradingAdapterTest {
         server.expect(method(HttpMethod.POST))
                 .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/algoOrder?")))
                 .andExpect(queryParam("type", "STOP_MARKET"))
-                .andRespond(withSuccess(algoOrderJson(556, "WORKING"), MediaType.APPLICATION_JSON));
+                .andRespond(withSuccess(algoOrderJson(556, "NEW"), MediaType.APPLICATION_JSON));
         // take-profit: both bounded-retry attempts fail
         expectAlgoOrderCheckNotFound();
         server.expect(method(HttpMethod.POST))
@@ -454,10 +454,10 @@ class BinanceFuturesTradingAdapterTest {
                 .andRespond(withSuccess(orderJson(555, "FILLED", "61000.00"), MediaType.APPLICATION_JSON));
         server.expect(method(HttpMethod.GET))
                 .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/algoOrder?")))
-                .andRespond(withSuccess(algoOrderJson(556, "WORKING"), MediaType.APPLICATION_JSON));
+                .andRespond(withSuccess(algoOrderJson(556, "NEW"), MediaType.APPLICATION_JSON));
         server.expect(method(HttpMethod.GET))
                 .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/algoOrder?")))
-                .andRespond(withSuccess(algoOrderJson(557, "WORKING"), MediaType.APPLICATION_JSON));
+                .andRespond(withSuccess(algoOrderJson(557, "NEW"), MediaType.APPLICATION_JSON));
 
         BrokerOrderResult result = adapter.placeOrder(request, TradingMode.PAPER);
 
@@ -484,10 +484,10 @@ class BinanceFuturesTradingAdapterTest {
                 .andRespond(withSuccess(orderJson(555, "FILLED", "61000.00"), MediaType.APPLICATION_JSON));
         server.expect(method(HttpMethod.GET))
                 .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/algoOrder?")))
-                .andRespond(withSuccess(algoOrderJson(556, "WORKING"), MediaType.APPLICATION_JSON));
+                .andRespond(withSuccess(algoOrderJson(556, "NEW"), MediaType.APPLICATION_JSON));
         server.expect(method(HttpMethod.GET))
                 .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/algoOrder?")))
-                .andRespond(withSuccess(algoOrderJson(557, "WORKING"), MediaType.APPLICATION_JSON));
+                .andRespond(withSuccess(algoOrderJson(557, "NEW"), MediaType.APPLICATION_JSON));
 
         Optional<BrokerOrderResult> result = adapter.getOrderStatus("BTCUSDT", "co-1", TradingMode.PAPER);
 
@@ -503,10 +503,10 @@ class BinanceFuturesTradingAdapterTest {
                 .andRespond(withSuccess(orderJson(555, "FILLED", "61000.00"), MediaType.APPLICATION_JSON));
         server.expect(method(HttpMethod.GET))
                 .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/algoOrder?")))
-                .andRespond(withSuccess(algoOrderJson(556, "CANCELLED"), MediaType.APPLICATION_JSON));
+                .andRespond(withSuccess(algoOrderJson(556, "CANCELED"), MediaType.APPLICATION_JSON));
         server.expect(method(HttpMethod.GET))
                 .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/algoOrder?")))
-                .andRespond(withSuccess(algoOrderJson(557, "WORKING"), MediaType.APPLICATION_JSON));
+                .andRespond(withSuccess(algoOrderJson(557, "NEW"), MediaType.APPLICATION_JSON));
 
         Optional<BrokerOrderResult> result = adapter.getOrderStatus("BTCUSDT", "co-1", TradingMode.PAPER);
 
@@ -525,7 +525,7 @@ class BinanceFuturesTradingAdapterTest {
                 .andRespond(withSuccess(algoOrderJson(556, "FINISHED"), MediaType.APPLICATION_JSON));
         server.expect(method(HttpMethod.GET))
                 .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/algoOrder?")))
-                .andRespond(withSuccess(algoOrderJson(557, "WORKING"), MediaType.APPLICATION_JSON));
+                .andRespond(withSuccess(algoOrderJson(557, "NEW"), MediaType.APPLICATION_JSON));
 
         Optional<BrokerOrderResult> result = adapter.getOrderStatus("BTCUSDT", "co-1", TradingMode.PAPER);
 
@@ -537,7 +537,7 @@ class BinanceFuturesTradingAdapterTest {
     @Test
     void getOrderStatus_exitLegNeverPlaced_returnsPartiallyProtected() {
         // Distinct from getOrderStatus_missingExitLeg_returnsPartiallyProtected (a leg that
-        // exists but shows CANCELLED/EXPIRED/REJECTED): here the leg was never placed at all,
+        // exists but shows CANCELED/EXPIRED/REJECTED): here the leg was never placed at all,
         // so findAlgoOrder's ALGO_ORDER_DOES_NOT_EXIST_CODE handling returns null.
         server.expect(method(HttpMethod.GET))
                 .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
@@ -545,7 +545,7 @@ class BinanceFuturesTradingAdapterTest {
         expectAlgoOrderCheckNotFound();
         server.expect(method(HttpMethod.GET))
                 .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/algoOrder?")))
-                .andRespond(withSuccess(algoOrderJson(557, "WORKING"), MediaType.APPLICATION_JSON));
+                .andRespond(withSuccess(algoOrderJson(557, "NEW"), MediaType.APPLICATION_JSON));
 
         Optional<BrokerOrderResult> result = adapter.getOrderStatus("BTCUSDT", "co-1", TradingMode.PAPER);
 
@@ -573,10 +573,10 @@ class BinanceFuturesTradingAdapterTest {
                 .andRespond(withSuccess(orderJson(555, "FILLED", "61000.00"), MediaType.APPLICATION_JSON));
         server.expect(method(HttpMethod.GET))
                 .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/algoOrder?")))
-                .andRespond(withSuccess(algoOrderJson(556, "WORKING"), MediaType.APPLICATION_JSON));
+                .andRespond(withSuccess(algoOrderJson(556, "NEW"), MediaType.APPLICATION_JSON));
         server.expect(method(HttpMethod.GET))
                 .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/algoOrder?")))
-                .andRespond(withSuccess(algoOrderJson(557, "WORKING"), MediaType.APPLICATION_JSON));
+                .andRespond(withSuccess(algoOrderJson(557, "NEW"), MediaType.APPLICATION_JSON));
 
         BrokerOrderResult result = adapter.cancelOrder("BTCUSDT", "co-1", TradingMode.PAPER);
 
