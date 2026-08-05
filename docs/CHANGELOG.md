@@ -4055,3 +4055,98 @@ status pills; Notifications), the theme toggle in both the header and login page
 and theme persistence surviving a real logout/login round trip (confirmed against
 the actual `DASHBOARD_PASSWORD` from `.env`, not a mocked session). No backend
 changes.
+
+## E2-F4-S2: backtest per-branch expectancy, not just win rate
+
+**Why this story exists.** A signal-quality assessment run this turn (rereading
+E2-F4-S1's printed backtest report) found the MAJORITY-branch win rates clustering
+right around a coin flip — 42.8-57.9% across BTCUSDT/DOGEUSDT's four directional
+branches. A win rate that close to 50/50 tells you almost nothing about whether the
+branch is actually worth trusting with capital: a 45% win rate can still be
+profitable if wins run bigger than losses on average, and a 55% win rate can still
+lose money if losses run bigger than wins. E2-F4-S1 never measured payoff size at
+all, only the WIN/LOSS/WASH classification — so there was no way to answer that
+question from the existing report. Scoped as its own backlog story rather than
+folded into a rule-table redesign, since the AC is purely "measure and report",
+not "change the rule table based on what's measured" — that decision (confidence-
+weighted voting, a regime filter, re-tuning the deadband) is explicitly left for
+later, once there's real expectancy evidence to decide from.
+
+**What changed, mechanically.** `BacktestHarness`'s private `score()` used to
+classify a forward move into `DirectionalOutcome.WIN`/`LOSS`/`WASH` and discard the
+actual percent move once classified — the number was computed, compared against
+`BacktestConfig.WIN_LOSS_DEADBAND_PCT`, then thrown away. Introduced
+`DirectionalScoreResult(DirectionalOutcome outcome, BigDecimal signedReturnPct)` so
+the signed return survives past classification. `DirectionalAccumulator` (already
+tracking win/loss/wash/notScored counts per `Checkpoint`) gained two more
+per-checkpoint `BigDecimal` running sums — `winReturnSums`/`lossReturnSums` — fed
+only when the outcome is WIN or LOSS respectively (WASH contributes to neither sum,
+matching the deadband's own "too small to call a real win or loss" semantics).
+`CheckpointStats` gained `avgWinReturnPct`/`avgLossReturnPct` (simple mean of each
+sum divided by its count, 0.0 when that count is 0) and a derived `expectancyPct()`
+— `(avgWinReturnPct * win + avgLossReturnPct * loss) / scored()`, i.e. the
+win-rate-weighted expected return per call with WASH scored as a flat zero, which
+is the actual "is this branch worth trusting with capital" number a win rate alone
+can't produce.
+
+**The one non-mechanical decision: how to roll up UNANIMOUS+MAJORITY.**
+`BacktestHarness.combineCheckpoint()` already existed to merge each directional
+rule's `CheckpointStats` into the report's "Overall BUY"/"Overall SELL" rows
+(E2-F4-S1). For the plain counts (win/loss/wash/notScored) a simple sum was always
+correct and still is. But `avgWinReturnPct`/`avgLossReturnPct` are themselves
+averages — summing two averages is wrong, and naively averaging the two branches'
+`avgWinReturnPct` values equally would silently misweight a 5-call branch the same
+as a 150-call branch. Changed to a call-count-weighted average:
+`(a.avgWinReturnPct * a.win + b.avgWinReturnPct * b.win) / (a.win + b.win)`, and
+symmetrically for losses — this is the correct combination since each branch's
+`avgWinReturnPct` is already itself an arithmetic mean over `a.win`/`b.win`
+observations, so weighting by those same counts reconstructs the true combined
+mean rather than an average-of-averages.
+
+**Report formatting.** The old single-line-per-rule win-rate row (`min X% mid Y%
+max Z%`) couldn't fit three more numbers per checkpoint without becoming
+unreadable, so `BacktestReport.printDirectional` now prints one line per
+checkpoint under each rule's name (`avg win`/`avg loss`/`expectancy`, signed and
+percent-formatted) instead of cramming all three checkpoints onto one line. Purely
+a `printTo` presentation change — `BacktestReport`'s record shape (fields, not
+methods) is untouched, so nothing that consumes the record itself needed to
+change.
+
+**Test coverage.** `BacktestHarnessTest` already asserted structural invariants
+only (decision-point counts reconcile across buckets) per E2-F4-S1's own
+precedent — the win rate itself is evidence under review, not a regression target,
+and the same reasoning extends to expectancy. Added
+`assertExpectancySignsAreSane`: for every directional rule (plus the Overall
+BUY/SELL roll-ups) and every checkpoint, asserts `avgWinReturnPct > 0` whenever
+`win > 0` and `avgLossReturnPct < 0` whenever `loss > 0`. This is a true structural
+invariant, not a disguised value assertion — a WIN classification requires
+`signedReturnPct` to exceed the positive deadband, and a LOSS requires it to be
+below the negative deadband, so an average built only from strictly-positive (or
+strictly-negative) inputs mathematically cannot land on the wrong side of zero;
+the test would only fail if the sign-tracking logic itself broke (e.g. a WIN
+return accidentally summed into `lossReturnSums`), which is exactly the kind of
+bug this class of test exists to catch.
+
+**The actual finding, read off the real fixture data** (`./mvnw test
+-Dtest=BacktestHarnessTest`, printed report, not asserted — per this story's own
+scope, the numbers are evidence to review, not a target to enforce):
+
+- BTCUSDT: both `BULLISH_MAJORITY` and `BEARISH_MAJORITY` are expectancy-positive
+  at all three checkpoints (e.g. BULLISH_MAJORITY: +0.59%/+2.01%/+3.51% at
+  min/mid/max; BEARISH_MAJORITY: +0.39%/+0.98%/+0.88%) — win rates in the
+  48-58% range, but wins consistently outrun losses in size, so the branches
+  are worth trusting on this evidence.
+- DOGEUSDT: `BULLISH_MAJORITY` is expectancy-positive throughout (win rate
+  46.3-49.6%, expectancy +0.03%/+0.30%/+0.22%), but `BEARISH_MAJORITY` is
+  expectancy-**negative** at the min and mid checkpoints (-0.087%, -0.305%)
+  despite a win rate (42.8%, 40.7%) that looks merely mediocre rather than
+  alarming — only recovering to slightly positive (+0.029%) at the max
+  checkpoint. This is exactly the failure mode E2-F4-S1's win-rate-only report
+  couldn't surface: a coin-flip-adjacent win rate hiding a branch where losses
+  run bigger than wins.
+
+No `SignalRuleId`/`SignalRuleEngine`/`HoldTermCalculator` changes — this story is
+diagnostic-only, per its own AC. `./mvnw test` (full backend suite) passes clean.
+No frontend changes. The DOGEUSDT `BEARISH_MAJORITY` finding is left as an open
+question for a future story (confidence-weighted voting, a regime filter, or a
+deadband/threshold re-tune) rather than acted on here.

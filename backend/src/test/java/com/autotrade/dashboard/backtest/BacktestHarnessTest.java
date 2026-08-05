@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * E2-F4-S1: replays the Buy/Sell/Hold rule table against real historical BTCUSDT/DOGEUSDT
@@ -50,11 +51,34 @@ class BacktestHarnessTest {
         for (SignalRuleId ruleId : SignalRuleId.values()) {
             int expected = report.callCounts().get(ruleId);
             if (ruleId.call() == SignalCall.BUY || ruleId.call() == SignalCall.SELL) {
-                assertEquals(expected, report.directionalStats().get(ruleId).totalCalls(),
+                DirectionalOutcomeStats stats = report.directionalStats().get(ruleId);
+                assertEquals(expected, stats.totalCalls(),
                         ruleId + ": directional stats total must match its call count");
+                assertExpectancySignsAreSane(ruleId.name(), stats);
             } else {
                 assertEquals(expected, report.holdGateStats().get(ruleId).totalCalls(),
                         ruleId + ": hold-gate stats total must match its call count");
+            }
+        }
+        assertExpectancySignsAreSane("Overall BUY", report.overallBuy());
+        assertExpectancySignsAreSane("Overall SELL", report.overallSell());
+    }
+
+    /**
+     * E2-F4-S2: avgWinReturnPct/avgLossReturnPct are derived from the same WIN/LOSS
+     * classification winRate() already reports (win = signedReturnPct > deadband, loss =
+     * signedReturnPct < -deadband), so their sign is a structural invariant, not a value under
+     * review — an average of strictly-positive numbers can't come out <= 0, and vice versa.
+     */
+    private void assertExpectancySignsAreSane(String label, DirectionalOutcomeStats stats) {
+        for (Checkpoint checkpoint : Checkpoint.values()) {
+            CheckpointStats cp = checkpoint == Checkpoint.MIN ? stats.min()
+                    : checkpoint == Checkpoint.MID ? stats.mid() : stats.max();
+            if (cp.win() > 0) {
+                assertTrue(cp.avgWinReturnPct() > 0, label + " " + checkpoint + ": avg win size must be positive");
+            }
+            if (cp.loss() > 0) {
+                assertTrue(cp.avgLossReturnPct() < 0, label + " " + checkpoint + ": avg loss size must be negative");
             }
         }
     }

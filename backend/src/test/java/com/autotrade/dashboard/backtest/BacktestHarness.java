@@ -112,8 +112,8 @@ public final class BacktestHarness {
     }
 
     /** @return empty if {@code daysForward} candles past the decision point don't exist in the fixture. */
-    private static Optional<DirectionalOutcome> score(List<Candle> candles, int decisionIndex, int daysForward,
-                                                        BigDecimal decisionClose, boolean isBuy) {
+    private static Optional<DirectionalScoreResult> score(List<Candle> candles, int decisionIndex, int daysForward,
+                                                            BigDecimal decisionClose, boolean isBuy) {
         int futureIndex = decisionIndex + daysForward;
         if (futureIndex >= candles.size()) {
             return Optional.empty();
@@ -121,10 +121,10 @@ public final class BacktestHarness {
         BigDecimal pctChange = percentChange(decisionClose, candles.get(futureIndex).close());
         BigDecimal signedForCall = isBuy ? pctChange : pctChange.negate();
 
-        if (signedForCall.abs().compareTo(BacktestConfig.WIN_LOSS_DEADBAND_PCT) <= 0) {
-            return Optional.of(DirectionalOutcome.WASH);
-        }
-        return Optional.of(signedForCall.signum() > 0 ? DirectionalOutcome.WIN : DirectionalOutcome.LOSS);
+        DirectionalOutcome outcome = signedForCall.abs().compareTo(BacktestConfig.WIN_LOSS_DEADBAND_PCT) <= 0
+                ? DirectionalOutcome.WASH
+                : (signedForCall.signum() > 0 ? DirectionalOutcome.WIN : DirectionalOutcome.LOSS);
+        return Optional.of(new DirectionalScoreResult(outcome, signedForCall));
     }
 
     private static Optional<HoldGateOutcome> scoreHoldGate(List<Candle> candles, int decisionIndex, BigDecimal decisionClose) {
@@ -147,14 +147,19 @@ public final class BacktestHarness {
     }
 
     private static CheckpointStats combineCheckpoint(CheckpointStats a, CheckpointStats b) {
-        return new CheckpointStats(a.win() + b.win(), a.loss() + b.loss(), a.wash() + b.wash(),
-                a.notScored() + b.notScored());
+        int win = a.win() + b.win();
+        int loss = a.loss() + b.loss();
+        double avgWin = win == 0 ? 0.0 : (a.avgWinReturnPct() * a.win() + b.avgWinReturnPct() * b.win()) / win;
+        double avgLoss = loss == 0 ? 0.0 : (a.avgLossReturnPct() * a.loss() + b.avgLossReturnPct() * b.loss()) / loss;
+        return new CheckpointStats(win, loss, a.wash() + b.wash(), a.notScored() + b.notScored(), avgWin, avgLoss);
     }
 
     private static final class DirectionalAccumulator {
         int totalCalls;
         final Map<Checkpoint, EnumMap<DirectionalOutcome, Integer>> outcomeCounts = new EnumMap<>(Checkpoint.class);
         final Map<Checkpoint, Integer> notScoredCounts = new EnumMap<>(Checkpoint.class);
+        final Map<Checkpoint, BigDecimal> winReturnSums = new EnumMap<>(Checkpoint.class);
+        final Map<Checkpoint, BigDecimal> lossReturnSums = new EnumMap<>(Checkpoint.class);
 
         DirectionalAccumulator() {
             for (Checkpoint checkpoint : Checkpoint.values()) {
@@ -164,14 +169,22 @@ public final class BacktestHarness {
                 }
                 outcomeCounts.put(checkpoint, counts);
                 notScoredCounts.put(checkpoint, 0);
+                winReturnSums.put(checkpoint, BigDecimal.ZERO);
+                lossReturnSums.put(checkpoint, BigDecimal.ZERO);
             }
         }
 
-        void record(Checkpoint checkpoint, Optional<DirectionalOutcome> outcome) {
-            if (outcome.isEmpty()) {
+        void record(Checkpoint checkpoint, Optional<DirectionalScoreResult> result) {
+            if (result.isEmpty()) {
                 notScoredCounts.merge(checkpoint, 1, Integer::sum);
-            } else {
-                outcomeCounts.get(checkpoint).merge(outcome.get(), 1, Integer::sum);
+                return;
+            }
+            DirectionalScoreResult scoreResult = result.get();
+            outcomeCounts.get(checkpoint).merge(scoreResult.outcome(), 1, Integer::sum);
+            if (scoreResult.outcome() == DirectionalOutcome.WIN) {
+                winReturnSums.merge(checkpoint, scoreResult.signedReturnPct(), BigDecimal::add);
+            } else if (scoreResult.outcome() == DirectionalOutcome.LOSS) {
+                lossReturnSums.merge(checkpoint, scoreResult.signedReturnPct(), BigDecimal::add);
             }
         }
 
@@ -182,8 +195,12 @@ public final class BacktestHarness {
 
         private CheckpointStats statsFor(Checkpoint checkpoint) {
             EnumMap<DirectionalOutcome, Integer> counts = outcomeCounts.get(checkpoint);
-            return new CheckpointStats(counts.get(DirectionalOutcome.WIN), counts.get(DirectionalOutcome.LOSS),
-                    counts.get(DirectionalOutcome.WASH), notScoredCounts.get(checkpoint));
+            int win = counts.get(DirectionalOutcome.WIN);
+            int loss = counts.get(DirectionalOutcome.LOSS);
+            double avgWin = win == 0 ? 0.0 : winReturnSums.get(checkpoint).doubleValue() / win;
+            double avgLoss = loss == 0 ? 0.0 : lossReturnSums.get(checkpoint).doubleValue() / loss;
+            return new CheckpointStats(win, loss, counts.get(DirectionalOutcome.WASH), notScoredCounts.get(checkpoint),
+                    avgWin, avgLoss);
         }
     }
 

@@ -43,6 +43,26 @@ Binance Futures Testnet.
 - E2-F3-S1: Indicators combined into a Buy/Sell/Hold call (rule engine)
 - E2-F3-S2: Suggested hold-term alongside the call
 - E2-F4-S1: Backtest harness
+- E2-F4-S2: Backtest per-branch expectancy (avg win size vs. avg loss size),
+  not just win rate. `BacktestHarness`'s directional `score()` now returns a
+  `DirectionalScoreResult` (outcome + the signed forward return it was
+  classified from, not just the WIN/LOSS/WASH enum) so `CheckpointStats` can
+  carry `avgWinReturnPct`/`avgLossReturnPct`/`expectancyPct()` alongside its
+  existing win rate, at the same min/mid/max checkpoints E2-F4-S1 already
+  reports; the UNANIMOUS+MAJORITY roll-up (`combineCheckpoint`) now does a
+  call-count-weighted average of the two branches' avg win/loss sizes rather
+  than a plain sum. Diagnostic-only, same as E2-F4-S1: no `SignalRuleEngine`
+  changes, reuses the existing checked-in BTCUSDT/DOGEUSDT fixtures.
+  `BacktestHarnessTest` gained a structural invariant check (avg win size is
+  always positive when win &gt; 0, avg loss size always negative when loss &gt;
+  0 — a sign guarantee of the deadband classification itself, not a value
+  under review) rather than asserting on the actual numbers. Confirmed the
+  story's premise on the real fixture data: DOGEUSDT's BEARISH_MAJORITY
+  branch has negative expectancy at the min/mid checkpoints (-0.09%/-0.31%)
+  despite a near-coin-flip win rate (42.8%/40.7%), while every BTCUSDT
+  branch is expectancy-positive at every checkpoint — exactly the "coin-flip
+  win rate can still be unprofitable" gap this story set out to measure.
+  Findings feed a future rule-table decision, not acted on here.
 
 ### E3 — Dashboard/Frontend
 - Frontend visual pass: design tokens (`index.css` `:root` custom

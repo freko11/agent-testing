@@ -10,8 +10,9 @@ import java.util.Map;
 
 /**
  * Aggregate result of one {@link BacktestHarness#run} call: raw call frequency per rule,
- * directional win/loss stats for the four BUY/SELL rules (plus an "overall BUY"/"overall SELL"
- * roll-up combining UNANIMOUS+MAJORITY), and hold-gate large-move stats for the five HOLD rules.
+ * directional win/loss/expectancy stats (E2-F4-S1/E2-F4-S2) for the four BUY/SELL rules (plus an
+ * "overall BUY"/"overall SELL" roll-up combining UNANIMOUS+MAJORITY), and hold-gate large-move
+ * stats for the five HOLD rules.
  */
 public record BacktestReport(String label, int totalCandles, int totalDecisionPoints,
                               Map<SignalRuleId, Integer> callCounts,
@@ -39,7 +40,7 @@ public record BacktestReport(String label, int totalCandles, int totalDecisionPo
         }
 
         out.println();
-        out.printf("BUY/SELL win rate (deadband +/-%s%%) at min/mid/max hold-term day:%n",
+        out.printf("BUY/SELL win rate + expectancy (avg win/loss size, deadband +/-%s%%) at min/mid/max hold-term day:%n",
                 BacktestConfig.WIN_LOSS_DEADBAND_PCT);
         for (SignalRuleId ruleId : DIRECTIONAL_RULES) {
             printDirectional(out, ruleId.name(), directionalStats.get(ruleId));
@@ -70,8 +71,15 @@ public record BacktestReport(String label, int totalCandles, int totalDecisionPo
             out.printf("  %-22s (n=0)%n", rowLabel);
             return;
         }
-        out.printf("  %-22s (n=%d) min %.1f%%(%d scored) mid %.1f%%(%d scored) max %.1f%%(%d scored)%n", rowLabel,
-                stats.totalCalls(), stats.min().winRate(), stats.min().scored(), stats.mid().winRate(),
-                stats.mid().scored(), stats.max().winRate(), stats.max().scored());
+        out.printf("  %-22s (n=%d)%n", rowLabel, stats.totalCalls());
+        printCheckpoint(out, "min", stats.min());
+        printCheckpoint(out, "mid", stats.mid());
+        printCheckpoint(out, "max", stats.max());
+    }
+
+    private void printCheckpoint(PrintStream out, String checkpointLabel, CheckpointStats cp) {
+        out.printf("    %-3s %5.1f%% win (%d scored) | avg win %+6.2f%% | avg loss %+6.2f%% | expectancy %+6.3f%%%n",
+                checkpointLabel, cp.winRate(), cp.scored(), cp.avgWinReturnPct(), cp.avgLossReturnPct(),
+                cp.expectancyPct());
     }
 }

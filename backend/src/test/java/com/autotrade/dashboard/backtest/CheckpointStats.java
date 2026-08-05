@@ -5,8 +5,16 @@ package com.autotrade.dashboard.backtest;
  * one {@link com.autotrade.dashboard.signal.SignalRuleId}. {@code notScored} counts decision
  * points too close to the end of the fixture series to reach this checkpoint's forward
  * horizon — tracked so total call counts aren't understated, but excluded from the win rate.
+ *
+ * <p>{@code avgWinReturnPct}/{@code avgLossReturnPct} (E2-F4-S2) are the average signed forward
+ * return across WIN calls / LOSS calls respectively (win average is always &gt;= 0, loss average
+ * always &lt;= 0, since both are derived from the same deadband classification as
+ * {@link #winRate()}) — a near-coin-flip win rate can still be profitable if wins run bigger than
+ * losses, which win rate alone can't show. WASH calls contribute zero to both, matching
+ * {@link #expectancyPct()} treating a wash as a zero-return outcome.
  */
-public record CheckpointStats(int win, int loss, int wash, int notScored) {
+public record CheckpointStats(int win, int loss, int wash, int notScored, double avgWinReturnPct,
+                               double avgLossReturnPct) {
 
     public int scored() {
         return win + loss + wash;
@@ -14,5 +22,12 @@ public record CheckpointStats(int win, int loss, int wash, int notScored) {
 
     public double winRate() {
         return scored() == 0 ? 0.0 : (100.0 * win / scored());
+    }
+
+    /** Expected return per call (percent), win-rate-weighted by avg win/loss size with wash
+     * scored as zero — the "is this branch actually worth trusting with capital" number a win
+     * rate alone can't answer. 0.0 when nothing at this checkpoint was scored. */
+    public double expectancyPct() {
+        return scored() == 0 ? 0.0 : (avgWinReturnPct * win + avgLossReturnPct * loss) / scored();
     }
 }
