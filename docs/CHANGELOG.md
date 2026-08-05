@@ -3979,3 +3979,79 @@ Notifications tab, plus the watchlist-click-jumps-to-Trade interaction. Did not
 re-verify the sub-900px stacked layout live (window-resize automation didn't visibly
 change the captured viewport in this session) — the breakpoint itself is a standard,
 low-risk `grid-template-columns` collapse.
+
+## Dark-first premium visual pass
+
+The user's reaction to the tabbed redesign above was blunt: "UI still looks very
+amateur." Rather than iterate on the same light pastel-blue admin-panel look again,
+asked the user to pick a direction up front (dark trading-terminal vs. polished light
+SaaS vs. a dark-first hybrid with a light toggle) before touching any code, since
+redoing a full visual pass twice on a subjective judgment call would be wasteful. User
+picked the dark-first hybrid.
+
+**Theme system.** New `theme/ThemeContext.tsx`: `Theme = 'dark' | 'light'`, default
+`'dark'`, persisted to `localStorage` (`autotrade-theme`), sets `data-theme` on
+`documentElement`. This replaces the previous approach entirely — the old `index.css`
+used `light-dark()` CSS values keyed off `prefers-color-scheme`, which meant the theme
+was inferred from OS setting with no in-app override. A theme now has to be an
+explicit, user-settable choice for a toggle to make sense, so every token moved to a
+plain `:root` (dark defaults) block plus a `:root[data-theme="light"]` override block.
+To avoid a flash of the wrong theme between HTML parse and React mount, `index.html`
+got a small inline `<script>` that reads `localStorage` and sets `data-theme` before
+first paint — `ThemeProvider` takes over from there. New `layout/ThemeToggle.tsx`
+(inline sun/moon SVGs, no new icon dependency) sits in the dashboard header and on the
+login page (the only two places with anywhere to put it).
+
+**Visual language.** `index.css` rewritten: deep navy/charcoal surfaces
+(`--color-surface: #12151d` etc.) over a subtle radial-gradient body background, a
+brighter electric-blue accent (`--color-accent: #4c8dff`) with gradient-filled primary
+buttons and glow-tinted shadows, a `--font-mono` stack (`ui-monospace`/Cascadia
+Mono/Consolas) applied to every numeric display — stat-tile values, chart-adjacent
+prices, the order-history table's numeric columns, the trade-confirm dialog's summary
+— which is the single detail that reads most as "trading terminal" rather than "CRUD
+form" at a glance. Buy/sell/momentum/volume hues carried over unchanged from the prior
+palette (still colorblind-safe teal/orange, not red/green) since that constraint was
+already correct, just re-expressed as explicit tokens instead of `light-dark()` pairs.
+Light theme is a full parallel token set, not an afterthought bolted on — verified
+side-by-side, not just "does it still render."
+
+**Two real bugs fixed along the way, not just restyled:**
+
+1. `.app-status-strip`'s cleared-kill-switch and paper-mode-banner states rendered as
+   a single bare button floating in a mostly-empty card — `flex: 1 1 16rem` gave both
+   cards roughly half the header's width, but neither had enough content to fill it.
+   Screenshotting the running app before touching any CSS is what surfaced this (the
+   prior redesign's own live-verification screenshots technically showed it too, just
+   not flagged). Fixed by restructuring both `KillSwitchControl.tsx` and
+   `TradingModeBanner.tsx` to a shared icon + label + state-pill + meta-text +
+   right-aligned-action layout, so the idle/cleared state now reads as a deliberate
+   compact status card instead of an empty box with a button in the corner.
+2. `TradeForm.tsx` ran `validateTradeForm` unconditionally on every render and showed
+   every resulting error immediately — a freshly opened, completely untouched form
+   displayed "Enter an amount greater than 0" / "Enter a take-profit price greater
+   than 0" etc. before the user had typed a single character. Fixed with per-field
+   `touched` state (set via a new `onBlur` handler) plus a `submitAttempted` flag; an
+   error now only renders once its field has been blurred or a submit was attempted.
+   `validation.ts`'s actual validation logic is untouched — this was purely a display-
+   timing bug in `TradeForm.tsx`.
+
+**Chart theme-awareness.** `chart/palette.ts`'s `isDarkMode()` used to read
+`window.matchMedia('(prefers-color-scheme: dark)')` — now reads
+`document.documentElement.dataset.theme !== 'light'` to match the app's own explicit
+theme instead of OS preference (consistent with the `light-dark()` removal above).
+`PriceChart.tsx` now takes `theme` from `useTheme()` as an explicit `useEffect`
+dependency alongside `candles`/`indicators` — without it, toggling the theme mid-view
+wouldn't rebuild the chart until the next ticker lookup, since `currentPalette()` is
+read once inside the effect, not reactively.
+
+**Verification.** `npm run build` (typecheck + vite build), `npm run lint` (oxlint —
+same one pre-existing `only-export-components` warning as `AuthContext.tsx`, no new
+warnings), and `npm test` (13/13 passing) all clean. Live-verified in the actual
+running dev stack (both frontend and backend already up, not a fresh boot) via
+browser automation: full login → dashboard flow in both themes, all three tabs
+(Trade with a populated BTCUSDT lookup — stat tiles, SELL signal badge, trade form
+with no eager validation errors, price chart re-themed correctly; Orders with its
+status pills; Notifications), the theme toggle in both the header and login page,
+and theme persistence surviving a real logout/login round trip (confirmed against
+the actual `DASHBOARD_PASSWORD` from `.env`, not a mocked session). No backend
+changes.

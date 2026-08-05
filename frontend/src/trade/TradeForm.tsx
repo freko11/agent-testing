@@ -78,6 +78,11 @@ function TradeForm({ signal, onOrderPlaced }: TradeFormProps) {
   const [values, setValues] = useState<TradeFormValues>(DEFAULT_VALUES)
   const [submitState, setSubmitState] = useState<SubmitState>({ kind: 'idle' })
   const [killSwitchEngaged, setKillSwitchEngaged] = useState(false)
+  // A field's error is only worth showing once the user has actually interacted with it (blur)
+  // or tried to submit — otherwise every field starts in a red "Enter an amount greater than 0"
+  // state before anyone's typed anything, which reads as broken rather than helpful.
+  const [touched, setTouched] = useState<Partial<Record<keyof TradeFormValues, boolean>>>({})
+  const [submitAttempted, setSubmitAttempted] = useState(false)
   const dialogRef = useRef<HTMLDialogElement>(null)
 
   const { call, ticker, indicators } = signal
@@ -117,8 +122,17 @@ function TradeForm({ signal, onOrderPlaced }: TradeFormProps) {
     }
   }
 
+  function blurField(field: keyof TradeFormValues) {
+    return () => setTouched((current) => ({ ...current, [field]: true }))
+  }
+
+  function shouldShowError(field: keyof TradeFormValues): boolean {
+    return Boolean(errors[field]) && (touched[field] === true || submitAttempted)
+  }
+
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    setSubmitAttempted(true)
     if (!isValid) return
 
     setSubmitState({
@@ -161,9 +175,14 @@ function TradeForm({ signal, onOrderPlaced }: TradeFormProps) {
       </h3>
       <label>
         Amount (USD)
-        <input inputMode="decimal" value={values.amountUsd} onChange={updateField('amountUsd')} />
+        <input
+          inputMode="decimal"
+          value={values.amountUsd}
+          onChange={updateField('amountUsd')}
+          onBlur={blurField('amountUsd')}
+        />
       </label>
-      {errors.amountUsd && (
+      {shouldShowError('amountUsd') && (
         <p className="trade-form__error" role="alert">
           {errors.amountUsd}
         </p>
@@ -180,9 +199,10 @@ function TradeForm({ signal, onOrderPlaced }: TradeFormProps) {
               step={1}
               value={values.leverage}
               onChange={updateField('leverage')}
+              onBlur={blurField('leverage')}
             />
           </label>
-          {errors.leverage && (
+          {shouldShowError('leverage') && (
             <p className="trade-form__error" role="alert">
               {errors.leverage}
             </p>
@@ -192,9 +212,14 @@ function TradeForm({ signal, onOrderPlaced }: TradeFormProps) {
 
       <label>
         Take-profit price
-        <input inputMode="decimal" value={values.takeProfitPrice} onChange={updateField('takeProfitPrice')} />
+        <input
+          inputMode="decimal"
+          value={values.takeProfitPrice}
+          onChange={updateField('takeProfitPrice')}
+          onBlur={blurField('takeProfitPrice')}
+        />
       </label>
-      {errors.takeProfitPrice && (
+      {shouldShowError('takeProfitPrice') && (
         <p className="trade-form__error" role="alert">
           {errors.takeProfitPrice}
         </p>
@@ -202,9 +227,14 @@ function TradeForm({ signal, onOrderPlaced }: TradeFormProps) {
 
       <label>
         Stop-loss price
-        <input inputMode="decimal" value={values.stopLossPrice} onChange={updateField('stopLossPrice')} />
+        <input
+          inputMode="decimal"
+          value={values.stopLossPrice}
+          onChange={updateField('stopLossPrice')}
+          onBlur={blurField('stopLossPrice')}
+        />
       </label>
-      {errors.stopLossPrice && (
+      {shouldShowError('stopLossPrice') && (
         <p className="trade-form__error" role="alert">
           {errors.stopLossPrice}
         </p>

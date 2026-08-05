@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import ThemeToggle from '../layout/ThemeToggle'
 
 function LoginPage() {
   const [username, setUsername] = useState('')
@@ -28,8 +29,17 @@ function LoginPage() {
 
   return (
     <main className="login-page">
+      <div className="login-page__theme-toggle">
+        <ThemeToggle />
+      </div>
       <div className="login-card">
+        <span className="login-card__logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 17l5-6 4 3 5-7 4 4" />
+          </svg>
+        </span>
         <h1>Sign in</h1>
+        <p className="login-card__subtitle">Auto-Trade Dashboard</p>
         <form onSubmit={handleSubmit}>
           <label>
             Username

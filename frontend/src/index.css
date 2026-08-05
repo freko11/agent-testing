@@ -1,34 +1,93 @@
+/* ==========================================================================
+   Design tokens
+   Dark-first trading-terminal theme: dark values live on :root as the
+   default (data-theme is set to "dark" before first paint by an inline
+   script in index.html, see theme/ThemeContext.tsx), with an explicit
+   [data-theme="light"] override block below. Deliberately not light-dark()
+   anymore — the active theme is a persisted user choice (ThemeToggle), not
+   inferred from OS preference, so it needs to be settable independent of it.
+   ========================================================================== */
+
 :root {
-  font: 18px/145% system-ui, 'Segoe UI', Roboto, sans-serif;
-  color-scheme: light dark;
+  font: 15.5px/1.5 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  color-scheme: dark;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  --color-bg: light-dark(#eef1f5, #0b0d11);
-  --color-surface: light-dark(#ffffff, #14171d);
-  --color-surface-alt: light-dark(#f3f4f6, #1b1f27);
-  --color-surface-sunken: light-dark(#e7eaef, #0f1216);
-  --color-border: light-dark(#dde1e6, #262b34);
-  --color-text: light-dark(#1a1d23, #e8eaed);
-  --color-text-muted: light-dark(#5b6270, #9aa1ac);
-  --color-accent: light-dark(#2563eb, #60a5fa);
-  --color-accent-contrast: #ffffff;
-  --color-accent-soft: light-dark(#e6edfc, #142136);
-  --color-danger: light-dark(#b91c1c, #f87171);
+  --color-bg: #090b10;
+  --color-bg-gradient: radial-gradient(ellipse 1200px 600px at 50% -10%, #101726 0%, #090b10 55%);
+  --color-surface: #12151d;
+  --color-surface-alt: #171b26;
+  --color-surface-sunken: #0c0e14;
+  --color-surface-raised: #1a1f2c;
+  --color-border: rgb(255 255 255 / 8%);
+  --color-border-strong: rgb(255 255 255 / 15%);
+  --color-text: #e7ebf3;
+  --color-text-muted: #8991a3;
+  --color-text-faint: #5b6376;
 
-  --color-buy: light-dark(#0f766e, #2dd4bf);
-  --color-sell: light-dark(#c2410c, #fb923c);
-  --color-momentum: light-dark(#4338ca, #a5b4fc);
-  --color-volume: light-dark(#7c3aed, #c4b5fd);
+  --color-accent: #4c8dff;
+  --color-accent-strong: #6ba3ff;
+  --color-accent-contrast: #051022;
+  --color-accent-soft: rgb(76 141 255 / 14%);
+  --color-danger: #f0475f;
+  --color-danger-soft: rgb(240 71 95 / 14%);
 
-  --radius-sm: 0.4rem;
+  --color-buy: #2dd4bf;
+  --color-buy-soft: rgb(45 212 191 / 12%);
+  --color-sell: #fb923c;
+  --color-sell-soft: rgb(251 146 60 / 12%);
+  --color-momentum: #a5b4fc;
+  --color-volume: #c4b5fd;
+  --color-warning: #fbbf24;
+  --color-warning-soft: rgb(251 191 36 / 12%);
+
+  --radius-sm: 0.45rem;
   --radius-md: 0.75rem;
-  --radius-lg: 1rem;
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 6%);
-  --shadow-md: 0 8px 24px rgb(0 0 0 / 12%);
+  --radius-lg: 1.1rem;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 30%);
+  --shadow-md: 0 16px 40px rgb(0 0 0 / 45%), 0 2px 8px rgb(0 0 0 / 35%);
+  --shadow-inset: inset 0 1px 0 rgb(255 255 255 / 4%);
   --sidebar-width: 19rem;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --color-bg: #eef1f5;
+  --color-bg-gradient: radial-gradient(ellipse 1200px 600px at 50% -10%, #ffffff 0%, #eef1f5 60%);
+  --color-surface: #ffffff;
+  --color-surface-alt: #f3f4f7;
+  --color-surface-sunken: #e6e9ef;
+  --color-surface-raised: #ffffff;
+  --color-border: #dde1e8;
+  --color-border-strong: #c7ccd6;
+  --color-text: #1a1d24;
+  --color-text-muted: #5b6270;
+  --color-text-faint: #8890a0;
+
+  --color-accent: #2563eb;
+  --color-accent-strong: #1d4ed8;
+  --color-accent-contrast: #ffffff;
+  --color-accent-soft: #e6edfc;
+  --color-danger: #c0263c;
+  --color-danger-soft: #fce8ea;
+
+  --color-buy: #0f766e;
+  --color-buy-soft: #e3f6f3;
+  --color-sell: #c2410c;
+  --color-sell-soft: #fdf0e6;
+  --color-momentum: #4338ca;
+  --color-volume: #7c3aed;
+  --color-warning: #92700c;
+  --color-warning-soft: #fef6e0;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 6%);
+  --shadow-md: 0 8px 24px rgb(0 0 0 / 10%);
+  --shadow-inset: none;
 }
 
 * {
@@ -37,7 +96,7 @@
 
 body {
   margin: 0;
-  background: var(--color-bg);
+  background: var(--color-bg-gradient) fixed, var(--color-bg);
   color: var(--color-text);
 }
 
@@ -47,6 +106,28 @@ body {
   box-sizing: border-box;
 }
 
+/* Dark-theme scrollbars — the default light thumb/track reads as a bug on a near-black page. */
+* {
+  scrollbar-color: var(--color-border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 h1, h2, h3, h4 {
   font-weight: 700;
   letter-spacing: -0.01em;
@@ -54,28 +135,30 @@ h1, h2, h3, h4 {
 
 h1 {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: 1.3rem;
+  letter-spacing: -0.02em;
 }
 
 /* Section headings read as small-caps eyebrow labels, matching .stat-tile__label's
    established convention — keeps every top-level dashboard card visually consistent. */
 h2 {
   margin: 0 0 1rem;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.09em;
   color: var(--color-text-muted);
 }
 
 h3 {
   margin: 0 0 0.75rem;
-  font-size: 1.05rem;
+  font-size: 1rem;
+  letter-spacing: -0.005em;
 }
 
 h4 {
   margin: 0 0 0.75rem;
-  font-size: 1rem;
+  font-size: 0.95rem;
 }
 
 p {
@@ -92,17 +175,31 @@ input,
 select,
 textarea {
   font: inherit;
-  padding: 0.5rem 0.65rem;
+  padding: 0.55rem 0.7rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  background: var(--color-surface);
+  background: var(--color-surface-sunken);
   color: var(--color-text);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+input::placeholder {
+  color: var(--color-text-faint);
 }
 
 input[type='radio'],
 input[type='checkbox'] {
   width: auto;
   padding: 0;
+  accent-color: var(--color-accent);
+}
+
+input[type='date'] {
+  color-scheme: dark;
+}
+
+:root[data-theme='light'] input[type='date'] {
+  color-scheme: light;
 }
 
 input:focus-visible,
@@ -113,6 +210,11 @@ button:focus-visible {
   outline-offset: 1px;
 }
 
+input:hover:not(:disabled, :focus-visible),
+select:hover:not(:disabled, :focus-visible) {
+  border-color: var(--color-border-strong);
+}
+
 /* Direct children only: fieldset's own radio/checkbox labels (below) stay inline,
    not stacked, so this must not cascade into them. */
 form > label {
@@ -120,8 +222,9 @@ form > label {
   flex-direction: column;
   gap: 0.3rem;
   margin: 0 0 0.75rem;
-  font-size: 0.9rem;
+  font-size: 0.87rem;
   font-weight: 500;
+  color: var(--color-text-muted);
 }
 
 fieldset {
@@ -133,10 +236,10 @@ fieldset {
 
 fieldset legend {
   padding: 0 0.4rem;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.07em;
   color: var(--color-text-muted);
 }
 
@@ -145,8 +248,9 @@ fieldset label {
   align-items: center;
   gap: 0.35rem;
   margin-right: 1.25rem;
-  font-size: 0.95rem;
+  font-size: 0.92rem;
   font-weight: 400;
+  color: var(--color-text);
 }
 
 /* ---------- Buttons ---------- */
@@ -154,16 +258,17 @@ fieldset label {
 button {
   font: inherit;
   cursor: pointer;
-  padding: 0.5rem 0.9rem;
-  border: 1px solid var(--color-border);
+  padding: 0.5rem 0.95rem;
+  border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
   background: var(--color-surface-alt);
   color: var(--color-text);
-  transition: border-color 120ms ease, filter 120ms ease, transform 120ms ease;
+  transition: border-color 120ms ease, background 120ms ease, filter 120ms ease, transform 60ms ease, box-shadow 120ms ease;
 }
 
 button:hover:not(:disabled) {
   border-color: var(--color-accent);
+  background: var(--color-surface-raised);
 }
 
 button:active:not(:disabled) {
@@ -171,7 +276,7 @@ button:active:not(:disabled) {
 }
 
 button:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
@@ -182,9 +287,10 @@ button:disabled {
 form button[type='submit'],
 .trade-confirm-dialog__actions button[autofocus] {
   border-color: var(--color-accent);
-  background: var(--color-accent);
+  background: linear-gradient(180deg, var(--color-accent-strong), var(--color-accent));
   color: var(--color-accent-contrast);
   font-weight: 600;
+  box-shadow: 0 1px 0 rgb(255 255 255 / 15%) inset, 0 6px 16px rgb(76 141 255 / 22%);
 }
 
 form button[type='submit']:hover:not(:disabled),
@@ -209,45 +315,73 @@ form button[type='submit']:hover:not(:disabled),
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 0.85rem 1.5rem;
-  background: var(--color-surface);
+  padding: 0.8rem 1.5rem;
+  background: rgb(18 21 29 / 88%);
+  backdrop-filter: blur(10px) saturate(1.4);
+  -webkit-backdrop-filter: blur(10px) saturate(1.4);
   border-bottom: 1px solid var(--color-border);
-  box-shadow: var(--shadow-sm);
+}
+
+:root[data-theme='light'] .app-header {
+  background: rgb(255 255 255 / 88%);
 }
 
 .app-header__brand {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.65rem;
 }
 
 .app-header__brand h1 {
-  font-size: 1.15rem;
+  font-size: 1.1rem;
 }
 
 .app-header__logo {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 1.9rem;
+  height: 1.9rem;
   border-radius: var(--radius-sm);
-  background: var(--color-accent);
-  color: var(--color-accent-contrast);
-  font-size: 0.9rem;
+  background: linear-gradient(155deg, var(--color-accent-strong), #7c3aed);
+  color: #fff;
+  box-shadow: 0 4px 14px rgb(76 141 255 / 35%);
 }
 
 .app-header__user {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  font-size: 0.9rem;
+  gap: 0.85rem;
+  font-size: 0.87rem;
   color: var(--color-text-muted);
+}
+
+.app-header__user-divider {
+  width: 1px;
+  height: 1.35rem;
+  background: var(--color-border);
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  padding: 0;
+  border-radius: 999px;
+  color: var(--color-text-muted);
+}
+
+.theme-toggle:hover:not(:disabled) {
+  color: var(--color-accent);
 }
 
 /* ---------- Status strip (kill switch + trading mode) ---------- */
 /* Always visible above the tabs, regardless of which one is active — both controls are
-   safety-critical global state, not per-tab content. */
+   safety-critical global state, not per-tab content. Both cards share one flex-row layout
+   (icon, label, state pill, meta text, right-aligned action) so neither reads as a bare
+   button floating in dead space at any viewport width. */
 
 .app-status-strip {
   display: flex;
@@ -259,7 +393,123 @@ form button[type='submit']:hover:not(:disabled),
 }
 
 .app-status-strip > * {
-  flex: 1 1 16rem;
+  flex: 1 1 22rem;
+}
+
+.kill-switch,
+.trading-mode-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.65rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm), var(--shadow-inset);
+}
+
+.kill-switch__icon,
+.trading-mode-banner__icon {
+  display: inline-flex;
+  color: var(--color-text-muted);
+}
+
+.kill-switch__label,
+.trading-mode-banner__label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.kill-switch__pill,
+.trading-mode-banner__mode {
+  padding: 0.12rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--color-surface-alt);
+  color: var(--color-text-muted);
+}
+
+.kill-switch__meta,
+.trading-mode-banner__meta {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  flex: 1 1 auto;
+  min-width: 8rem;
+}
+
+.kill-switch__action,
+.trading-mode-banner__action {
+  margin-left: auto;
+  background: var(--color-surface-alt);
+}
+
+.kill-switch--cleared .kill-switch__pill {
+  color: var(--color-buy);
+  background: var(--color-buy-soft);
+}
+
+.kill-switch--engaged {
+  border-color: rgb(240 71 95 / 45%);
+  background: linear-gradient(180deg, var(--color-danger-soft), var(--color-surface) 60%);
+}
+
+.kill-switch--engaged .kill-switch__pill {
+  color: #fff;
+  background: var(--color-danger);
+}
+
+.kill-switch--engaged .kill-switch__icon {
+  color: var(--color-danger);
+}
+
+.kill-switch__error,
+.trading-mode-banner__error {
+  margin: 0;
+  flex-basis: 100%;
+  font-size: 0.85rem;
+  color: var(--color-danger);
+}
+
+/* The one-click, no-confirmation "stop everything" action — a deliberate, singular
+   exception to this app's avoid-raw-red-for-buttons convention, since it needs to
+   read as more urgent than any other button on the page. */
+button.kill-switch__engage {
+  border-color: var(--color-danger);
+  background: var(--color-danger);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 6px 16px rgb(240 71 95 / 25%);
+}
+
+button.kill-switch__engage:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+/* PAPER is calm/informational; LIVE is a deliberate, singular exception to this
+   app's avoid-raw-red convention — it isn't part of a red/green comparison pair
+   the way BUY/SELL is, and the word "LIVE" is always shown alongside the color. */
+.trading-mode-banner--paper .trading-mode-banner__mode {
+  color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+.trading-mode-banner--live {
+  border-color: rgb(240 71 95 / 45%);
+  background: linear-gradient(180deg, var(--color-danger-soft), var(--color-surface) 60%);
+}
+
+.trading-mode-banner--live .trading-mode-banner__mode {
+  color: #fff;
+  background: var(--color-danger);
+}
+
+.trading-mode-banner--live .trading-mode-banner__icon {
+  color: var(--color-danger);
 }
 
 /* ---------- Body: sidebar watchlist + tabbed content ---------- */
@@ -305,9 +555,9 @@ form button[type='submit']:hover:not(:disabled),
 
 .app-tabs {
   display: flex;
-  gap: 0.25rem;
+  gap: 0.2rem;
   padding: 0.3rem;
-  background: var(--color-surface-alt);
+  background: var(--color-surface-sunken);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   width: fit-content;
@@ -318,22 +568,24 @@ form button[type='submit']:hover:not(:disabled),
 .app-tab {
   border: 1px solid transparent;
   background: transparent;
-  padding: 0.45rem 1.1rem;
+  padding: 0.45rem 1.15rem;
   border-radius: var(--radius-sm);
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.87rem;
   color: var(--color-text-muted);
   white-space: nowrap;
+  box-shadow: none;
 }
 
 .app-tab:hover:not(:disabled) {
   border-color: transparent;
+  background: transparent;
   color: var(--color-text);
 }
 
 .app-tab--active,
 .app-tab--active:hover:not(:disabled) {
-  background: var(--color-surface);
+  background: var(--color-surface-raised);
   color: var(--color-accent);
   box-shadow: var(--shadow-sm);
 }
@@ -356,11 +608,11 @@ form button[type='submit']:hover:not(:disabled),
    every card visually uniform without a className on each component. */
 .app-tab-panel > section,
 .app-sidebar > section {
-  background: var(--color-surface);
+  background: linear-gradient(180deg, var(--color-surface-raised), var(--color-surface));
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: 1.25rem 1.5rem 1.5rem;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-sm), var(--shadow-inset);
 }
 
 /* ---------- Login page ---------- */
@@ -371,27 +623,53 @@ form button[type='submit']:hover:not(:disabled),
   align-items: center;
   justify-content: center;
   padding: 1.5rem;
+  position: relative;
+}
+
+.login-page__theme-toggle {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.25rem;
 }
 
 .login-card {
   width: 100%;
-  max-width: 22rem;
-  padding: 2rem 2rem 2.25rem;
-  background: var(--color-surface);
+  max-width: 23rem;
+  padding: 2.25rem 2.25rem 2.5rem;
+  background: linear-gradient(180deg, var(--color-surface-raised), var(--color-surface));
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
 }
 
+.login-card__logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  margin-bottom: 1.1rem;
+  border-radius: var(--radius-md);
+  background: linear-gradient(155deg, var(--color-accent-strong), #7c3aed);
+  color: #fff;
+  box-shadow: 0 8px 20px rgb(76 141 255 / 35%);
+}
+
 .login-card h1 {
-  margin: 0 0 1.25rem;
-  font-size: 1.35rem;
+  margin: 0 0 0.3rem;
+  font-size: 1.4rem;
+}
+
+.login-card__subtitle {
+  margin: 0 0 1.5rem;
+  font-size: 0.87rem;
+  color: var(--color-text-muted);
 }
 
 .login-card__error {
   margin: 0 0 0.75rem;
   font-size: 0.85rem;
-  color: light-dark(#c2410c, #fb923c);
+  color: var(--color-danger);
 }
 
 .login-card button[type='submit'] {
@@ -422,27 +700,34 @@ form button[type='submit']:hover:not(:disabled),
   flex: 0 0 auto;
 }
 
+.ticker-lookup-meta {
+  margin: 0.75rem 0 0;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
 .stat-tile-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-  gap: 0.75rem;
+  gap: 0.7rem;
   margin: 1rem 0;
 }
 
 .stat-tile {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  padding: 0.75rem 1rem;
+  gap: 0.3rem;
+  padding: 0.8rem 1rem;
   border: 1px solid var(--color-border);
-  border-left: 3px solid var(--color-border);
-  border-radius: 0.5rem;
+  border-left: 2px solid var(--color-border);
+  border-radius: var(--radius-sm);
   background: var(--color-surface-alt);
-  transition: border-color 120ms ease, transform 120ms ease;
+  transition: border-color 150ms ease, transform 150ms ease, box-shadow 150ms ease;
 }
 
 .stat-tile:hover {
   transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
 /* Left-border accent groups tiles by kind at a glance — price, momentum
@@ -465,75 +750,91 @@ form button[type='submit']:hover:not(:disabled),
 }
 
 .stat-tile__label {
-  font-size: 0.8rem;
+  font-size: 0.72rem;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
-  color: light-dark(#555555, #aaaaaa);
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
 }
 
 .stat-tile__value {
-  font-size: 1.25rem;
+  font-family: var(--font-mono);
+  font-size: 1.2rem;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .stat-tile__hint {
-  font-size: 0.8rem;
-  color: light-dark(#666666, #999999);
+  font-size: 0.78rem;
+  color: var(--color-text-faint);
 }
 
 .signal-badge {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.4rem 1rem;
+  align-items: center;
+  gap: 0.4rem 1.25rem;
   margin: 1rem 0;
-  padding: 0.75rem 1.25rem;
-  border-radius: 0.5rem;
+  padding: 1rem 1.4rem;
+  border-radius: var(--radius-md);
   border: 1px solid;
+  box-shadow: var(--shadow-sm);
 }
 
 .signal-badge__call {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  font-size: 1.5rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  gap: 0.55rem;
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
 }
 
 .signal-badge__glyph {
-  font-size: 1.1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 999px;
+  font-size: 1.05rem;
+  background: rgb(255 255 255 / 10%);
+}
+
+:root[data-theme='light'] .signal-badge__glyph {
+  background: rgb(0 0 0 / 6%);
 }
 
 .signal-badge__rule {
-  font-size: 0.85rem;
-  opacity: 0.8;
+  font-size: 0.82rem;
+  opacity: 0.75;
 }
 
 .signal-badge__hold-term {
-  font-size: 0.9rem;
-  font-weight: 500;
+  font-size: 0.88rem;
+  font-weight: 600;
+  margin-left: auto;
 }
 
 /* Teal/orange/slate rather than green/red/amber: stays distinguishable under
    red-green color blindness, and the call word itself still carries the meaning. */
 .signal-badge--buy {
-  background: light-dark(#e3f6f3, #0f2e2b);
-  border-color: light-dark(#0f766e, #2dd4bf);
-  color: light-dark(#0f766e, #5eead4);
+  background: var(--color-buy-soft);
+  border-color: rgb(45 212 191 / 35%);
+  color: var(--color-buy);
 }
 
 .signal-badge--sell {
-  background: light-dark(#fdf0e6, #3a2410);
-  border-color: light-dark(#c2410c, #fb923c);
-  color: light-dark(#c2410c, #fdba74);
+  background: var(--color-sell-soft);
+  border-color: rgb(251 146 60 / 35%);
+  color: var(--color-sell);
 }
 
 .signal-badge--hold {
-  background: light-dark(#f1f4f7, #232a33);
-  border-color: light-dark(#475569, #94a3b8);
-  color: light-dark(#475569, #cbd5e1);
+  background: var(--color-surface-alt);
+  border-color: var(--color-border-strong);
+  color: var(--color-text-muted);
 }
 
 .price-chart-container {
@@ -546,12 +847,14 @@ form button[type='submit']:hover:not(:disabled),
   width: 100%;
   height: 420px;
   border: 1px solid var(--color-border);
-  border-radius: 0.5rem;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--color-surface-sunken);
 }
 
 .chart-note {
   font-size: 0.85rem;
-  color: light-dark(#666666, #999999);
+  color: var(--color-text-muted);
 }
 
 .watchlist-list {
@@ -567,69 +870,90 @@ form button[type='submit']:hover:not(:disabled),
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.5rem 0.75rem;
+  padding: 0.55rem 0.75rem;
   border: 1px solid var(--color-border);
-  border-radius: 0.5rem;
+  border-radius: var(--radius-sm);
   background: var(--color-surface-alt);
-  transition: border-color 120ms ease;
+  transition: border-color 120ms ease, background 120ms ease;
 }
 
 .watchlist-item:hover {
   border-color: var(--color-accent);
+  background: var(--color-surface-raised);
 }
 
 .watchlist-item__symbol {
+  font-family: var(--font-mono);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   background: none;
   border: none;
   padding: 0;
+  color: var(--color-text);
+  letter-spacing: -0.01em;
+}
+
+.watchlist-item__symbol:hover:not(:disabled) {
   color: var(--color-accent);
-  text-decoration: underline;
-  text-underline-offset: 0.15em;
 }
 
 .watchlist-item__asset-type {
-  font-size: 0.8rem;
-  color: light-dark(#666666, #999999);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--color-text-faint);
   margin-right: auto;
+}
+
+.watchlist-item button:not(.watchlist-item__symbol) {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.8rem;
 }
 
 .trade-form {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  max-width: 24rem;
+  max-width: 26rem;
   margin: 1rem 0;
-  padding: 1rem 1.25rem;
+  padding: 1.1rem 1.35rem 1.35rem;
   border: 1px solid var(--color-border);
-  border-radius: 0.5rem;
+  border-radius: var(--radius-md);
   background: var(--color-surface-alt);
+}
+
+.trade-form h3 {
+  font-family: var(--font-mono);
 }
 
 .trade-form label {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  font-size: 0.9rem;
+  font-size: 0.87rem;
+  color: var(--color-text-muted);
+}
+
+.trade-form input {
+  background: var(--color-surface-sunken);
 }
 
 .trade-form__error {
   margin: 0;
   font-size: 0.8rem;
-  color: light-dark(#c2410c, #fb923c);
+  color: var(--color-danger);
 }
 
 .trade-form__note {
   margin: 0;
   font-size: 0.85rem;
-  color: light-dark(#666666, #999999);
+  color: var(--color-text-muted);
 }
 
 .trade-form__result {
   margin: 0;
-  padding: 0.5rem 0.75rem;
-  border-radius: 0.4rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: var(--radius-sm);
   font-size: 0.85rem;
 }
 
@@ -637,33 +961,38 @@ form button[type='submit']:hover:not(:disabled),
    that must not read as a routine success or failure: a real open position that's
    only partially protected, or a genuinely unknown submission status. */
 .trade-form__result--success {
-  background: light-dark(#e3f6f3, #0f2e2b);
-  color: light-dark(#0f766e, #5eead4);
+  background: var(--color-buy-soft);
+  color: var(--color-buy);
 }
 
 .trade-form__result--warning {
-  background: light-dark(#fef6e0, #3a2f0a);
-  color: light-dark(#92700c, #fde68a);
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
   font-weight: 600;
 }
 
 .trade-form__result--error {
-  background: light-dark(#fdf0e6, #3a2410);
-  color: light-dark(#c2410c, #fdba74);
+  background: var(--color-sell-soft);
+  color: var(--color-sell);
 }
 
 .trade-confirm-dialog {
-  border: 1px solid var(--color-border);
-  border-radius: 0.5rem;
-  padding: 1.25rem 1.5rem;
-  max-width: 22rem;
-  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  padding: 1.4rem 1.6rem;
+  max-width: 23rem;
+  background: var(--color-surface-raised);
   color: var(--color-text);
   box-shadow: var(--shadow-md);
 }
 
 .trade-confirm-dialog::backdrop {
-  background: light-dark(rgb(0 0 0 / 35%), rgb(0 0 0 / 60%));
+  background: rgb(0 0 0 / 55%);
+  backdrop-filter: blur(2px);
+}
+
+:root[data-theme='light'] .trade-confirm-dialog::backdrop {
+  background: rgb(15 20 30 / 35%);
 }
 
 .trade-confirm-dialog__content h4 {
@@ -673,17 +1002,23 @@ form button[type='submit']:hover:not(:disabled),
 .trade-confirm-dialog__summary {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 0.25rem 0.75rem;
-  margin: 0 0 1rem;
+  gap: 0.3rem 0.75rem;
+  margin: 0 0 1.1rem;
+  padding: 0.75rem 0.9rem;
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-sm);
 }
 
 .trade-confirm-dialog__summary dt {
-  color: light-dark(#666666, #999999);
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
 }
 
 .trade-confirm-dialog__summary dd {
   margin: 0;
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .trade-confirm-dialog__actions {
@@ -705,50 +1040,65 @@ form button[type='submit']:hover:not(:disabled),
   flex-direction: column;
   gap: 0.2rem;
   font-size: 0.85rem;
+  color: var(--color-text-muted);
 }
 
 .order-export__error {
   margin: 0;
   flex-basis: 100%;
   font-size: 0.85rem;
-  color: light-dark(#c2410c, #fb923c);
+  color: var(--color-danger);
 }
 
 .order-history-table-wrap {
   overflow-x: auto;
   overflow-y: auto;
   max-height: 32rem;
-  border-radius: 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
 }
 
 .order-history-table {
   border-collapse: collapse;
   width: 100%;
-  margin: 0.5rem 0;
-  font-size: 0.9rem;
+  margin: 0;
+  font-size: 0.87rem;
   font-variant-numeric: tabular-nums;
 }
 
 .order-history-table th,
 .order-history-table td {
-  padding: 0.5rem 0.6rem;
+  padding: 0.55rem 0.7rem;
   text-align: left;
   border-bottom: 1px solid var(--color-border);
   white-space: nowrap;
 }
 
+.order-history-table td {
+  font-family: var(--font-mono);
+}
+
+.order-history-table td:nth-child(2),
+.order-history-table td:nth-child(8) {
+  font-family: inherit;
+}
+
 .order-history-table thead th {
   position: sticky;
   top: 0;
-  background: var(--color-surface);
-  font-size: 0.75rem;
+  background: var(--color-surface-raised);
+  font-size: 0.68rem;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.05em;
   color: var(--color-text-muted);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .order-history-table tbody tr:nth-child(even) {
+  background: rgb(255 255 255 / 2.5%);
+}
+
+:root[data-theme='light'] .order-history-table tbody tr:nth-child(even) {
   background: var(--color-surface-alt);
 }
 
@@ -760,54 +1110,64 @@ form button[type='submit']:hover:not(:disabled),
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  font-weight: 600;
+  padding: 0.18rem 0.55rem 0.18rem 0.45rem;
+  border-radius: 999px;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: var(--color-surface-alt);
 }
 
 .order-status::before {
   content: '';
-  width: 0.5rem;
-  height: 0.5rem;
+  width: 0.45rem;
+  height: 0.45rem;
   border-radius: 50%;
   background: currentColor;
 }
 
 /* Same success/warning/error tone split as .trade-form__result. */
 .order-status--success {
-  color: light-dark(#0f766e, #5eead4);
+  color: var(--color-buy);
+  background: var(--color-buy-soft);
 }
 
 .order-status--warning {
-  color: light-dark(#92700c, #fde68a);
+  color: var(--color-warning);
+  background: var(--color-warning-soft);
 }
 
 .order-status--error {
-  color: light-dark(#c2410c, #fdba74);
+  color: var(--color-sell);
+  background: var(--color-sell-soft);
 }
 
 .order-status--neutral {
-  color: light-dark(#475569, #94a3b8);
+  color: var(--color-text-muted);
 }
 
 .order-history-table__row-error {
   margin: 0.25rem 0 0;
   font-size: 0.8rem;
-  color: light-dark(#c2410c, #fb923c);
+  color: var(--color-danger);
+  white-space: normal;
 }
 
 .notification-panel__unread-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 1.4rem;
-  height: 1.4rem;
+  min-width: 1.35rem;
+  height: 1.35rem;
   margin-left: 0.5rem;
   padding: 0 0.4rem;
   border-radius: 999px;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-weight: 700;
   vertical-align: middle;
-  background: light-dark(#c2410c, #fb923c);
-  color: light-dark(#ffffff, #1e1e1e);
+  background: var(--color-danger);
+  color: #fff;
 }
 
 .notification-panel__actions {
@@ -830,14 +1190,15 @@ form button[type='submit']:hover:not(:disabled),
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 0.5rem 0.75rem;
+  padding: 0.6rem 0.85rem;
   border: 1px solid var(--color-border);
-  border-radius: 0.5rem;
+  border-left: 2px solid var(--color-border);
+  border-radius: var(--radius-sm);
   background: var(--color-surface-alt);
 }
 
 .notification-panel__item--unread {
-  border-color: light-dark(#0f766e, #2dd4bf);
+  border-left-color: var(--color-buy);
 }
 
 .notification-panel__item-body {
@@ -847,138 +1208,18 @@ form button[type='submit']:hover:not(:disabled),
 }
 
 .notification-panel__event-type {
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: 0.7rem;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
-  color: light-dark(#555555, #aaaaaa);
+  letter-spacing: 0.05em;
+  color: var(--color-text-faint);
 }
 
 .notification-panel__message {
-  font-size: 0.95rem;
+  font-size: 0.92rem;
 }
 
 .notification-panel__timestamp {
-  font-size: 0.8rem;
-  color: light-dark(#666666, #999999);
-}
-
-/* ---------- Kill switch ---------- */
-/* Previously referenced by KillSwitchControl.tsx with no rules at all — the
-   safety-critical control rendered as unstyled text. ENGAGED reuses the same
-   danger red as .trading-mode-banner--live; CLEARED stays a neutral card so it
-   doesn't compete with the paper/live banner next to it. */
-
-.kill-switch {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.6rem 0.9rem;
-  padding: 0.6rem 1rem;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-sm);
-}
-
-.kill-switch button {
-  background: var(--color-surface);
-}
-
-.kill-switch--cleared .kill-switch__status {
-  color: var(--color-text-muted);
-}
-
-.kill-switch--engaged {
-  background: light-dark(#fdecec, #3a1414);
-  border-color: light-dark(#b91c1c, #f87171);
-  color: light-dark(#b91c1c, #fca5a5);
-}
-
-.kill-switch__status {
-  font-weight: 700;
-}
-
-.kill-switch__since,
-.kill-switch__summary {
-  font-size: 0.85rem;
-  opacity: 0.85;
-}
-
-.kill-switch__error {
-  margin: 0;
-  flex-basis: 100%;
-  font-size: 0.85rem;
-  color: light-dark(#c2410c, #fb923c);
-}
-
-/* The one-click, no-confirmation "stop everything" action — a deliberate, singular
-   exception to this app's avoid-raw-red-for-buttons convention, since it needs to
-   read as more urgent than any other button on the page. Selector is bumped to
-   `button.kill-switch__engage` (element+class, matching .kill-switch button's own
-   specificity) so it wins on source order — plain `.kill-switch__engage` loses this
-   fight to the contrast-background rule above and silently ends up white-on-white. */
-button.kill-switch__engage {
-  border-color: var(--color-danger);
-  background: var(--color-danger);
-  color: #ffffff;
-  font-weight: 700;
-}
-
-button.kill-switch__engage:hover:not(:disabled) {
-  filter: brightness(1.08);
-}
-
-.trading-mode-banner {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.6rem 1rem;
-  border-radius: var(--radius-md);
-  border: 1px solid;
-  box-shadow: var(--shadow-sm);
-}
-
-.trading-mode-banner button {
-  background: var(--color-surface);
-}
-
-.trading-mode-banner__mode {
-  font-weight: 700;
-  letter-spacing: 0.03em;
-}
-
-.trading-mode-banner__since {
-  font-size: 0.85rem;
-  opacity: 0.8;
-  margin-right: auto;
-}
-
-.trading-mode-banner__error {
-  margin: 0;
-  flex-basis: 100%;
-  font-size: 0.85rem;
-  color: light-dark(#c2410c, #fb923c);
-}
-
-.trading-mode-banner__threshold {
-  flex-basis: 100%;
-  font-size: 0.85rem;
-  opacity: 0.85;
-}
-
-/* PAPER is calm/informational; LIVE is a deliberate, singular exception to this
-   app's avoid-raw-red convention — it isn't part of a red/green comparison pair
-   the way BUY/SELL is, and the word "LIVE" is always shown alongside the color. */
-.trading-mode-banner--paper {
-  background: light-dark(#eaf2fb, #101f2e);
-  border-color: light-dark(#2563eb, #60a5fa);
-  color: light-dark(#1d4ed8, #93c5fd);
-}
-
-.trading-mode-banner--live {
-  background: light-dark(#fdecec, #3a1414);
-  border-color: light-dark(#b91c1c, #f87171);
-  color: light-dark(#b91c1c, #fca5a5);
+  font-size: 0.78rem;
+  color: var(--color-text-faint);
 }

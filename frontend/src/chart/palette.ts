@@ -1,10 +1,10 @@
 /**
  * lightweight-charts needs concrete JS color values — it can't consume the app's index.css
- * light-dark() rules directly, and reading a light-dark()-valued custom property back out via
- * getComputedStyle is unreliable cross-browser. These hex values intentionally mirror the
- * existing .signal-badge palette (candleUp/candleDown match --buy/--sell) plus two more
- * colorblind-safe hues (blue/violet) for the non-directional MA overlay lines, per the
- * dataviz skill's "one accessible palette reused everywhere" constraint.
+ * custom properties directly, and reading one back out via getComputedStyle is unreliable
+ * cross-browser. These hex values intentionally mirror the existing .signal-badge palette
+ * (candleUp/candleDown match --buy/--sell) plus two more colorblind-safe hues (blue/violet)
+ * for the non-directional MA overlay lines, per the dataviz skill's "one accessible palette
+ * reused everywhere" constraint.
  */
 export interface ChartPalette {
   candleUp: string
@@ -33,17 +33,20 @@ const LIGHT_PALETTE: ChartPalette = {
 const DARK_PALETTE: ChartPalette = {
   candleUp: '#2dd4bf',
   candleDown: '#fb923c',
-  maShort: '#60a5fa',
+  maShort: '#6ba3ff',
   maLong: '#c4b5fd',
   rsi: '#a5b4fc',
-  rsiReference: '#6b7280',
+  rsiReference: '#4a5164',
   background: 'transparent',
-  text: '#e5e7eb',
-  grid: '#3a3a3a',
+  text: '#e7ebf3',
+  grid: 'rgba(255, 255, 255, 0.06)',
 }
 
+// data-theme (theme/ThemeContext.tsx) is the app's own persisted choice, set on
+// documentElement before first paint — not prefers-color-scheme, since the dashboard is
+// dark-first and the theme toggle is an explicit override independent of OS preference.
 export function isDarkMode(): boolean {
-  return window.matchMedia('(prefers-color-scheme: dark)').matches
+  return document.documentElement.dataset.theme !== 'light'
 }
 
 export function currentPalette(): ChartPalette {

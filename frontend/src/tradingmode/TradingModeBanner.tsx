@@ -119,19 +119,27 @@ function TradingModeBanner() {
 
   return (
     <div className={`trading-mode-banner trading-mode-banner--${state.mode.toLowerCase()}`} role="status">
-      <span className="trading-mode-banner__mode">{state.mode} mode</span>
-      <span className="trading-mode-banner__since">
-        {state.changedAt ? `Since ${new Date(state.changedAt).toLocaleString()}` : 'Default — never changed'}
+      <span className="trading-mode-banner__icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="6" width="18" height="12" rx="3" />
+          <circle cx={state.mode === 'LIVE' ? 16 : 8} cy="12" r="2.3" fill="currentColor" stroke="none" />
+        </svg>
       </span>
-      <button type="button" onClick={handleToggle} disabled={switching || blockedByThreshold}>
+      <span className="trading-mode-banner__label">Trading mode</span>
+      <span className="trading-mode-banner__mode">{state.mode}</span>
+      <span className="trading-mode-banner__meta">
+        {state.changedAt ? `Since ${new Date(state.changedAt).toLocaleString()}` : 'Default — never changed'}
+        {blockedByThreshold && (
+          <>
+            {' '}
+            · Live unlocks after {state.paperTradeThreshold} successful paper trades ({state.successfulPaperTrades}{' '}
+            completed)
+          </>
+        )}
+      </span>
+      <button type="button" className="trading-mode-banner__action" onClick={handleToggle} disabled={switching || blockedByThreshold}>
         {switching ? 'Switching…' : `Switch to ${target}`}
       </button>
-      {blockedByThreshold && (
-        <span className="trading-mode-banner__threshold">
-          Live mode unlocks after {state.paperTradeThreshold} successful paper trades (
-          {state.successfulPaperTrades} completed).
-        </span>
-      )}
       {error && <p className="trading-mode-banner__error">{error}</p>}
 
       <dialog ref={dialogRef} className="trade-confirm-dialog" onCancel={handleCancelConsent}>

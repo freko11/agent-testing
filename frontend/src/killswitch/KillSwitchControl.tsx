@@ -101,24 +101,38 @@ function KillSwitchControl() {
 
   return (
     <div className={`kill-switch kill-switch--${state.state.toLowerCase()}`} role="status">
+      <span className="kill-switch__icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 2v9" />
+          <path d="M6.3 5.5a8 8 0 1 0 11.4 0" />
+        </svg>
+      </span>
+      <span className="kill-switch__label">Kill switch</span>
+      <span className="kill-switch__pill">{engaged ? 'Engaged' : 'Ready'}</span>
       {engaged ? (
         <>
-          <span className="kill-switch__status">Kill switch ENGAGED — new trades are blocked.</span>
-          {state.changedBy && (
-            <span className="kill-switch__since">
-              By {state.changedBy}
-              {state.changedAt ? ` at ${new Date(state.changedAt).toLocaleString()}` : ''}
-            </span>
-          )}
-          {cancelSummary && <span className="kill-switch__summary">{describeSummary(cancelSummary)}</span>}
-          <button type="button" onClick={handleRequestClear} disabled={busy}>
+          <span className="kill-switch__meta">
+            New trades are blocked
+            {state.changedBy && (
+              <>
+                {' '}
+                — by {state.changedBy}
+                {state.changedAt ? ` at ${new Date(state.changedAt).toLocaleString()}` : ''}
+              </>
+            )}
+            {cancelSummary && <>. {describeSummary(cancelSummary)}</>}
+          </span>
+          <button type="button" className="kill-switch__action" onClick={handleRequestClear} disabled={busy}>
             Clear kill switch
           </button>
         </>
       ) : (
-        <button type="button" className="kill-switch__engage" onClick={handleEngage} disabled={busy}>
-          {busy ? 'Engaging…' : 'Kill switch'}
-        </button>
+        <>
+          <span className="kill-switch__meta">Stops new orders and cancels open ones instantly.</span>
+          <button type="button" className="kill-switch__action kill-switch__engage" onClick={handleEngage} disabled={busy}>
+            {busy ? 'Engaging…' : 'Engage'}
+          </button>
+        </>
       )}
       {error && <p className="kill-switch__error" role="alert">{error}</p>}
 

@@ -101,6 +101,40 @@ Binance Futures Testnet.
   at once. Added tone-coded stat-tile accents, a directional glyph on the
   signal badge, and a sticky-header/zebra-striped/status-dot order-history
   table for a more "high-fidelity trading terminal" feel.
+- Dark-first premium visual pass, prompted by continued "looks amateur"
+  feedback on the tabbed redesign above. New `theme/ThemeContext.tsx`
+  (dark-first, persisted to `localStorage`, `data-theme` set on
+  `documentElement` before first paint via an inline `index.html` script to
+  avoid a flash of the wrong theme) replaced the previous OS-inferred
+  `light-dark()` token approach — the active theme is now an explicit,
+  persisted user choice via a new `layout/ThemeToggle.tsx` in the header
+  (and the login page). `index.css` tokens rewritten as explicit
+  `:root` (dark default) plus a `:root[data-theme="light"]` override block:
+  deep navy/charcoal surfaces with a subtle radial-gradient backdrop, a
+  brighter electric-blue accent, glow-tinted shadows, a monospace numeric
+  font stack (`--font-mono`) applied to prices/stat-tile values/table
+  numeric columns, and refined status pills for order/kill-switch/trading-
+  mode state. `chart/palette.ts`'s `isDarkMode()` now reads `data-theme`
+  instead of `prefers-color-scheme`, and `PriceChart.tsx` takes `theme` as
+  an effect dependency (via `useTheme()`) so the chart actually rebuilds on
+  a mid-session toggle instead of only picking up theme on next lookup.
+  Restructured `KillSwitchControl.tsx`/`TradingModeBanner.tsx` markup
+  (icon + label + state pill + meta text + right-aligned action, mirrored
+  between both) to fix a real layout bug caught in live-verification: the
+  cleared/paper-mode idle states rendered as a single bare button floating
+  in a mostly-empty card, since `.app-status-strip`'s equal `flex: 1 1 16rem`
+  stretch gave both cards half the header width with nothing to fill it.
+  Also fixed `TradeForm.tsx` showing every field's validation error
+  immediately on a freshly-opened, untouched form (e.g. "Enter an amount
+  greater than 0" before the user had typed anything) — added per-field
+  `touched` state (set `onBlur`) plus a `submitAttempted` flag, so an
+  error only surfaces once its field has been interacted with or a submit
+  was attempted, without changing `validation.ts`'s actual validation
+  logic. Live-verified in both themes: full login → dashboard flow, all
+  three tabs, a populated ticker lookup (stat tiles, signal badge, trade
+  form, price chart), and the theme toggle persisting across a logout/
+  login round trip. `npm run build`, `npm run lint`, and `npm test` all
+  pass unchanged.
 
 ### E4 — Broker Adapter Layer
 - E4-F1-S1: `BrokerAdapter` interface + mock implementation + shared contract test suite

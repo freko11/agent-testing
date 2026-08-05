@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { CandlestickSeries, ColorType, LineSeries, LineStyle, createChart } from 'lightweight-charts'
 import type { Candle } from '../marketdata/api'
+import { useTheme } from '../theme/ThemeContext'
 import type { ChartIndicatorPoint } from './api'
 import { currentPalette } from './palette'
 import { toCandlestickSeries, toMaLongSeries, toMaShortSeries, toRsiSeries } from './mergeIndicators'
@@ -23,6 +24,9 @@ const RSI_OVERBOUGHT = 70
  */
 function PriceChart({ candles, indicators }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  // currentPalette() reads data-theme directly (not React state), so the chart needs the
+  // theme in its own dependency array to actually rebuild — via ThemeToggle mid-view.
+  const { theme } = useTheme()
 
   useEffect(() => {
     const container = containerRef.current
@@ -86,7 +90,7 @@ function PriceChart({ candles, indicators }: PriceChartProps) {
     return () => {
       chart.remove()
     }
-  }, [candles, indicators])
+  }, [candles, indicators, theme])
 
   return <div ref={containerRef} className="price-chart" role="img" aria-label="Price chart with moving-average overlays and an RSI subplot" />
 }
