@@ -2,6 +2,7 @@ package com.autotrade.dashboard.backtest;
 
 import com.autotrade.dashboard.signal.HoldTermCalculator;
 import com.autotrade.dashboard.signal.IndicatorId;
+import com.autotrade.dashboard.signal.RegimeClassifier;
 import com.autotrade.dashboard.signal.SignalRuleEngine;
 import com.autotrade.dashboard.signal.SignalRuleId;
 
@@ -13,9 +14,11 @@ import java.util.Map;
  * Aggregate result of one {@link BacktestHarness#run} call: raw call frequency per rule,
  * directional win/loss/expectancy stats (E2-F4-S1/E2-F4-S2) for the four BUY/SELL rules (plus an
  * "overall BUY"/"overall SELL" roll-up combining UNANIMOUS+MAJORITY), hold-gate large-move stats
- * for the five HOLD rules, and each individual indicator's own directional-read expectancy
+ * for the five HOLD rules, each individual indicator's own directional-read expectancy
  * (E8-F3-S1's {@code indicatorStats}) — the evidence {@code WeightedVoteRuleEngine.IndicatorWeights}
- * is calibrated from.
+ * is calibrated from — and each direction's expectancy split by ADX-derived {@link
+ * com.autotrade.dashboard.signal.Regime} (E8-F3-S2's {@code buyByRegime}/{@code sellByRegime}) —
+ * the evidence a regime filter's wiring decision is gated on.
  */
 public record BacktestReport(String label, int totalCandles, int totalDecisionPoints,
                               Map<SignalRuleId, Integer> callCounts,
@@ -23,7 +26,8 @@ public record BacktestReport(String label, int totalCandles, int totalDecisionPo
                               DirectionalOutcomeStats overallBuy, DirectionalOutcomeStats overallSell,
                               Map<SignalRuleId, HoldGateStats> holdGateStats,
                               List<BacktestDecisionPoint> buySellDecisionPoints,
-                              Map<IndicatorId, CheckpointStats> indicatorStats) {
+                              Map<IndicatorId, CheckpointStats> indicatorStats,
+                              RegimeSplitStats buyByRegime, RegimeSplitStats sellByRegime) {
 
     private static final List<SignalRuleId> DIRECTIONAL_RULES = List.of(SignalRuleId.BULLISH_UNANIMOUS,
             SignalRuleId.BULLISH_MAJORITY, SignalRuleId.BEARISH_UNANIMOUS, SignalRuleId.BEARISH_MAJORITY);
@@ -72,6 +76,20 @@ public record BacktestReport(String label, int totalCandles, int totalDecisionPo
         }
 
         printIndicatorExpectancy(out);
+        printRegimeExpectancy(out);
+    }
+
+    /** E8-F3-S2: each direction's win rate/expectancy split by ADX-derived regime — the direct
+     * "does a regime filter earn its keep" comparison (this story's AC): trending-regime
+     * expectancy vs. ranging-regime expectancy, for the same direction, at the same checkpoints.
+     * Reuses {@link #printDirectional}'s existing format. */
+    private void printRegimeExpectancy(PrintStream out) {
+        out.println();
+        out.printf("Regime split (ADX >= %s = TRENDING, else RANGING):%n", RegimeClassifier.ADX_TRENDING_THRESHOLD);
+        printDirectional(out, "BUY  trending", buyByRegime.trending());
+        printDirectional(out, "BUY  ranging", buyByRegime.ranging());
+        printDirectional(out, "SELL trending", sellByRegime.trending());
+        printDirectional(out, "SELL ranging", sellByRegime.ranging());
     }
 
     /** E8-F3-S1: each indicator's own directional-read win rate/expectancy, scored independently

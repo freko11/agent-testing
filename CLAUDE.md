@@ -22,8 +22,8 @@ Order API migration) added after E4-F3-S2's post-launch verification found
 Binance rejecting conditional exit-leg orders on the old endpoint — see
 that story's entry below, live-verified end-to-end against the real
 Binance Futures Testnet. E8 (Signal Quality & Quant Rigor) is a backlog
-epic added after E7 shipped; E8-F1-S1, E8-F2-S1, E8-F2-S2, and E8-F3-S1 are
-done, the rest of E8 (E8-F3-S2 through E8-F5) is not yet started.
+epic added after E7 shipped; E8-F1-S1, E8-F2-S1, E8-F2-S2, E8-F3-S1, and
+E8-F3-S2 are done, the rest of E8 (E8-F4 and E8-F5) is not yet started.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -598,6 +598,76 @@ done, the rest of E8 (E8-F3-S2 through E8-F5) is not yet started.
   unwired classes) plus the `computeVotes` extraction inside
   `SignalRuleEngine` (no behavior change), `src/test/java` for everything
   else — no `SignalService`/`OrderService`/`PlaceOrderRequest` changes.
+- E8-F3-S2: Trend-strength/regime filter, built as a new, deliberately
+  **unwired** `signal.RegimeGatedRuleEngine` — same "add a new class, don't
+  touch the production call path" pattern as E8-F3-S1's
+  `WeightedVoteRuleEngine`. New `indicator.AdxCalculator.calculate(candles,
+  period)` computes Wilder's ADX (per-candle +DM/-DM/TR, Wilder-smoothed
+  over `period` using the running-average recursion form
+  `VolatilityCalculator`'s ATR already uses, +DI/-DI, DX, then a
+  Wilder-smoothed ADX) — chosen over a long/short ATR-ratio alternative
+  (confirmed with the user) because ADX measures directional persistence,
+  which is what the AC actually asks for, where an ATR ratio would measure
+  volatility expansion and could misread a whipsaw as "trending". New
+  `signal.Regime` enum (TRENDING/RANGING) and `signal.RegimeClassifier`
+  (`classify(BigDecimal adx)`, threshold `ADX_TRENDING_THRESHOLD=25` — the
+  common ADX rule-of-thumb, an explicitly uncalibrated placeholder like
+  `BacktestConfig.TAKE_PROFIT_PCT`, with the ambiguous 20–25 band resolving
+  to RANGING as the more conservative default) mirror `HoldTermCalculator`'s
+  classify-a-precomputed-value shape. `RegimeGatedRuleEngine.applyGate
+  (SignalRuleId, Regime)` is a pure, engine-agnostic post-filter (confirmed
+  with the user: gate, not down-weight, since down-weighting would only
+  meaningfully compose with `WeightedVoteRuleEngine`'s already-degenerate
+  all-zero default weights) that collapses a directional BUY/SELL call to
+  the existing `SignalRuleId.NO_STRONG_SIGNAL` when the regime is RANGING —
+  confirmed with the user to reuse the existing enum value rather than add a
+  new `SignalRuleId` constant, keeping this story's blast radius to new,
+  additive classes only (`NO_STRONG_SIGNAL`'s rationale string is a known,
+  accepted minor inaccuracy for a regime-gated call, since the indicators
+  did actually agree — the regime override suppressed it, not dissent).
+  `BacktestHarness` gained a fourth-decision-point-tag capability alongside
+  E8-F3-S1's per-indicator scoring: every BUY/SELL decision point now also
+  computes its ADX/regime and is tallied into one of four new
+  `DirectionalAccumulator`s (buy/sell x trending/ranging), reusing the
+  existing `CheckpointStats`/`DirectionalOutcomeStats` shapes unchanged, via
+  a new `RegimeSplitStats(trending, ranging)` record surfaced as
+  `BacktestReport.buyByRegime`/`sellByRegime` and a new
+  `printRegimeExpectancy` block. New `RegimeCalibrationTest` is this story's
+  evidence deliverable; `BacktestHarnessTest`/`RegimeCalibrationTest` both
+  assert the regime split partitions the existing unsplit
+  `overallBuy`/`overallSell` totals exactly. `AdxCalculatorTest` hand-derives
+  two exact reference values at period=2 using exact-fraction arithmetic (a
+  clean one-directional uptrend fixture, where -DM is always zero so DX is
+  always exactly 100 regardless of magnitude → ADX=100.0000; an alternating
+  up/down chop fixture, hand-solved to exactly 80/3 → ADX=26.6667) — real
+  pinned reference values, not tolerance checks, the same rigor
+  `BacktestHarnessTpSlTest` established for the TP/SL crossing scan, since
+  the two real BTCUSDT/DOGEUSDT fixtures can't provide ground truth for the
+  algorithm itself, only evidence under review.
+
+  **Wiring decision (evidence-gated, confirmed with the user as the bar
+  before implementation):** `RegimeCalibrationTest`'s actual run against
+  both fixtures does *not* clear the bar of "ranging expectancy
+  consistently and materially worse than trending, on both fixtures" — the
+  evidence is mixed, not confirming the story's premise uniformly. On
+  BTCUSDT, ranging is worse than trending for SELL at every checkpoint
+  (e.g. max: trending +0.100% after-cost expectancy vs. ranging -0.227%)
+  and roughly a wash for BUY. On DOGEUSDT the result *inverts*: ranging
+  BUY/SELL both score higher after-cost expectancy than trending at every
+  checkpoint (e.g. SELL max: trending +0.751% vs. ranging +0.641% — still
+  both positive, and BUY max: trending +0.046% vs. ranging +0.291%, ranging
+  ahead). So `RegimeGatedRuleEngine` stays unwired — `SignalService`/
+  `OrderService` still call `SignalRuleEngine.evaluate` directly, unfiltered
+  — the same outcome as E8-F3-S1, but for a different reason: E8-F3-S1's
+  calibration came back uniformly negative, this story's regime hypothesis
+  came back fixture-dependent, which is itself real evidence that "ranging
+  = lower-quality signal" doesn't hold uniformly across assets at
+  `ADX_TRENDING_THRESHOLD=25`, not just an unlucky calibration. Explicitly
+  provisional/pending E8-F4-S1's out-of-sample validation, same caveat
+  every other E8 calibration carries. Backend, `src/main/java` for
+  `AdxCalculator`/`Regime`/`RegimeClassifier`/`RegimeGatedRuleEngine` (new,
+  unwired classes), `src/test/java` for everything else — no
+  `SignalService`/`OrderService`/`PlaceOrderRequest` changes.
 
 ## Build / lint / test
 
@@ -623,7 +693,9 @@ done, the rest of E8 (E8-F3-S2 through E8-F5) is not yet started.
   `MarketDataService` (routes by asset type), `MarketHoursService` (hardcoded
   NYSE/NASDAQ calendar), `RetryHelper` (one bounded retry).
 - `indicator` — hand-rolled `RsiCalculator`/`MacdCalculator`/
-  `MovingAverageCrossoverCalculator`/`VolatilityCalculator`/`VolumeTrendCalculator`
+  `MovingAverageCrossoverCalculator`/`VolatilityCalculator`/`VolumeTrendCalculator`/
+  `AdxCalculator` (E8-F3-S2, Wilder ADX for trend-strength/regime
+  classification)
   (pure static, no library — see `docs/CHANGELOG.md` E2-F2-S1 for why), plus
   `IndicatorService`/`IndicatorSnapshot` persistence.
 - `signal` — `SignalRuleEngine` (versioned rule table, safety gates + 2-of-3
@@ -632,7 +704,12 @@ done, the rest of E8 (E8-F3-S2 through E8-F5) is not yet started.
   an alternative, deliberately **unwired** weighted-vote scoring layer —
   reuses `SignalRuleEngine.computeVotes`/`IndicatorVotes`, not called by
   `SignalService`/`OrderService`. `IndicatorId` (RSI/MACD/MA_CROSSOVER) keys
-  per-indicator data for both.
+  per-indicator data for both. `RegimeGatedRuleEngine` (E8-F3-S2) is another
+  deliberately **unwired** class — a pure `SignalRuleId x Regime ->
+  SignalRuleId` post-filter (`applyGate`) that suppresses a directional call
+  in a RANGING regime, composable with either `SignalRuleEngine` or
+  `WeightedVoteRuleEngine`'s output; `Regime`/`RegimeClassifier` classify an
+  `AdxCalculator` reading into TRENDING/RANGING.
 - `broker` — `BrokerCredentialService`/`CredentialEncryptionService` (keyring-based
   rotation), per-broker credential bootstraps from env vars.
 - `brokeradapter` — `BrokerAdapter` interface, `RetryingBrokerAdapter` decorator

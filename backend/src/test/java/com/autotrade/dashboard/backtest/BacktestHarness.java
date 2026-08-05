@@ -1,5 +1,6 @@
 package com.autotrade.dashboard.backtest;
 
+import com.autotrade.dashboard.indicator.AdxCalculator;
 import com.autotrade.dashboard.indicator.IndicatorService;
 import com.autotrade.dashboard.indicator.MacdCalculator;
 import com.autotrade.dashboard.indicator.MacdResult;
@@ -12,6 +13,8 @@ import com.autotrade.dashboard.marketdata.Candle;
 import com.autotrade.dashboard.signal.HoldTerm;
 import com.autotrade.dashboard.signal.HoldTermCalculator;
 import com.autotrade.dashboard.signal.IndicatorId;
+import com.autotrade.dashboard.signal.Regime;
+import com.autotrade.dashboard.signal.RegimeClassifier;
 import com.autotrade.dashboard.signal.SignalCall;
 import com.autotrade.dashboard.signal.SignalRuleEngine;
 import com.autotrade.dashboard.signal.SignalRuleEngine.IndicatorVotes;
@@ -88,6 +91,15 @@ public final class BacktestHarness {
         Map<IndicatorId, IndicatorAccumulator> indicatorAcc = new EnumMap<>(IndicatorId.class);
         List<BacktestDecisionPoint> buySellPoints = new ArrayList<>();
 
+        // E8-F3-S2: regime-split accumulators, additive alongside the existing per-rule ones —
+        // every BUY/SELL decision point is tallied into exactly one of these four in addition to
+        // its existing per-rule DirectionalAccumulator, so trending vs. ranging expectancy can be
+        // compared directly for the same direction.
+        DirectionalAccumulator buyTrendingAcc = new DirectionalAccumulator();
+        DirectionalAccumulator buyRangingAcc = new DirectionalAccumulator();
+        DirectionalAccumulator sellTrendingAcc = new DirectionalAccumulator();
+        DirectionalAccumulator sellRangingAcc = new DirectionalAccumulator();
+
         for (SignalRuleId ruleId : SignalRuleId.values()) {
             callCounts.put(ruleId, 0);
             if (ruleId.call() == SignalCall.BUY || ruleId.call() == SignalCall.SELL) {
@@ -113,6 +125,8 @@ public final class BacktestHarness {
             BigDecimal volatility = VolatilityCalculator.calculate(window, VolatilityCalculator.DEFAULT_PERIOD);
             BigDecimal volumeTrend = VolumeTrendCalculator.calculate(window,
                     VolumeTrendCalculator.DEFAULT_SHORT_PERIOD, VolumeTrendCalculator.DEFAULT_LONG_PERIOD);
+            BigDecimal adx = AdxCalculator.calculate(window, AdxCalculator.DEFAULT_PERIOD);
+            Regime regime = RegimeClassifier.classify(adx);
 
             SignalRuleId matchedRule = evaluator.evaluate(rsi, macd, ma, volatility, volumeTrend);
             HoldTerm holdTerm = HoldTermCalculator.calculate(matchedRule, volatility);
@@ -143,8 +157,16 @@ public final class BacktestHarness {
                 acc.record(Checkpoint.MID, midResult);
                 acc.record(Checkpoint.MAX, maxResult);
 
+                DirectionalAccumulator regimeAcc = isBuy
+                        ? (regime == Regime.TRENDING ? buyTrendingAcc : buyRangingAcc)
+                        : (regime == Regime.TRENDING ? sellTrendingAcc : sellRangingAcc);
+                regimeAcc.totalCalls++;
+                regimeAcc.record(Checkpoint.MIN, minResult);
+                regimeAcc.record(Checkpoint.MID, midResult);
+                regimeAcc.record(Checkpoint.MAX, maxResult);
+
                 buySellPoints.add(new BacktestDecisionPoint(i, candles.get(i).timestamp(), rsi, macd.histogram(),
-                        volatility, volumeTrend, matchedRule, holdTerm, minResult, midResult, maxResult));
+                        volatility, volumeTrend, matchedRule, holdTerm, minResult, midResult, maxResult, regime));
             } else {
                 HoldGateAccumulator acc = holdGate.get(matchedRule);
                 acc.totalCalls++;
@@ -164,8 +186,11 @@ public final class BacktestHarness {
         DirectionalOutcomeStats overallSell = combine(directionalStats.get(SignalRuleId.BEARISH_UNANIMOUS),
                 directionalStats.get(SignalRuleId.BEARISH_MAJORITY));
 
+        RegimeSplitStats buyByRegime = new RegimeSplitStats(buyTrendingAcc.toStats(), buyRangingAcc.toStats());
+        RegimeSplitStats sellByRegime = new RegimeSplitStats(sellTrendingAcc.toStats(), sellRangingAcc.toStats());
+
         return new BacktestReport(label, candles.size(), decisionPoints, callCounts, directionalStats, overallBuy,
-                overallSell, holdGateStats, buySellPoints, indicatorStats);
+                overallSell, holdGateStats, buySellPoints, indicatorStats, buyByRegime, sellByRegime);
     }
 
     /**

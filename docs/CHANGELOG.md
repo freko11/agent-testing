@@ -4832,3 +4832,201 @@ output (there's no running-dashboard surface to exercise, since nothing new
 is wired into a controller or the order path) — both are reproducible via
 `./mvnw test -Dtest=IndicatorExpectancyCalibrationTest` and `./mvnw test
 -Dtest=WeightedVoteBacktestTest`.
+
+## E8-F3-S2 — trend-strength/regime filter
+
+**Design gate, confirmed with the user before implementation.** Four open
+questions from the task brief, resolved before any code was written: (1)
+regime indicator — ADX-style (chosen) over a long/short ATR-ratio
+alternative, because ADX measures directional persistence (what the AC
+actually asks for — "the same MA-crossover means different things in a
+choppy vs. trending market"), where an ATR ratio measures volatility
+expansion/contraction and could misread a sudden whipsaw as "trending"
+purely because it's volatile, not because it's directional; (2) mechanism —
+gate (suppress the call outright in a RANGING regime) over down-weight,
+because down-weighting only has a natural home inside
+`WeightedVoteRuleEngine`'s weighted sum, whose calibrated `IndicatorWeights.
+DEFAULT` (E8-F3-S1) is currently all-zero — stacking an unproven regime
+factor on an already-degenerate base adds a second layer of provisional-ness
+with nothing solid under it; (3) gated-outcome representation — collapse to
+the existing `SignalRuleId.NO_STRONG_SIGNAL` over adding a new enum
+constant, keeping this story's blast radius to new, additive classes only,
+since every existing `SignalRuleId` consumer (`SignalCallEntry`,
+`OrderAuditEntry`, `BacktestReport`'s hardcoded rule lists, the frontend's TS
+mirror) would otherwise need to account for a rule that isn't wired into
+production this story anyway; (4) the ADX trending threshold (25) is an
+explicit, uncalibrated industry-default placeholder, the same treatment as
+`BacktestConfig.TAKE_PROFIT_PCT`/`STOP_LOSS_PCT`, not backtest-derived.
+
+**New `indicator.AdxCalculator`.** Wilder's ADX, deliberately duplicating its
+own true-range computation rather than sharing `VolatilityCalculator`'s
+private helper — every calculator in this package is independently pure
+with zero cross-calculator calls, and this preserves that convention rather
+than being the first exception to it. Per-candle `+DM`/`-DM`/`TR`:
+
+```java
+BigDecimal upMove = curr.high().subtract(prev.high());
+BigDecimal downMove = prev.low().subtract(curr.low());
+plusDm[i] = (upMove.signum() > 0 && upMove.compareTo(downMove) > 0) ? upMove : BigDecimal.ZERO;
+minusDm[i] = (downMove.signum() > 0 && downMove.compareTo(upMove) > 0) ? downMove : BigDecimal.ZERO;
+tr[i] = highLow.max(highPrevClose).max(lowPrevClose);  // same three-way max VolatilityCalculator uses
+```
+
+then Wilder-smoothed over `period` using the **running-average** recursion
+form (`smoothed = (smoothed * (period - 1) + current) / period`) —
+deliberately matching `VolatilityCalculator`'s own ATR recursion rather than
+the running-*sum* form some references use for DM/TR; algebraically
+equivalent for +DI/-DI's ratio, since numerator and denominator scale
+identically either way, so this is a style choice for consistency with the
+rest of the package, not a different result. `+DI`/`-DI` from smoothed
+DM over smoothed TR, `DX = 100 * |+DI - -DI| / (+DI + -DI)` (guarded to zero
+when the denominator is zero — a flat market with no directional movement at
+all), and a final Wilder-smoothed ADX from the first `period` DX values.
+Minimum candle count is `2 * period` (derived exactly, not estimated: `period`
+candles to seed the first smoothed DM/TR/DX, then `period` more DX values —
+one per additional candle — to seed the first ADX average), comfortably under
+`IndicatorService.MIN_CANDLES_FOR_INDICATORS` (34) at the default period of
+14, so `BacktestHarness`'s existing decision-point loop (which never starts
+before that floor) never needs a separate ADX-specific floor check.
+
+**`AdxCalculatorTest` — exact hand-derived reference values, not tolerance
+checks.** The two real BTCUSDT/DOGEUSDT backtest fixtures can't provide
+ground truth for the algorithm itself (same rationale
+`BacktestHarnessTpSlTest` documented for the TP/SL crossing scan), so this
+story hand-solved two small synthetic fixtures at `period=2` using exact
+fraction arithmetic rather than decimal approximation, specifically to avoid
+rounding-mismatch risk against the implementation's `MathContext(50)`
+intermediate precision:
+
+- **Clean uptrend** (every candle a higher-high/higher-low): `-DM` is
+  structurally always zero, so `-DI` is always zero and `DX` is always
+  exactly 100 regardless of magnitude, at every smoothing step — `ADX =
+  100.0000` exactly, a rounding-free reference value by construction.
+- **Alternating up/down chop**: hand-solved as exact fractions — first `DX`
+  step resolves to exactly `100/3`, second to exactly `20`, averaged to
+  `80/3` — which is `26.666...` repeating, rounding `HALF_UP` at 4 decimal
+  places to exactly `26.6667`. Also asserted comparatively (`chopAdx <
+  uptrendAdx`) as a second, independent check that doesn't depend on the
+  hand arithmetic being right.
+
+Both fixtures also serve the minimum-candle-count exception test (3 candles
+at `period=2`, below the `2*period=4` floor, throws
+`IllegalArgumentException`, mirroring `VolatilityCalculator`'s existing
+`fewerThanPeriodPlusOneCandles_throws` test).
+
+**New `signal.Regime` enum** (`TRENDING`/`RANGING`) and
+**`signal.RegimeClassifier`** (`classify(BigDecimal adx)`, threshold
+`ADX_TRENDING_THRESHOLD=25`, ambiguous 20–25 band resolves to `RANGING` — the
+more conservative default, an uncertain regime is treated as one where the
+directional vote should be gated, not trusted) — both mirror
+`HoldTermCalculator`'s classify-an-already-computed-scalar shape, a tiny
+pure classifier rather than a raw-candle consumer.
+
+**New `signal.RegimeGatedRuleEngine` — deliberately unwired, engine-agnostic
+post-filter.**
+
+```java
+public static SignalRuleId applyGate(SignalRuleId matchedRule, Regime regime) {
+    boolean directional = matchedRule.call() == SignalCall.BUY || matchedRule.call() == SignalCall.SELL;
+    if (directional && regime == Regime.RANGING) {
+        return SignalRuleId.NO_STRONG_SIGNAL;
+    }
+    return matchedRule;
+}
+```
+
+Takes an *already-computed* `SignalRuleId` — from either
+`SignalRuleEngine.evaluate` or `WeightedVoteRuleEngine.evaluate` — and a
+`Regime`, with zero coupling to either engine's internals, so it composes
+identically with both (unlike a down-weight approach, which would only have
+made sense bolted onto `WeightedVoteRuleEngine`'s weighted sum). Every
+HOLD-cause rule passes through unchanged regardless of regime — the safety
+gates and the conflict/dissent gate already decided those, and a regime
+filter has nothing to add to a call that's already HOLD.
+`RegimeGatedRuleEngineTest` covers all five cases directly (BUY/SELL
+suppressed in RANGING, BUY/SELL unchanged in TRENDING, every HOLD-cause rule
+unchanged in both regimes) — pure enum-in/enum-out, no calculator math to
+pin down here.
+
+**`BacktestHarness` regime-split scoring — a fourth additive
+decision-point-tag capability, alongside E8-F3-S1's per-indicator scoring.**
+Every BUY/SELL decision point already computes rsi/macd/ma/volatility/
+volumeTrend fresh per `window`; this story adds one more scalar the same
+way — `AdxCalculator.calculate(window, AdxCalculator.DEFAULT_PERIOD)` →
+`RegimeClassifier.classify(adx)` — and tallies the point into one of four new
+`DirectionalAccumulator`s (`buyTrendingAcc`/`buyRangingAcc`/
+`sellTrendingAcc`/`sellRangingAcc`), fed at the exact same call site the
+existing per-rule accumulator already records at, using the
+already-computed `minResult`/`midResult`/`maxResult` (no re-scoring). New
+`backtest.RegimeSplitStats(DirectionalOutcomeStats trending,
+DirectionalOutcomeStats ranging)` record surfaces the four accumulators as
+`BacktestReport.buyByRegime`/`sellByRegime`, reusing the exact
+`DirectionalOutcomeStats`/`CheckpointStats` shape the unsplit overall
+BUY/SELL stats already use — no new stats machinery, just a second
+aggregation dimension over data the loop was already computing.
+`BacktestReport.printRegimeExpectancy` reuses the existing `printDirectional`
+formatter unchanged. `BacktestDecisionPoint` gained a `regime` field
+(computed regardless of whether a filter is actually applied, so the
+spot-check table shows what regime the market was actually in at each
+historical decision). `BacktestHarnessTest` and the new
+`RegimeCalibrationTest` both assert the regime split is a true partition —
+`buyByRegime.trending().totalCalls() + buyByRegime.ranging().totalCalls() ==
+overallBuy.totalCalls()` (and the SELL equivalent) — a resample bug (e.g.
+double-counting or dropping points) would show up immediately as a mismatch
+against the harness's own pre-existing overall totals.
+
+**`RegimeCalibrationTest` — the story's evidence deliverable — and the
+actual wiring decision.** Confirmed with the user as the bar *before*
+running it: wire `RegimeGatedRuleEngine` into production only if ranging
+expectancy comes back consistently and materially worse than trending
+expectancy, on both fixtures, at more than one checkpoint. The actual run:
+
+- **BTCUSDT**: SELL shows the hypothesized pattern clearly — ranging is
+  worse than trending at every checkpoint (e.g. max: trending +0.100%
+  after-cost expectancy vs. ranging -0.227%; min: trending +0.053% vs.
+  ranging -0.281%). BUY is close to a wash between the two regimes (max:
+  trending +0.076% vs. ranging -0.173% — directionally consistent but a
+  smaller gap).
+- **DOGEUSDT**: the pattern *inverts*. Both BUY and SELL score **higher**
+  after-cost expectancy in the ranging regime than the trending one, at
+  every checkpoint (SELL max: trending +0.751% vs. ranging +0.641%, both
+  strongly positive but trending actually ahead there — while SELL mid
+  inverts harder: trending +0.592% vs. ranging +0.834%, ranging ahead; BUY
+  max: trending +0.046% vs. ranging +0.291%, ranging clearly ahead).
+
+This does not clear the confirmed bar — the evidence is fixture-dependent,
+not a uniform "ranging = lower-quality signal" finding. **Decision:
+`RegimeGatedRuleEngine` stays unwired.** `SignalService`/`OrderService`
+still call `SignalRuleEngine.evaluate` directly, unfiltered — the same
+practical outcome as E8-F3-S1, but for a materially different reason:
+E8-F3-S1's weights came back uniformly negative (a calibration that simply
+didn't find anything worth wiring); this story's regime split came back
+*contradictory* across the two fixtures, which is itself a real, informative
+result about `ADX_TRENDING_THRESHOLD=25` at daily-bar granularity on these
+two assets, not an inconclusive non-finding to shrug off. A plausible
+non-exhaustive read (not verified further, flagged for any future
+recalibration attempt): DOGEUSDT's higher baseline volatility may mean its
+"ranging" bucket at ADX<25 still contains plenty of real, tradeable
+directional moves that a stricter/asset-specific threshold would
+reclassify as trending — but this is speculation, not something this
+story's evidence establishes either way. Explicitly provisional pending
+E8-F4-S1's not-yet-implemented out-of-sample validation, the same caveat
+every E8 calibration story carries.
+
+**Scope boundaries, confirmed against the design gate.** Not wired into
+`SignalService`/`OrderService`/any config flag; no `RULE_TABLE_VERSION` bump;
+no `OrderAuditEntry` change; no new `SignalRuleId` constant;
+`WeightedVoteRuleEngine` itself untouched (composition with
+`RegimeGatedRuleEngine` is structurally possible — both operate on
+`SignalRuleId`/take a `SignalRuleId` output respectively — but not
+exercised by any test in this story, since neither engine is wired into
+production yet); E8-F4-S1 (out-of-sample validation) remains the separate,
+unimplemented follow-up both this story and E8-F3-S1 are provisional
+pending.
+
+`./mvnw test -Dtest=AdxCalculatorTest,RegimeClassifierTest,RegimeGatedRuleEngineTest,BacktestHarnessTest,RegimeCalibrationTest`
+and the full `./mvnw verify` (452 tests, up from 437, 0 failures/errors, jar
+packaged) both pass clean. Backend-only; no frontend changes. "Live verification" for this
+story is the calibration test's printed output (there's no running-dashboard
+surface to exercise, since nothing new is wired into a controller or the
+order path), reproducible via `./mvnw test -Dtest=RegimeCalibrationTest`.

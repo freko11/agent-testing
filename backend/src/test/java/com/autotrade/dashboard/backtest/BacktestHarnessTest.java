@@ -67,6 +67,20 @@ class BacktestHarnessTest {
         for (IndicatorId indicatorId : IndicatorId.values()) {
             assertCheckpointStatsAreSane(indicatorId.name(), report.indicatorStats().get(indicatorId));
         }
+
+        // E8-F3-S2: the regime split is additive over the same per-direction totals, not a
+        // resample — every BUY/SELL decision point lands in exactly one of {trending, ranging}
+        // for its own direction, on top of already landing in exactly one SignalRuleId bucket.
+        assertEquals(report.overallBuy().totalCalls(),
+                report.buyByRegime().trending().totalCalls() + report.buyByRegime().ranging().totalCalls(),
+                "BUY regime split must partition overallBuy's total calls exactly");
+        assertEquals(report.overallSell().totalCalls(),
+                report.sellByRegime().trending().totalCalls() + report.sellByRegime().ranging().totalCalls(),
+                "SELL regime split must partition overallSell's total calls exactly");
+        assertExpectancySignsAreSane("BUY trending", report.buyByRegime().trending());
+        assertExpectancySignsAreSane("BUY ranging", report.buyByRegime().ranging());
+        assertExpectancySignsAreSane("SELL trending", report.sellByRegime().trending());
+        assertExpectancySignsAreSane("SELL ranging", report.sellByRegime().ranging());
     }
 
     /**

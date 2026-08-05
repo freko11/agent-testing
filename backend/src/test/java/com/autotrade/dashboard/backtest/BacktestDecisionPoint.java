@@ -1,6 +1,7 @@
 package com.autotrade.dashboard.backtest;
 
 import com.autotrade.dashboard.signal.HoldTerm;
+import com.autotrade.dashboard.signal.Regime;
 import com.autotrade.dashboard.signal.SignalRuleId;
 
 import java.math.BigDecimal;
@@ -18,10 +19,15 @@ import java.util.Optional;
  * stats, threaded through here too so the spot-check table can show exit reason at decision-point
  * granularity, not just in aggregate. Empty exactly when the fixture doesn't reach that
  * checkpoint's horizon.
+ *
+ * <p>{@code regime} (E8-F3-S2) is this decision point's ADX-derived {@link Regime} — computed
+ * regardless of whether a regime filter is actually applied to the call (it isn't, in production;
+ * see {@code RegimeGatedRuleEngine}), so the spot-check table and the regime-split stats can show
+ * what regime the market was actually in at each historical decision.
  */
 public record BacktestDecisionPoint(int index, Instant date, BigDecimal rsi, BigDecimal macdHistogram,
                                      BigDecimal volatility, BigDecimal volumeTrend, SignalRuleId matchedRule,
                                      HoldTerm holdTerm, Optional<DirectionalScoreResult> minResult,
                                      Optional<DirectionalScoreResult> midResult,
-                                     Optional<DirectionalScoreResult> maxResult) {
+                                     Optional<DirectionalScoreResult> maxResult, Regime regime) {
 }
