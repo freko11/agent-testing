@@ -715,8 +715,8 @@
     "semantic_hash": "bdb49b096f294fd7a1d51b678382d2ab"
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/BacktestConfig.java": {
-    "mtime": 1785941050.4947395,
-    "ast_hash": "a5fbe8fb3c577713631c56039b050837",
+    "mtime": 1785943073.1421018,
+    "ast_hash": "36a90c8e70e6d09f92de449574dd283c",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/BacktestDecisionPoint.java": {
@@ -730,13 +730,13 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/BacktestHarnessTest.java": {
-    "mtime": 1785941195.5281565,
-    "ast_hash": "961e015e0be4f93a16990d39b71721e6",
+    "mtime": 1785943099.6663332,
+    "ast_hash": "98dea029c7c47fa7659aafc29c78d008",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/BacktestReport.java": {
-    "mtime": 1785941172.2889037,
-    "ast_hash": "58e60d10c67cdaad0e970770a9c47070",
+    "mtime": 1785943092.5896728,
+    "ast_hash": "f7022eda26bc59a046b3263fc0545290",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/Checkpoint.java": {
@@ -745,8 +745,8 @@
     "semantic_hash": "74f669001547c6d9849f42c31de2bc96"
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/CheckpointStats.java": {
-    "mtime": 1785941069.5731952,
-    "ast_hash": "686ffa0dcc4b2faae7a98314a657ec77",
+    "mtime": 1785943080.970053,
+    "ast_hash": "11634ee4d0c6333e8362fd8a12c2852a",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/DirectionalOutcome.java": {
@@ -1280,8 +1280,8 @@
     "semantic_hash": "ba2aaaac807614916be42c0c7583990e"
   },
   "CLAUDE.md": {
-    "mtime": 1785941658.0828753,
-    "ast_hash": "5e4c4d720cfa3c778f0870266e3cb1de",
+    "mtime": 1785943336.2831235,
+    "ast_hash": "7a23e791c8cb1753fc99373e56b2c9de",
     "semantic_hash": ""
   },
   "docker-compose.yml": {
@@ -1330,8 +1330,8 @@
     "semantic_hash": ""
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1785941711.036899,
-    "ast_hash": "5f3213ab037433dbe5fc88df75d7e2ed",
+    "mtime": 1785943658.3534093,
+    "ast_hash": "648dd51e2121d5cc26d6a498cea39489",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/risk/RiskExceptionHandler.java": {
@@ -1520,8 +1520,8 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/ThresholdCalibrationTest.java": {
-    "mtime": 1785941203.430972,
-    "ast_hash": "45153c8341f6368e0de37e1188dfa961",
+    "mtime": 1785943103.7636702,
+    "ast_hash": "ab2c564c333b7dcbcc3eaff0974aae2d",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/BacktestHarnessTpSlTest.java": {
@@ -1532,6 +1532,11 @@
   "backend/src/test/java/com/autotrade/dashboard/backtest/ExitReason.java": {
     "mtime": 1785941042.4591177,
     "ast_hash": "01eabfe9abb0f94b3574686486d8c172",
+    "semantic_hash": ""
+  },
+  "backend/src/test/java/com/autotrade/dashboard/backtest/CheckpointStatsTest.java": {
+    "mtime": 1785943118.499695,
+    "ast_hash": "b45d000b9ed4cdf994ce1b747626d1d5",
     "semantic_hash": ""
   }
 }
