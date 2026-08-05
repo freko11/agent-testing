@@ -3715,3 +3715,103 @@ the testnet account. Not fixed in this pass — migrating exit-leg placement to
 Binance's Algo Order API is a separate, real scope of work (new endpoint, likely a
 different request/response shape) tracked as a follow-up, not a quick truncation fix.
 
+
+## E4-F3-S3 — Binance Algo Order API migration for exit legs
+
+Backlog story added by E4-F3-S2's follow-up entry above: Binance rejects
+`STOP_MARKET`/`TAKE_PROFIT_MARKET` exit legs on `/fapi/v1/order` ("use the Algo
+Order API endpoints instead"), so every crypto bracket order's protective legs
+were failing after retry — correctly surfaced as `PARTIALLY_PROTECTED`, not
+hidden, but not fixed either. This story migrates exit-leg placement/lookup to
+the Algo Order API so both legs actually place again.
+
+**Design gate.** Given this is live money-handling broker code (the same weight
+E4-F3-S2's bracket construction, MARKET-only entries, and partial-failure design
+were built under), ran a Plan-agent design pass before touching code. It read the
+full `BinanceFuturesTradingAdapter`, `BinanceFuturesTradingAdapterTest`,
+`BinanceFuturesTradingAdapterContractTest`, `BrokerAdapterContractTest`, and the
+E4-F3-S2 follow-up's root-cause entry, then proposed a concrete migration: move
+only `ensureExitLeg`'s placement and its "check-first" lookup to `POST`/`GET
+/fapi/v1/algoOrder` (`algoType=CONDITIONAL`), leave the entry leg and
+`cancelOrder` untouched, and flagged the whole endpoint shape as unverified since
+this project's Binance integration targets a fictional/project-internal API
+surface with no real docs to check against — the backlog AC itself (`docs/agile-plan.md`
+line 147) specifies the target endpoint shape (`POST/GET/DELETE /fapi/v1/algoOrder`,
+`algoType=CONDITIONAL`), which the plan treated as authoritative rather than
+something to fact-check.
+
+One real scope question came out of the design pass and was put to the user
+directly rather than guessed: should the kill switch's cancel-all-open-orders
+sweep also cancel exit legs via the new API, or stay scoped to the entry leg
+like today? Answered: entry leg only — by the time exit legs exist, the entry
+has already filled and is no longer cancelable, so `cancelOrder`'s job was
+always about a still-resting entry, not position-flattening (matches E6-F2-S2's
+already-documented "not broker-side position-flattening" scope). No new
+cancellation path was built.
+
+**Implementation.** `BinanceFuturesTradingAdapter`:
+- New constants `ALGO_TYPE_CONDITIONAL` and `ALGO_ORDER_DOES_NOT_EXIST_CODE`
+  (the latter assumed to match the entry endpoint's `-2013`, explicitly flagged
+  as unverified — see below).
+- New `findAlgoOrder` (the Algo Order API's `GET` equivalent of `findOrder`),
+  and a new `BinanceAlgoOrderResponse` record (`algoId`/`algoStatus` in place of
+  `orderId`/`status`; no `avgPrice` field since `compositeResult` never reads a
+  fill price off an exit leg).
+- `ensureExitLeg`'s check-first lookup and its `POST` both retargeted to
+  `/fapi/v1/algoOrder`, with `stopPrice`→`triggerPrice` and
+  `newClientOrderId`→`clientAlgoId` param renames, plus a new `algoType`
+  param; `newOrderRespType` dropped (order-endpoint-specific, not carried over).
+- `compositeResult`'s stop-loss/take-profit lookups switched from `findOrder`
+  to `findAlgoOrder`; `isTriggered`/`isMissingProtection` retyped to
+  `BinanceAlgoOrderResponse` and now read `algoStatus` against an invented
+  vocabulary (`WORKING`/`FINISHED`/`CANCELLED`/`EXPIRED`/`REJECTED`) chosen to
+  keep the surrounding FILLED/PARTIALLY_PROTECTED/CANCELLED branching
+  structurally identical to before.
+- Entry-leg placement/lookup (`placeEntryOrder`, the top-of-`placeOrder` check,
+  `findOrder`), `cancelOrder`/`deleteOrder`, and `legIds`'s SHA-256 id scheme are
+  all unchanged — confirmed via grep that nothing outside this one class
+  (`OrderService`, `RetryingBrokerAdapter`, `KillSwitchService`) knows about
+  Binance's endpoint shapes, so the migration's blast radius really is this one
+  adapter.
+
+**Tests.** `FakeBinanceFuturesTradingServer` (drives the shared
+`BrokerAdapterContractTest` suite via `BinanceFuturesTradingAdapterContractTest`)
+gained `POST`/`GET /fapi/v1/algoOrder` handlers backed by a new
+`algoOrdersByClientAlgoId` map/`StoredAlgoOrder` record, alongside the existing
+`/fapi/v1/order` handlers (now entry-only — `handlePlaceOrder` no longer branches
+on order type, since only MARKET entries reach it anymore).
+`BinanceFuturesTradingAdapterTest`: every exit-leg expectation across
+`placeOrder_fullSuccess_setsLeveragePlacesEntryAndBothExitLegs`,
+`placeOrder_highPrecisionQuantityAndPrices_truncatedToSymbolPrecisionBeforeSubmission`,
+`placeOrder_takeProfitLegFailsAfterRetry_returnsPartiallyProtected`,
+`placeOrder_repeatedClientOrderId_replaysExistingLegsWithoutReposting`,
+`getOrderStatus_entryFilledBothLegsResting_returnsFilled`,
+`getOrderStatus_missingExitLeg_returnsPartiallyProtected`,
+`getOrderStatus_exitLegTriggered_returnsCancelled`, and
+`cancelOrder_alreadyFilledAndProtected_isIdempotentNoOpWithoutDeleting` moved from
+`/fapi/v1/order`/`stopPrice`/old-status-vocabulary to
+`/fapi/v1/algoOrder`/`triggerPrice`/the new `algoStatus` vocabulary, via new
+`algoOrderJson`/`expectAlgoOrderCheckNotFound` helpers mirroring the existing
+`orderJson`/`expectOrderCheckNotFound`. Added one new test,
+`getOrderStatus_exitLegNeverPlaced_returnsPartiallyProtected`, distinct from the
+existing "missing exit leg" test (a leg that exists but shows a terminal
+non-fill status) — this one exercises `findAlgoOrder` returning `null` via
+`ALGO_ORDER_DOES_NOT_EXIST_CODE` for a leg that was never placed at all. All 402
+backend tests pass (`./mvnw verify`), up from 401.
+
+**Open gap, deliberately not closed in this pass.** The AC's "against the real
+Binance Futures Testnet, not just mocks" requirement is not yet satisfied — no
+live Binance account was available in this session, so `FakeBinanceFuturesTradingServer`
+and the unit tests were built against the same assumed param names, response
+shape, and status vocabulary the Plan agent proposed (all internally consistent,
+none independently verified). The single highest-risk unverified value is
+`ALGO_ORDER_DOES_NOT_EXIST_CODE`: if the real Algo Order API's "not found" error
+code differs from `-2013`, `ensureExitLeg`'s check-first idempotency silently
+breaks (a genuine "not yet placed" response gets treated as a fatal error, or a
+real error gets swallowed as "safe to place"). Before this is trusted with real
+paper-mode capital, a live testnet pass is still needed: submit one real bracket
+order end-to-end, confirm both legs show protected (not just this app's own
+status reporting — cross-check via a direct signed call to
+`/fapi/v3/positionRisk`, same technique used in E4-F3-S2's follow-up), and
+specifically GET with a bogus `clientAlgoId` first to capture the real
+not-found error code before relying on the current placeholder.

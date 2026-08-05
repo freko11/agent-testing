@@ -22,28 +22,38 @@ import java.util.Map;
  * A minimal in-memory fake of Binance's USD&#9328;-M Futures Testnet trading
  * API — {@code GET /fapi/v3/account} and {@code GET /fapi/v3/positionRisk}
  * (E4-F3-S1), plus {@code POST /fapi/v1/leverage}, {@code POST}/{@code GET}/
- * {@code DELETE /fapi/v1/order} (E4-F3-S2) tracked via an in-memory map keyed
- * by {@code newClientOrderId}/{@code origClientOrderId} — enough to satisfy
- * {@link BrokerAdapterContractTest}'s full shared suite now that {@code
- * placeOrder}/{@code getOrderStatus}/{@code cancelOrder} are real. A
- * {@code POST /fapi/v1/order} with {@code type=MARKET} fills immediately
- * (this fake has no concept of a resting order); any other type (the
- * {@code STOP_MARKET}/{@code TAKE_PROFIT_MARKET} exit legs) is stored as
- * {@code NEW}. Asserts every request carries {@code X-MBX-APIKEY} and a
+ * {@code DELETE /fapi/v1/order} for the MARKET entry leg (E4-F3-S2), and
+ * {@code POST}/{@code GET /fapi/v1/algoOrder} for the two conditional exit
+ * legs (E4-F3-S3 — see {@code BinanceFuturesTradingAdapter}'s class Javadoc
+ * for why exit legs moved off {@code /fapi/v1/order}) — tracked via
+ * in-memory maps keyed by {@code newClientOrderId}/{@code clientAlgoId} —
+ * enough to satisfy {@link BrokerAdapterContractTest}'s full shared suite
+ * now that {@code placeOrder}/{@code getOrderStatus}/{@code cancelOrder}
+ * are real. A {@code POST /fapi/v1/order} always fills immediately (this
+ * fake has no concept of a resting order — every order it now sees at this
+ * endpoint is a MARKET entry, since exit legs moved to {@code
+ * /fapi/v1/algoOrder}); a {@code POST /fapi/v1/algoOrder} is stored as
+ * {@code WORKING}. Asserts every request carries {@code X-MBX-APIKEY} and a
  * {@code signature} query param — a concrete check that signing actually
  * happened, not just trusted. Mirrors {@code FakeAlpacaTradingServer}'s
  * custom-{@code ResponseCreator} approach so call order isn't fixed;
  * adapter-level failure-path scenarios (rejections, rate limits, leg
  * failures) belong in {@link BinanceFuturesTradingAdapterTest}'s own
  * {@code MockRestServiceServer} expectations instead of here, same split as
- * Alpaca's fake/adapter-test pair.
+ * Alpaca's fake/adapter-test pair. {@code DELETE /fapi/v1/algoOrder} is
+ * deliberately unhandled (falls through to the generic 404 route) — E4-F3-S3
+ * scoped {@code cancelOrder} to the entry leg only, same as before this
+ * story (confirmed: by the time exit legs exist, the entry has already
+ * filled and is no longer cancelable, so there was never a gap to close).
  */
 class FakeBinanceFuturesTradingServer {
 
     private static final String ENTRY_FILL_PRICE = "60000.00";
 
     private final Map<String, StoredOrder> ordersByClientOrderId = new HashMap<>();
+    private final Map<String, StoredAlgoOrder> algoOrdersByClientAlgoId = new HashMap<>();
     private long nextOrderId = 1000;
+    private long nextAlgoId = 2000;
 
     RestClient buildRestClient(String baseUrl) {
         RestClient.Builder builder = RestClient.builder().baseUrl(baseUrl);
@@ -95,18 +105,22 @@ class FakeBinanceFuturesTradingServer {
         if (HttpMethod.DELETE.equals(method) && "/fapi/v1/order".equals(path)) {
             return handleDeleteOrder(query);
         }
+        if (HttpMethod.POST.equals(method) && "/fapi/v1/algoOrder".equals(path)) {
+            return handlePlaceAlgoOrder(query);
+        }
+        if (HttpMethod.GET.equals(method) && "/fapi/v1/algoOrder".equals(path)) {
+            return handleGetAlgoOrder(query);
+        }
         return jsonResponse(HttpStatus.NOT_FOUND, "{\"code\":-1121,\"msg\":\"unhandled fake route: " + method + " " + path + "\"}");
     }
 
     private ClientHttpResponse handlePlaceOrder(MultiValueMap<String, String> query) {
+        // Only the MARKET entry leg reaches this endpoint now — exit legs place via
+        // /fapi/v1/algoOrder instead (E4-F3-S3) — so it always fills immediately.
         String clientOrderId = query.getFirst("newClientOrderId");
-        String type = query.getFirst("type");
-        boolean isEntry = "MARKET".equals(type);
-        String status = isEntry ? "FILLED" : "NEW";
-        String avgPrice = isEntry ? ENTRY_FILL_PRICE : "0";
         long orderId = nextOrderId++;
-        ordersByClientOrderId.put(clientOrderId, new StoredOrder(orderId, clientOrderId, status, avgPrice));
-        return jsonResponse(HttpStatus.OK, orderJson(orderId, clientOrderId, status, avgPrice));
+        ordersByClientOrderId.put(clientOrderId, new StoredOrder(orderId, clientOrderId, "FILLED", ENTRY_FILL_PRICE));
+        return jsonResponse(HttpStatus.OK, orderJson(orderId, clientOrderId, "FILLED", ENTRY_FILL_PRICE));
     }
 
     private ClientHttpResponse handleGetOrder(MultiValueMap<String, String> query) {
@@ -126,9 +140,28 @@ class FakeBinanceFuturesTradingServer {
         return jsonResponse(HttpStatus.OK, orderJson(order.orderId, order.clientOrderId, order.status, order.avgPrice));
     }
 
+    private ClientHttpResponse handlePlaceAlgoOrder(MultiValueMap<String, String> query) {
+        String clientAlgoId = query.getFirst("clientAlgoId");
+        long algoId = nextAlgoId++;
+        algoOrdersByClientAlgoId.put(clientAlgoId, new StoredAlgoOrder(algoId, clientAlgoId, "WORKING"));
+        return jsonResponse(HttpStatus.OK, algoOrderJson(algoId, "WORKING"));
+    }
+
+    private ClientHttpResponse handleGetAlgoOrder(MultiValueMap<String, String> query) {
+        StoredAlgoOrder algoOrder = algoOrdersByClientAlgoId.get(query.getFirst("clientAlgoId"));
+        if (algoOrder == null) {
+            return jsonResponse(HttpStatus.BAD_REQUEST, "{\"code\":-2013,\"msg\":\"Order does not exist.\"}");
+        }
+        return jsonResponse(HttpStatus.OK, algoOrderJson(algoOrder.algoId, algoOrder.algoStatus));
+    }
+
     private String orderJson(long orderId, String clientOrderId, String status, String avgPrice) {
         return "{\"orderId\":" + orderId + ",\"clientOrderId\":\"" + clientOrderId + "\",\"status\":\"" + status
                 + "\",\"avgPrice\":\"" + avgPrice + "\"}";
+    }
+
+    private String algoOrderJson(long algoId, String algoStatus) {
+        return "{\"algoId\":" + algoId + ",\"algoStatus\":\"" + algoStatus + "\"}";
     }
 
     private ClientHttpResponse jsonResponse(HttpStatus status, String body) {
@@ -148,6 +181,18 @@ class FakeBinanceFuturesTradingServer {
             this.clientOrderId = clientOrderId;
             this.status = status;
             this.avgPrice = avgPrice;
+        }
+    }
+
+    private static final class StoredAlgoOrder {
+        private final long algoId;
+        private final String clientAlgoId;
+        private final String algoStatus;
+
+        private StoredAlgoOrder(long algoId, String clientAlgoId, String algoStatus) {
+            this.algoId = algoId;
+            this.clientAlgoId = clientAlgoId;
+            this.algoStatus = algoStatus;
         }
     }
 }

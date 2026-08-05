@@ -16,10 +16,13 @@ Testnet) with risk/safety guardrails (E6).
 
 ## Status
 
-All stories below are done, including E6 (Risk & Safety Controls) and E7
-(Observability & Hardening), except E4-F3-S3 (Binance Algo Order API
-migration), added to `docs/agile-plan.md` as backlog after E4-F3-S2's
-post-launch verification found it — see that story's entry below.
+All stories below are done, including E6 (Risk & Safety Controls), E7
+(Observability & Hardening), and the E4-F3-S3 backlog story (Binance Algo
+Order API migration) added after E4-F3-S2's post-launch verification found
+Binance rejecting conditional exit-leg orders on the old endpoint — see
+that story's entry below. Live verification against the real Binance
+Futures Testnet is still outstanding (see E4-F3-S3's entry for what remains
+open).
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -97,14 +100,38 @@ post-launch verification found it — see that story's entry below.
   known Binance precision before submission (`BinanceFuturesTradingAdapter`'s
   `QUANTITY_PRECISION`/`PRICE_PRECISION` maps) — found live when a real paper
   order was rejected with Binance's `-1111 "Precision is over the maximum
-  defined for this asset"`. Known open gap found by the same live run, not
-  yet fixed: Binance now rejects `STOP_MARKET`/`TAKE_PROFIT_MARKET` exit legs
-  with "use the Algo Order API endpoints instead" — an apparent breaking API
-  change since this story was built, so every crypto bracket order's
-  protective legs currently fail after retry (correctly surfaced as
-  `PARTIALLY_PROTECTED`, not hidden). See `docs/CHANGELOG.md` for detail.
-  Tracked as backlog story E4-F3-S3 in `docs/agile-plan.md` (not yet
-  implemented — scoped, not built).
+  defined for this asset"`. Its other follow-up gap (Binance rejecting
+  `STOP_MARKET`/`TAKE_PROFIT_MARKET` exit legs on `/fapi/v1/order`) is now
+  fixed by E4-F3-S3 below.
+- E4-F3-S3: Binance Algo Order API migration. `ensureExitLeg`/a new
+  `findAlgoOrder` now place and look up the two exit legs (stop-loss,
+  take-profit) against `POST`/`GET /fapi/v1/algoOrder`
+  (`algoType=CONDITIONAL`) instead of the now-rejecting `/fapi/v1/order`,
+  using `clientAlgoId`/`triggerPrice`/`algoId`/`algoStatus` in place of that
+  endpoint's `newClientOrderId`/`stopPrice`/`orderId`/`status`. The entry
+  leg is untouched (still a plain MARKET order on `/fapi/v1/order`), and so
+  is `cancelOrder`'s scope (still entry-leg-only — confirmed with the user
+  before implementation: by the time exit legs exist the entry has already
+  filled and is no longer cancelable, so there was never a gap here to
+  close; the kill switch's cancel-all sweep stays entry-only too, the same
+  scope choice). `compositeResult`'s `isTriggered`/`isMissingProtection`
+  now read `algoStatus` (assumed vocabulary: `WORKING`/`FINISHED`/
+  `CANCELLED`/`EXPIRED`/`REJECTED`) instead of the old endpoint's `status`.
+  This project's Binance integration targets a fictional/project-internal
+  API surface with no real docs to verify against, so the Algo Order API's
+  param/response names, status vocabulary, and
+  `ALGO_ORDER_DOES_NOT_EXIST_CODE` (assumed to match the entry endpoint's
+  `-2013`) are this story's best-effort design, not verified facts — see
+  the class Javadoc's E4-F3-S3 paragraph and `docs/CHANGELOG.md` for the
+  full design-gate rationale. **Open gap**: the AC's "against the real
+  Binance Futures Testnet, not just mocks" requirement is not yet
+  satisfied — `FakeBinanceFuturesTradingServer`/`BinanceFuturesTradingAdapterTest`
+  were updated to the same assumed shapes, so all tests are internally
+  consistent but unverified against a live endpoint. A live testnet pass
+  (submit a real bracket order, confirm both legs show protected, and
+  specifically re-derive `ALGO_ORDER_DOES_NOT_EXIST_CODE` from a real
+  not-found response before trusting it) is still needed before this is
+  relied on with real paper-mode capital.
 
 ### E5 — Auto-Trade Execution
 - E5-F1-S1: Trade input form (amount, leverage, take-profit, stop-loss)

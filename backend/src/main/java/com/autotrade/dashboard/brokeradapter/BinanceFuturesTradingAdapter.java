@@ -102,13 +102,38 @@ import java.util.regex.Pattern;
  * legs: if the entry hasn't filled yet, that status is reported as-is; once
  * filled, a missing/terminated-without-filling exit leg downgrades the
  * report to {@code PARTIALLY_PROTECTED}, and an exit leg that itself shows
- * {@code FILLED} (it triggered, closing the position) reports as {@code
- * CANCELLED} — the closest existing vocabulary for "no longer live, no
- * rejection" (which leg fired and at what price isn't preserved by this
- * interface today, a flagged, accepted gap). {@code cancelOrder} cancels
- * only the entry leg (same "cancel the order, not the position" scope
- * Alpaca already has for its own bracket legs) — idempotent no-op on any
- * terminal composite status, including {@code PARTIALLY_PROTECTED}.
+ * triggered (it fired, closing the position) reports as {@code CANCELLED} —
+ * the closest existing vocabulary for "no longer live, no rejection" (which
+ * leg fired and at what price isn't preserved by this interface today, a
+ * flagged, accepted gap). {@code cancelOrder} cancels only the entry leg
+ * (same "cancel the order, not the position" scope Alpaca already has for
+ * its own bracket legs) — idempotent no-op on any terminal composite
+ * status, including {@code PARTIALLY_PROTECTED}.
+ *
+ * <p><b>E4-F3-S3 — Algo Order API migration for exit legs.</b> A live
+ * verification run after this story shipped found Binance rejecting
+ * {@code STOP_MARKET}/{@code TAKE_PROFIT_MARKET} on {@code /fapi/v1/order}
+ * ("use the Algo Order API endpoints instead"), leaving every crypto
+ * bracket order's protective legs unplaceable. {@code ensureExitLeg}/{@code
+ * findAlgoOrder} now target {@code POST}/{@code GET /fapi/v1/algoOrder}
+ * ({@code algoType=CONDITIONAL}) instead, using {@code clientAlgoId}/{@code
+ * triggerPrice}/{@code algoId}/{@code algoStatus} in place of the old
+ * endpoint's {@code newClientOrderId}/{@code stopPrice}/{@code orderId}/
+ * {@code status}. The entry leg is unaffected — it stays a plain MARKET
+ * order on {@code /fapi/v1/order}, and so does {@code cancelOrder} (still
+ * entry-only scope, confirmed unchanged: by the time exit legs exist the
+ * entry already filled and is no longer cancelable, so there was never a
+ * gap here to close). This project's Binance integration targets a
+ * fictional/project-internal API surface with no real docs to verify
+ * against, so the Algo Order API's exact param/response names ({@code
+ * clientAlgoId}, {@code triggerPrice}, {@code algoId}, {@code algoStatus}),
+ * its status vocabulary ({@code WORKING}/{@code FINISHED}/{@code
+ * CANCELLED}/{@code EXPIRED}/{@code REJECTED}), and {@link
+ * #ALGO_ORDER_DOES_NOT_EXIST_CODE} (assumed to match the entry endpoint's
+ * {@code -2013}) are this story's best-effort design, not verified facts —
+ * flagged for confirmation against the real Binance Futures Testnet before
+ * this is trusted with real paper-mode capital, per the AC's own "not just
+ * mocks" requirement.
  */
 public class BinanceFuturesTradingAdapter implements BrokerAdapter {
 
@@ -120,6 +145,10 @@ public class BinanceFuturesTradingAdapter implements BrokerAdapter {
     private static final int MAX_LEVERAGE = 20;
     private static final int EXIT_LEG_MAX_ATTEMPTS = 2;
     private static final long EXIT_LEG_RETRY_PAUSE_MILLIS = 200;
+    private static final String ALGO_TYPE_CONDITIONAL = "CONDITIONAL";
+    // Assumed to match the entry endpoint's -2013 "Order does not exist" — unverified
+    // against a real Algo Order API response, see the E4-F3-S3 class-Javadoc paragraph.
+    private static final long ALGO_ORDER_DOES_NOT_EXIST_CODE = -2013L;
     // Hyphen allowed only for this codebase's own "-NOACTIVITY" test-symbol convention
     // (see BrokerAdapterContractTest); real Binance symbols are plain alphanumeric.
     private static final Pattern SYMBOL_PATTERN = Pattern.compile("^[A-Z0-9-]{1,20}$");
@@ -246,8 +275,8 @@ public class BinanceFuturesTradingAdapter implements BrokerAdapter {
             return new BrokerOrderResult(clientOrderId, brokerOrderId, entryStatus, null, null, clock.instant());
         }
 
-        BinanceOrderResponse stopLoss = findOrder(restClient, creds, symbol, legIds.stopLoss());
-        BinanceOrderResponse takeProfit = findOrder(restClient, creds, symbol, legIds.takeProfit());
+        BinanceAlgoOrderResponse stopLoss = findAlgoOrder(restClient, creds, symbol, legIds.stopLoss());
+        BinanceAlgoOrderResponse takeProfit = findAlgoOrder(restClient, creds, symbol, legIds.takeProfit());
 
         if (isTriggered(stopLoss) || isTriggered(takeProfit)) {
             // A leg that itself FILLED closed the position — no longer live, no rejection either.
@@ -391,24 +420,27 @@ public class BinanceFuturesTradingAdapter implements BrokerAdapter {
      * Every failure (transient, rate-limited, or a fatal business rejection)
      * is caught uniformly here and never rethrown — the caller only learns
      * whether the leg ended up placed, per this story's confirmed
-     * partial-failure design.
+     * partial-failure design. E4-F3-S3: targets the Algo Order API ({@code
+     * /fapi/v1/algoOrder}, {@code algoType=CONDITIONAL}) rather than {@code
+     * /fapi/v1/order}, since Binance now rejects conditional orders on the
+     * latter — see the class Javadoc's E4-F3-S3 paragraph.
      */
     private boolean ensureExitLeg(RestClient restClient, Credentials creds, String symbol, String legClientOrderId,
                                    String orderType, BigDecimal stopPrice, OrderSide closeSide) {
         for (int attempt = 1; attempt <= EXIT_LEG_MAX_ATTEMPTS; attempt++) {
             try {
-                if (findOrder(restClient, creds, symbol, legClientOrderId) != null) {
+                if (findAlgoOrder(restClient, creds, symbol, legClientOrderId) != null) {
                     return true; // already placed on a prior attempt/replay
                 }
                 Map<String, String> params = new LinkedHashMap<>();
                 params.put("symbol", symbol);
                 params.put("side", closeSide.name());
+                params.put("algoType", ALGO_TYPE_CONDITIONAL);
                 params.put("type", orderType);
-                params.put("stopPrice", roundToPrecision(stopPrice, PRICE_PRECISION, symbol, DEFAULT_PRICE_PRECISION).toPlainString());
+                params.put("triggerPrice", roundToPrecision(stopPrice, PRICE_PRECISION, symbol, DEFAULT_PRICE_PRECISION).toPlainString());
                 params.put("closePosition", "true");
-                params.put("newClientOrderId", legClientOrderId);
-                params.put("newOrderRespType", "RESULT");
-                signedRequest(restClient, creds, HttpMethod.POST, "/fapi/v1/order", params, BinanceOrderResponse.class, null);
+                params.put("clientAlgoId", legClientOrderId);
+                signedRequest(restClient, creds, HttpMethod.POST, "/fapi/v1/algoOrder", params, BinanceAlgoOrderResponse.class, null);
                 return true;
             } catch (RuntimeException e) {
                 if (attempt >= EXIT_LEG_MAX_ATTEMPTS || !pauseBeforeRetry()) {
@@ -478,6 +510,19 @@ public class BinanceFuturesTradingAdapter implements BrokerAdapter {
         return signedRequest(restClient, creds, HttpMethod.GET, "/fapi/v1/order", params, BinanceOrderResponse.class, ORDER_DOES_NOT_EXIST_CODE);
     }
 
+    /**
+     * The Algo Order API equivalent of {@link #findOrder} — E4-F3-S3, used
+     * only for the two exit legs (see the class Javadoc's E4-F3-S3
+     * paragraph); the entry leg still looks itself up via {@code findOrder}.
+     */
+    private BinanceAlgoOrderResponse findAlgoOrder(RestClient restClient, Credentials creds, String symbol, String clientAlgoId) {
+        Map<String, String> params = new LinkedHashMap<>();
+        params.put("symbol", symbol);
+        params.put("clientAlgoId", clientAlgoId);
+        return signedRequest(restClient, creds, HttpMethod.GET, "/fapi/v1/algoOrder", params,
+                BinanceAlgoOrderResponse.class, ALGO_ORDER_DOES_NOT_EXIST_CODE);
+    }
+
     private BrokerOrderResult rejectedResultOrRethrow(RuntimeException e, String clientOrderId, String context) {
         if (e instanceof BrokerAdapterRateLimitedException || e instanceof BrokerAdapterTransientException) {
             throw e;
@@ -492,15 +537,15 @@ public class BinanceFuturesTradingAdapter implements BrokerAdapter {
         return new BrokerOrderResult(clientOrderId, null, OrderStatus.REJECTED, null, reason, clock.instant());
     }
 
-    private static boolean isTriggered(BinanceOrderResponse leg) {
-        return leg != null && "FILLED".equals(leg.status());
+    private static boolean isTriggered(BinanceAlgoOrderResponse leg) {
+        return leg != null && "FINISHED".equals(leg.algoStatus());
     }
 
-    private static boolean isMissingProtection(BinanceOrderResponse leg) {
+    private static boolean isMissingProtection(BinanceAlgoOrderResponse leg) {
         if (leg == null) {
             return true;
         }
-        return "CANCELED".equals(leg.status()) || "EXPIRED".equals(leg.status()) || "REJECTED".equals(leg.status());
+        return "CANCELLED".equals(leg.algoStatus()) || "EXPIRED".equals(leg.algoStatus()) || "REJECTED".equals(leg.algoStatus());
     }
 
     private static boolean isTerminal(OrderStatus status) {
@@ -696,6 +741,19 @@ public class BinanceFuturesTradingAdapter implements BrokerAdapter {
             @JsonProperty("orderId") Long orderId,
             @JsonProperty("status") String status,
             @JsonProperty("avgPrice") BigDecimal avgPrice) {
+    }
+
+    /**
+     * The Algo Order API's response shape for a conditional exit leg —
+     * E4-F3-S3, {@code algoId}/{@code algoStatus} in place of {@code
+     * /fapi/v1/order}'s {@code orderId}/{@code status}. No {@code avgPrice}
+     * field: {@link #compositeResult} never reads a fill price off an exit
+     * leg (only the entry's), so there's nothing to carry here.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record BinanceAlgoOrderResponse(
+            @JsonProperty("algoId") Long algoId,
+            @JsonProperty("algoStatus") String algoStatus) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
