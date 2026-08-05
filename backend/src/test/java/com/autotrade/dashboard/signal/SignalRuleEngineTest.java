@@ -13,8 +13,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class SignalRuleEngineTest {
 
     private static final BigDecimal RSI_NEUTRAL = new BigDecimal("50");
-    private static final BigDecimal RSI_OVERSOLD = new BigDecimal("25");
-    private static final BigDecimal RSI_OVERBOUGHT = new BigDecimal("75");
+    private static final BigDecimal RSI_OVERSOLD = new BigDecimal("20");
+    private static final BigDecimal RSI_OVERBOUGHT = new BigDecimal("80");
 
     private static final MacdResult MACD_NEUTRAL = macd("0");
     private static final MacdResult MACD_BULLISH = macd("1.0");
@@ -102,13 +102,13 @@ class SignalRuleEngineTest {
     @Test
     void rsiExactlyAtOversoldThreshold_notOversold() {
         assertEquals(SignalRuleId.NO_STRONG_SIGNAL,
-                SignalRuleEngine.evaluate(new BigDecimal("30"), MACD_NEUTRAL, MA_NEUTRAL, VOLATILITY_NORMAL, VOLUME_TREND_NORMAL));
+                SignalRuleEngine.evaluate(new BigDecimal("25"), MACD_NEUTRAL, MA_NEUTRAL, VOLATILITY_NORMAL, VOLUME_TREND_NORMAL));
     }
 
     @Test
     void rsiExactlyAtOverboughtThreshold_notOverbought() {
         assertEquals(SignalRuleId.NO_STRONG_SIGNAL,
-                SignalRuleEngine.evaluate(new BigDecimal("70"), MACD_NEUTRAL, MA_NEUTRAL, VOLATILITY_NORMAL, VOLUME_TREND_NORMAL));
+                SignalRuleEngine.evaluate(new BigDecimal("75"), MACD_NEUTRAL, MA_NEUTRAL, VOLATILITY_NORMAL, VOLUME_TREND_NORMAL));
     }
 
     @Test

@@ -16,12 +16,14 @@ Testnet) with risk/safety guardrails (E6).
 
 ## Status
 
-All stories below are done, including E6 (Risk & Safety Controls), E7
+E1–E7 are done, including E6 (Risk & Safety Controls), E7
 (Observability & Hardening), and the E4-F3-S3 backlog story (Binance Algo
 Order API migration) added after E4-F3-S2's post-launch verification found
 Binance rejecting conditional exit-leg orders on the old endpoint — see
 that story's entry below, live-verified end-to-end against the real
-Binance Futures Testnet.
+Binance Futures Testnet. E8 (Signal Quality & Quant Rigor) is a backlog
+epic added after E7 shipped; E8-F1-S1 is done, the rest of E8 (E8-F2
+through E8-F5) is not yet started.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -402,6 +404,47 @@ Binance Futures Testnet.
   added to force LF line endings on `scripts/*.sh` so Windows checkouts
   don't silently corrupt them. This was E7's last story — the epic is now
   complete.
+
+### E8 — Signal Quality & Quant Rigor (in progress, backlog)
+- E8-F1-S1: Threshold calibration pass. `SignalRuleEngine` gained a nested
+  `RuleThresholds` record (`rsiOversold`/`rsiOverbought`/`volatilityExtreme`/
+  `volumeDriedUp`) plus a `RuleThresholds`-accepting `evaluate` overload — the
+  existing 5-arg `evaluate` now delegates to it with `RuleThresholds.DEFAULT`,
+  so no production caller changed — and a matching overload on
+  `BacktestHarness.run`, so a new `ThresholdCalibrationTest`
+  (`backend/src/test/java/.../backtest/`) could sweep threshold candidates
+  through the real backtest harness without reflectively mutating production
+  constants. Swept RSI (oversold/overbought moved together), volatility-
+  extreme, and volume-dried-up one dimension at a time (others held at
+  baseline) against the same checked-in BTCUSDT/DOGEUSDT fixtures E2-F4-S1/S2
+  already use. Finding: widening RSI from 30/70 to 25/75 raised win rate and
+  expectancy on the BUY side across both fixtures at every min/mid/max
+  checkpoint, with a *larger* scored sample at each step (fewer RSI-vs-other-
+  indicator conflicts resolved to `CONFLICTING_SIGNALS`/HOLD, not a smaller/
+  noisier n) — not an overfit to a handful of points. Shipped: RSI 30/70 →
+  25/75, `RULE_TABLE_VERSION` bumped v1 → v2. Volatility-extreme (8.0) and
+  volume-dried-up (0.20) were left unchanged: volume-dried-up was completely
+  flat across the whole 0.10–0.40 sweep on both fixtures (a dead parameter in
+  that range, no calibration signal either way), and volatility's only
+  better-looking candidate (5.0) only looked better on an n=10 DOGEUSDT
+  sample — not enough to trust over the n=133+ baseline. `SignalRuleEngineTest`'s
+  RSI boundary tests and its bullish/bearish RSI fixture constants were
+  updated to the new 25/75 boundary (previously exactly-at-old-boundary
+  values like RSI=25 would otherwise land exactly on the *new* boundary
+  instead of clearly past it); `SignalServiceTest` and `OrderCsvExporterTest`
+  had similar hardcoded-boundary/hardcoded-version-literal fixtures that
+  needed the same update, caught by `./mvnw verify` after the threshold
+  change (2 failures, both fixed). Confirmed via grep that every consumer of
+  `RULE_TABLE_VERSION` (`SignalCallEntry`, `SignalResponse`,
+  `BacktestReport`, `OrderAuditEntry` via `SignalCallEntry`) reads the
+  constant dynamically — no hardcoded `"v1"` literal anywhere in production
+  code — so the version bump needed no migration; past `order_audit_entries`
+  rows keep their frozen `"v1"` string untouched, per E6-F3-S2's write-once
+  guarantee. Deliberately conservative and explicitly scoped: this pass is
+  provisional pending E8-F4-S1's out-of-sample validation, since the same two
+  fixtures were both the tuning set and the only evidence used here — no
+  train/held-out split was attempted, since that's E8-F4-S1's own AC to
+  close, not preempted here.
 
 ## Build / lint / test
 

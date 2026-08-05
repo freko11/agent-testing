@@ -57,7 +57,7 @@ class SignalServiceTest {
         MovingAverageResult ma = new MovingAverageResult(10, new BigDecimal("111.0"), 30,
                 new BigDecimal("108.0"), MovingAverageRelation.SHORT_ABOVE_LONG);
         IndicatorResponse response = new IndicatorResponse(TickerSummary.from(ticker), Broker.ALPACA,
-                Instant.parse("2026-02-09T00:00:00Z"), new BigDecimal("113.10"), new BigDecimal("25"), macd, ma,
+                Instant.parse("2026-02-09T00:00:00Z"), new BigDecimal("113.10"), new BigDecimal("20"), macd, ma,
                 new BigDecimal("2.0"), new BigDecimal("1000000.0000"), new BigDecimal("1.0000"));
 
         when(indicatorService.computeForSignal("AAPL", 200))

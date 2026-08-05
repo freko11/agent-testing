@@ -44,6 +44,13 @@ public final class BacktestHarness {
     }
 
     public static BacktestReport run(String label, List<Candle> candles) {
+        return run(label, candles, SignalRuleEngine.RuleThresholds.DEFAULT);
+    }
+
+    /** E8-F1-S1: accepts candidate {@link SignalRuleEngine.RuleThresholds} so
+     * {@code ThresholdCalibrationTest} can sweep threshold candidates without touching
+     * {@link SignalRuleEngine}'s production constants. */
+    public static BacktestReport run(String label, List<Candle> candles, SignalRuleEngine.RuleThresholds thresholds) {
         Map<SignalRuleId, Integer> callCounts = new EnumMap<>(SignalRuleId.class);
         Map<SignalRuleId, DirectionalAccumulator> directional = new EnumMap<>(SignalRuleId.class);
         Map<SignalRuleId, HoldGateAccumulator> holdGate = new EnumMap<>(SignalRuleId.class);
@@ -72,7 +79,7 @@ public final class BacktestHarness {
             BigDecimal volumeTrend = VolumeTrendCalculator.calculate(window,
                     VolumeTrendCalculator.DEFAULT_SHORT_PERIOD, VolumeTrendCalculator.DEFAULT_LONG_PERIOD);
 
-            SignalRuleId matchedRule = SignalRuleEngine.evaluate(rsi, macd, ma, volatility, volumeTrend);
+            SignalRuleId matchedRule = SignalRuleEngine.evaluate(rsi, macd, ma, volatility, volumeTrend, thresholds);
             HoldTerm holdTerm = HoldTermCalculator.calculate(matchedRule, volatility);
 
             callCounts.merge(matchedRule, 1, Integer::sum);

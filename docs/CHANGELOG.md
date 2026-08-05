@@ -4150,3 +4150,147 @@ diagnostic-only, per its own AC. `./mvnw test` (full backend suite) passes clean
 No frontend changes. The DOGEUSDT `BEARISH_MAJORITY` finding is left as an open
 question for a future story (confidence-weighted voting, a regime filter, or a
 deadband/threshold re-tune) rather than acted on here.
+
+## E8-F1-S1 — threshold calibration pass
+
+**Why this story exists.** E2-F4-S2 gave the backtest harness real expectancy
+numbers, but `SignalRuleEngine`'s RSI 30/70 and the two safety-gate thresholds
+(`VOLATILITY_EXTREME_THRESHOLD` 8.0, `VOLUME_DRIED_UP_THRESHOLD` 0.20) were still
+exactly what E2-F3-S1 hand-picked before that evidence existed — the class Javadoc
+said as much ("provisional engineering estimates, not yet backtest-validated").
+E8-F1-S1 closes that gap: sweep candidate values for each threshold through the
+real backtest harness and let the printed expectancy decide, rather than leaving
+them as engineering intuition indefinitely.
+
+**Refactor needed before any sweep was possible.** `SignalRuleEngine.evaluate`
+read its four thresholds directly from `public static final BigDecimal` production
+constants — there was no way to try a candidate value without either reflectively
+mutating those constants (fragile, not something to do to a class every other
+signal computation depends on) or hand-editing and recompiling per candidate.
+Added a nested `SignalRuleEngine.RuleThresholds` record
+(`rsiOversold`/`rsiOverbought`/`volatilityExtreme`/`volumeDriedUp`) with a
+`RuleThresholds.DEFAULT` built from the four production constants, and a new
+6-arg `evaluate(..., RuleThresholds)` overload containing the real logic; the
+existing 5-arg `evaluate` is now a one-line delegate to
+`evaluate(..., RuleThresholds.DEFAULT)`, so every production caller
+(`SignalService`, `IndicatorService` path) is untouched. `BacktestHarness` got the
+matching treatment: a new `run(String, List<Candle>, RuleThresholds)` overload,
+with the existing 2-arg `run` delegating to `RuleThresholds.DEFAULT`. Verified this
+refactor alone was behavior-preserving — `./mvnw test -Dtest=BacktestHarnessTest,
+SignalRuleEngineTest` passed clean — before touching any actual threshold value.
+
+**The sweep.** New `ThresholdCalibrationTest`
+(`backend/src/test/java/.../backtest/`) sweeps one dimension at a time (RSI's two
+bounds move together, the other thresholds held at baseline) rather than a full
+cross-product grid, so an expectancy change can be attributed to the one threshold
+that moved:
+- RSI oversold/overbought: 20/80, 25/75, 30/70 (baseline), 35/65
+- `VOLATILITY_EXTREME_THRESHOLD`: 5.0, 6.5, 8.0 (baseline), 10.0, 12.0
+- `VOLUME_DRIED_UP_THRESHOLD`: 0.10, 0.15, 0.20 (baseline), 0.30, 0.40
+
+Each candidate ran through `BacktestHarness.run` against the same checked-in
+BTCUSDT/DOGEUSDT fixtures E2-F4-S1/S2 already use, printing win rate/expectancy
+per directional rule and checkpoint (assertions structural-only, mirroring
+`BacktestHarnessTest` — the printed report is the evidence under review, not a
+regression target).
+
+**What the sweep found:**
+- **RSI — real signal, acted on.** Widening from 30/70 to 25/75 raised both win
+  rate and expectancy on the BUY side (`BULLISH_MAJORITY`) at every min/mid/max
+  checkpoint, on *both* fixtures, and did so with a **larger** scored sample at
+  each step, not a smaller one:
+  - BTCUSDT `BULLISH_MAJORITY`: 30/70 baseline min/mid/max win 46.3/49.6/49.1%,
+    expectancy +0.028%/+0.303%/+0.221% (n=227/224/222) → 25/75 win
+    47.3/51.0/51.4%, expectancy +0.057%/+0.562%/+0.694% (n=262/259/257).
+  - DOGEUSDT `BULLISH_MAJORITY`: 30/70 baseline win 48.4/49.0/46.5%, expectancy
+    +0.586%/+2.014%/+3.513% (n=155) → 25/75 win 51.4/49.2/48.0%, expectancy
+    +0.950%/+2.828%/+4.592% (n=179).
+
+  The larger n at 25/75 isn't a coincidence to be suspicious of: widening the
+  RSI neutral band means fewer cases where RSI alone disagreed with an otherwise-
+  bullish MACD+MA pair, so fewer decision points fall into `CONFLICTING_SIGNALS`
+  (forced HOLD) and more resolve to `BULLISH_MAJORITY` — a mechanical
+  redistribution, not noise. `BEARISH_MAJORITY` moved by less and in mixed
+  directions (BTCUSDT improved slightly, DOGEUSDT dipped slightly at the mid
+  checkpoint only, +0.982% → +0.877%) but stayed solidly positive throughout on
+  both fixtures — no reason not to make the RSI change on the SELL side's
+  account. The most permissive candidate tried, 20/80, looked marginally better
+  still on a few rows, but 25/75 already captures nearly all of the gain; picked
+  the more conservative of the two per this story's own overfitting caution
+  (below) rather than the extreme end of the tested range.
+- **Volatility-extreme and volume-dried-up — no signal, left unchanged.**
+  `VOLUME_DRIED_UP_THRESHOLD` produced byte-identical win/loss/expectancy numbers
+  across the *entire* 0.10-0.40 sweep on both fixtures — the fixture data simply
+  doesn't have volume-trend values in that band, so it's a dead parameter across
+  this whole range with zero calibration evidence either way; 0.20 stayed as a
+  defensible, if unproven-by-this-sweep, choice. `VOLATILITY_EXTREME_THRESHOLD`'s
+  only candidate that looked dramatically better (5.0 on DOGEUSDT: up to 100% win
+  rate, +9.9% expectancy at the max checkpoint) did so on an **n=10** sample —
+  tightening the gate that far simply excludes almost every DOGEUSDT decision
+  point, and the handful left aren't enough to trust over the baseline's
+  n=133-155. 10.0/12.0 showed *more* coverage but *lower* expectancy than the
+  8.0 baseline. 8.0 stayed unchanged.
+
+**What shipped.** `SignalRuleEngine.RSI_OVERSOLD_THRESHOLD` 30 → 25,
+`RSI_OVERBOUGHT_THRESHOLD` 70 → 75, `VOLATILITY_EXTREME_THRESHOLD`/
+`VOLUME_DRIED_UP_THRESHOLD` unchanged, `RULE_TABLE_VERSION` bumped `"v1"` →
+`"v2"` per the class's own versioning convention (feeds E6-F3-S2's audit trail).
+Grepped every reference to `RULE_TABLE_VERSION` first to confirm the bump was
+safe: `SignalCallEntry`, `SignalResponse`, `BacktestReport`, and `OrderAuditEntry`
+(via `SignalCallEntry.getRuleTableVersion()`) all read the constant dynamically —
+nothing hardcodes the `"v1"` string in production code — and the
+`order_audit_entries.rule_table_version` column (`V14` migration) is a plain
+`VARCHAR2(20) NOT NULL` with no CHECK constraint, so no migration was needed.
+Past audit rows keep their frozen `"v1"` string untouched, exactly the guarantee
+E6-F3-S2 was built for.
+
+**Boundary-value fallout, caught by `./mvnw verify`.** Moving the actual RSI
+boundary broke three tests that had hardcoded the old 30/70 boundary or values
+that used to sit clearly on one side of it:
+- `SignalRuleEngineTest`'s own `RSI_OVERSOLD`/`RSI_OVERBOUGHT` test-fixture
+  constants were `25`/`75` — under the old 30/70 threshold these were clearly
+  inside the bullish/bearish zones, but under the new 25/75 threshold they landed
+  exactly *on* the new boundary (not satisfying the strict `<`/`>` comparison),
+  silently flipping several "clearly bullish/bearish" tests to neutral. Moved to
+  `20`/`80`. The two boundary tests themselves
+  (`rsiExactlyAtOversoldThreshold_notOversold`/
+  `rsiExactlyAtOverboughtThreshold_notOverbought`) were updated from `30`/`70` to
+  the new `25`/`75` boundary values they're actually testing.
+- `SignalServiceTest.bullishIndicators_computesBuyCallAndPersistsEntry` hardcoded
+  an RSI of `25` expecting `BULLISH_UNANIMOUS`; under v2 that's exactly the new
+  boundary (not `< 25`), which downgraded the test's actual outcome to
+  `BULLISH_MAJORITY`. Moved to `20`.
+- `OrderCsvExporterTest.export_orderWithSignalSnapshot_includesMatchedRuleAndHoldTerm`
+  asserted a CSV row containing a hardcoded `"v1"` — `SignalCallEntry`'s
+  constructor sets `ruleTableVersion` from `SignalRuleEngine.RULE_TABLE_VERSION`
+  internally (not a test-supplied parameter), so the row correctly said `"v2"`
+  once the constant changed; the test's expected string was stale, not the code.
+  Updated to `"v2"`.
+
+All three were genuine "test encodes an old threshold value" gaps, not encodings
+that needed a design change — none of them affected whether the *sweep itself*
+was reading real production behavior; they surfaced only once the constants
+actually moved. `./mvnw verify` (full backend suite, 405 tests) passes clean
+after the fixes.
+
+**Deliberate scope boundary — this pass is provisional.** Both BTCUSDT and
+DOGEUSDT were simultaneously the *only* backtest fixtures available and the
+*tuning set* used to pick 25/75 — there is no held-out data this pass validated
+against. E8-F4-S1 ("threshold/weighting changes validated out-of-sample") is the
+explicit, separate follow-up story that closes this gap; deliberately not
+attempted here, since implementing a train/held-out split now would preempt that
+story's own AC. Treat the 25/75 change as evidence-backed but not yet
+out-of-sample-confirmed. Class Javadoc on `SignalRuleEngine` was rewritten to
+record this finding and caveat directly, replacing the old "not yet
+backtest-validated" note.
+
+**Aside, noticed but not fixed here:** re-reading E2-F4-S2's CHANGELOG entry above
+while confirming this story's baseline numbers turned up a pre-existing
+labeling bug in that entry's prose — its "BTCUSDT" and "DOGEUSDT" findings are
+swapped (the `+0.59%/+2.01%/+3.51%` numbers it attributes to BTCUSDT are actually
+DOGEUSDT's, and vice versa; confirmed by rerunning `BacktestHarnessTest` and by
+sanity-checking the fixture CSVs' price magnitudes — BTC candles are ~$35k,
+DOGE candles are ~$0.07, filenames match their contents correctly). The
+underlying test code and fixture data were never wrong, only that entry's written
+description. Left as-is rather than edited, to keep this story's diff scoped to
+its own AC — worth a correction pass if anyone revisits that entry.
