@@ -1140,8 +1140,8 @@
     "semantic_hash": "96c140f8016a6d83ffac7672fd15d2b6"
   },
   "frontend/src/pages/DashboardPage.tsx": {
-    "mtime": 1785848468.0744514,
-    "ast_hash": "a68cb597edf15396eafae62a8105bd36",
+    "mtime": 1785916862.1193755,
+    "ast_hash": "49a0bfd2a63baecba1c773f76fbdbcc4",
     "semantic_hash": ""
   },
   "frontend/src/pages/LoginPage.tsx": {
@@ -1150,8 +1150,8 @@
     "semantic_hash": ""
   },
   "frontend/src/signal/TickerMetrics.tsx": {
-    "mtime": 1785849641.7465038,
-    "ast_hash": "83dcfd004d109da75c5b5edad4a61be1",
+    "mtime": 1785916880.626052,
+    "ast_hash": "27214ecdbb67cad0d006b1dc9c6f24ff",
     "semantic_hash": ""
   },
   "frontend/src/signal/api.ts": {
@@ -1280,8 +1280,8 @@
     "semantic_hash": "ba2aaaac807614916be42c0c7583990e"
   },
   "CLAUDE.md": {
-    "mtime": 1785915328.406754,
-    "ast_hash": "4000b79839729879ac8477c87f5d4723",
+    "mtime": 1785917246.8233895,
+    "ast_hash": "9885bfaf94a47f4cc79af7b88a9f59c8",
     "semantic_hash": ""
   },
   "docker-compose.yml": {
@@ -1330,8 +1330,8 @@
     "semantic_hash": ""
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1785915345.4747765,
-    "ast_hash": "f7d5994b48e87925eba78336e8a05868",
+    "mtime": 1785917238.745115,
+    "ast_hash": "4c4499b4fa9bd9f7ffeb6cf8dc148473",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/risk/RiskExceptionHandler.java": {
@@ -1497,6 +1497,11 @@
   "docs/runbooks/oracle-backup-restore.md": {
     "mtime": 1785759748.3159118,
     "ast_hash": "f5ed3ed51054bc4a2f641ee0c20ca923",
+    "semantic_hash": ""
+  },
+  "frontend/src/layout/Tabs.tsx": {
+    "mtime": 1785916850.8696055,
+    "ast_hash": "c8cec484750ac1b242798c18a8b6d884",
     "semantic_hash": ""
   }
 }

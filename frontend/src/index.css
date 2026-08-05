@@ -6,20 +6,29 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  --color-bg: light-dark(#eef1f5, #14171c);
-  --color-surface: light-dark(#ffffff, #1c2027);
-  --color-surface-alt: light-dark(#f3f4f6, #262b33);
-  --color-border: light-dark(#dde1e6, #2e333c);
+  --color-bg: light-dark(#eef1f5, #0b0d11);
+  --color-surface: light-dark(#ffffff, #14171d);
+  --color-surface-alt: light-dark(#f3f4f6, #1b1f27);
+  --color-surface-sunken: light-dark(#e7eaef, #0f1216);
+  --color-border: light-dark(#dde1e6, #262b34);
   --color-text: light-dark(#1a1d23, #e8eaed);
   --color-text-muted: light-dark(#5b6270, #9aa1ac);
   --color-accent: light-dark(#2563eb, #60a5fa);
   --color-accent-contrast: #ffffff;
+  --color-accent-soft: light-dark(#e6edfc, #142136);
   --color-danger: light-dark(#b91c1c, #f87171);
+
+  --color-buy: light-dark(#0f766e, #2dd4bf);
+  --color-sell: light-dark(#c2410c, #fb923c);
+  --color-momentum: light-dark(#4338ca, #a5b4fc);
+  --color-volume: light-dark(#7c3aed, #c4b5fd);
 
   --radius-sm: 0.4rem;
   --radius-md: 0.75rem;
+  --radius-lg: 1rem;
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 6%);
   --shadow-md: 0 8px 24px rgb(0 0 0 / 12%);
+  --sidebar-width: 19rem;
 }
 
 * {
@@ -185,23 +194,47 @@ form button[type='submit']:hover:not(:disabled),
 
 /* ---------- App shell ---------- */
 
+.app-shell {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+
 .app-header {
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 20;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 0.9rem 1.5rem;
+  padding: 0.85rem 1.5rem;
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
   box-shadow: var(--shadow-sm);
 }
 
 .app-header__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.app-header__brand h1 {
   font-size: 1.15rem;
+}
+
+.app-header__logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-size: 0.9rem;
 }
 
 .app-header__user {
@@ -212,33 +245,120 @@ form button[type='submit']:hover:not(:disabled),
   color: var(--color-text-muted);
 }
 
-.app-main {
-  max-width: 1000px;
+/* ---------- Status strip (kill switch + trading mode) ---------- */
+/* Always visible above the tabs, regardless of which one is active — both controls are
+   safety-critical global state, not per-tab content. */
+
+.app-status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.75rem 1.5rem;
+  background: var(--color-surface-sunken);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.app-status-strip > * {
+  flex: 1 1 16rem;
+}
+
+/* ---------- Body: sidebar watchlist + tabbed content ---------- */
+
+.app-body {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: var(--sidebar-width) 1fr;
+  align-items: start;
+  gap: 1.25rem;
+  max-width: 1400px;
+  width: 100%;
   margin: 0 auto;
-  padding: 1.5rem 1.5rem 3rem;
+  padding: 1.25rem 1.5rem 3rem;
+}
+
+.app-sidebar {
+  position: sticky;
+  top: calc(3.5rem + 4.5rem);
+  max-height: calc(100svh - 3.5rem - 4.5rem - 1.5rem);
+  overflow-y: auto;
+}
+
+.app-content {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
 }
 
-.app-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  align-items: stretch;
+@media (max-width: 900px) {
+  .app-body {
+    grid-template-columns: 1fr;
+  }
+
+  .app-sidebar {
+    position: static;
+    max-height: none;
+  }
 }
 
-.app-toolbar > * {
-  flex: 1 1 auto;
+/* ---------- Tabs ---------- */
+
+.app-tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.3rem;
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.app-tab {
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 0.45rem 1.1rem;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.app-tab:hover:not(:disabled) {
+  border-color: transparent;
+  color: var(--color-text);
+}
+
+.app-tab--active,
+.app-tab--active:hover:not(:disabled) {
+  background: var(--color-surface);
+  color: var(--color-accent);
+  box-shadow: var(--shadow-sm);
+}
+
+.app-tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* Beats the plain-display rule above on specificity via the attribute selector's
+   equal-but-later-losing tiebreak otherwise — without this, [hidden] panels still
+   render, since flex/block both override the UA [hidden]{display:none} default. */
+.app-tab-panel[hidden] {
+  display: none;
 }
 
 /* Every top-level dashboard block (Notifications, Watchlist, Ticker lookup, Order
    history) is a bare <section> — styling that structural position once here keeps
    every card visually uniform without a className on each component. */
-.app-main > section {
+.app-tab-panel > section,
+.app-sidebar > section {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   padding: 1.25rem 1.5rem 1.5rem;
   box-shadow: var(--shadow-sm);
 }
@@ -315,8 +435,33 @@ form button[type='submit']:hover:not(:disabled),
   gap: 0.25rem;
   padding: 0.75rem 1rem;
   border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-border);
   border-radius: 0.5rem;
   background: var(--color-surface-alt);
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.stat-tile:hover {
+  transform: translateY(-1px);
+}
+
+/* Left-border accent groups tiles by kind at a glance — price, momentum
+   (RSI/MACD/MA), volatility, and volume are visually distinct without needing a
+   legend, useful once the grid grows past a handful of tiles. */
+.stat-tile--price {
+  border-left-color: var(--color-accent);
+}
+
+.stat-tile--momentum {
+  border-left-color: var(--color-momentum);
+}
+
+.stat-tile--volatility {
+  border-left-color: var(--color-sell);
+}
+
+.stat-tile--volume {
+  border-left-color: var(--color-volume);
 }
 
 .stat-tile__label {
@@ -349,9 +494,16 @@ form button[type='submit']:hover:not(:disabled),
 }
 
 .signal-badge__call {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   font-size: 1.5rem;
   font-weight: 700;
   letter-spacing: 0.04em;
+}
+
+.signal-badge__glyph {
+  font-size: 1.1rem;
 }
 
 .signal-badge__rule {
@@ -419,6 +571,11 @@ form button[type='submit']:hover:not(:disabled),
   border: 1px solid var(--color-border);
   border-radius: 0.5rem;
   background: var(--color-surface-alt);
+  transition: border-color 120ms ease;
+}
+
+.watchlist-item:hover {
+  border-color: var(--color-accent);
 }
 
 .watchlist-item__symbol {
@@ -559,6 +716,9 @@ form button[type='submit']:hover:not(:disabled),
 
 .order-history-table-wrap {
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: 32rem;
+  border-radius: 0.5rem;
 }
 
 .order-history-table {
@@ -566,17 +726,21 @@ form button[type='submit']:hover:not(:disabled),
   width: 100%;
   margin: 0.5rem 0;
   font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .order-history-table th,
 .order-history-table td {
-  padding: 0.4rem 0.6rem;
+  padding: 0.5rem 0.6rem;
   text-align: left;
   border-bottom: 1px solid var(--color-border);
   white-space: nowrap;
 }
 
-.order-history-table th {
+.order-history-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--color-surface);
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -584,8 +748,27 @@ form button[type='submit']:hover:not(:disabled),
   font-weight: 600;
 }
 
+.order-history-table tbody tr:nth-child(even) {
+  background: var(--color-surface-alt);
+}
+
+.order-history-table tbody tr:hover {
+  background: var(--color-accent-soft);
+}
+
 .order-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   font-weight: 600;
+}
+
+.order-status::before {
+  content: '';
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 /* Same success/warning/error tone split as .trade-form__result. */

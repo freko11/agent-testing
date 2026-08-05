@@ -39,15 +39,18 @@ function relationLabel(ma: MovingAverageResult): string {
   }
 }
 
+type StatTileTone = 'price' | 'momentum' | 'volatility' | 'volume'
+
 interface StatTileProps {
   label: string
   value: string
   hint?: string
+  tone: StatTileTone
 }
 
-function StatTile({ label, value, hint }: StatTileProps) {
+function StatTile({ label, value, hint, tone }: StatTileProps) {
   return (
-    <div className="stat-tile">
+    <div className={`stat-tile stat-tile--${tone}`}>
       <span className="stat-tile__label">{label}</span>
       <span className="stat-tile__value">{value}</span>
       {hint && <span className="stat-tile__hint">{hint}</span>}
@@ -55,11 +58,22 @@ function StatTile({ label, value, hint }: StatTileProps) {
   )
 }
 
+const SIGNAL_GLYPH: Record<SignalResponse['call'], string> = {
+  BUY: '▲',
+  SELL: '▼',
+  HOLD: '■',
+}
+
 function SignalBadge({ signal }: { signal: SignalResponse }) {
   const { call, matchedRule, holdTerm } = signal
   return (
     <div className={`signal-badge signal-badge--${call.toLowerCase()}`} role="status">
-      <span className="signal-badge__call">{call}</span>
+      <span className="signal-badge__call">
+        <span className="signal-badge__glyph" aria-hidden="true">
+          {SIGNAL_GLYPH[call]}
+        </span>
+        {call}
+      </span>
       <span className="signal-badge__rule">{matchedRule}</span>
       {holdTerm && <span className="signal-badge__hold-term">Suggested hold-term: {holdTerm.label}</span>}
     </div>
@@ -77,21 +91,29 @@ function TickerMetricsResult({ signal }: { signal: SignalResponse }) {
       </p>
       <SignalBadge signal={signal} />
       <div className="stat-tile-grid">
-        <StatTile label="Price" value={formatOrDash(indicators.price, 4)} />
-        <StatTile label="RSI (14)" value={indicators.rsi.toFixed(2)} hint="Oversold <30 · Overbought >70" />
+        <StatTile tone="price" label="Price" value={formatOrDash(indicators.price, 4)} />
         <StatTile
+          tone="momentum"
+          label="RSI (14)"
+          value={indicators.rsi.toFixed(2)}
+          hint="Oversold <30 · Overbought >70"
+        />
+        <StatTile
+          tone="momentum"
           label="MACD (12,26,9)"
           value={indicators.macd.line.toFixed(4)}
           hint={`Signal ${indicators.macd.signal.toFixed(4)} · Histogram ${indicators.macd.histogram.toFixed(4)}`}
         />
         <StatTile
+          tone="momentum"
           label={`MA crossover (${indicators.movingAverage.shortPeriod}/${indicators.movingAverage.longPeriod})`}
           value={relationLabel(indicators.movingAverage)}
           hint={`MA${indicators.movingAverage.shortPeriod} ${indicators.movingAverage.shortMa.toFixed(4)} · MA${indicators.movingAverage.longPeriod} ${indicators.movingAverage.longMa.toFixed(4)}`}
         />
-        <StatTile label="Volatility (ATR%)" value={formatOrDash(indicators.volatility, 4, '%')} />
-        <StatTile label="Volume" value={formatOrDash(indicators.volume, 2)} />
+        <StatTile tone="volatility" label="Volatility (ATR%)" value={formatOrDash(indicators.volatility, 4, '%')} />
+        <StatTile tone="volume" label="Volume" value={formatOrDash(indicators.volume, 2)} />
         <StatTile
+          tone="volume"
           label="Volume trend (10/30)"
           value={formatOrDash(indicators.volumeTrend, 4)}
           hint="Ratio of 10-day to 30-day average volume"

@@ -86,6 +86,21 @@ Binance Futures Testnet.
   showing last available data as of &lt;timestamp&gt;" note above the chart
   when set, reusing the existing `.chart-note` style.
 - E3-F3-S1: Watchlist
+- Tabbed high-fidelity dashboard redesign: `DashboardPage.tsx` restructured
+  from one scrolling column into a persistent header, a persistent safety
+  status strip (`TradingModeBanner`/`KillSwitchControl`, visible on every
+  tab since they're global state), a sticky sidebar (`Watchlist`, always
+  visible), and a tabbed main area (Trade/Orders/Notifications, new
+  `layout/Tabs.tsx`) holding `TickerMetrics`/`OrderHistory`/
+  `NotificationPanel` unchanged internally, just relocated. Watchlist-click
+  now jumps to the Trade tab. Tab panels use `hidden` (not conditional
+  rendering) so switching tabs never loses in-progress state; needed an
+  explicit `.app-tab-panel[hidden] { display: none }` override after a
+  live-verification catch — the base `display: flex` rule was silently
+  defeating `hidden` via equal CSS specificity, rendering all three panels
+  at once. Added tone-coded stat-tile accents, a directional glyph on the
+  signal badge, and a sticky-header/zebra-striped/status-dot order-history
+  table for a more "high-fidelity trading terminal" feel.
 
 ### E4 — Broker Adapter Layer
 - E4-F1-S1: `BrokerAdapter` interface + mock implementation + shared contract test suite

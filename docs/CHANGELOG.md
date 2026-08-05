@@ -3923,3 +3923,59 @@ not just the adapter in isolation against direct signed calls.
 confirmed flat via a final `GET /fapi/v3/positionRisk` returning `[]` — no dangling
 test position or orders left on the account. No code changes this pass — this was
 verification only, closing the scope note flagged in the prior follow-up entry.
+
+## Tabbed high-fidelity dashboard redesign
+
+Requested as "the UI looks too simple, make it a high-fidelity trading dashboard,
+split into tabs" — not tied to a specific story. Second UI pass on top of the earlier
+"Frontend visual pass" (design tokens, card treatment); that pass fixed the app-shell
+basics, this one restructures layout and adds trading-terminal-style visual detail.
+
+**Layout restructuring** (`DashboardPage.tsx`, new `layout/Tabs.tsx`): the previous
+single scrolling column (toolbar, notifications, watchlist, ticker lookup, order
+history all stacked) is now a persistent header, a persistent safety-critical status
+strip (`TradingModeBanner` + `KillSwitchControl` — deliberately kept outside the tabs
+so they stay visible no matter which tab is active, since they're global state that
+affects every trade), a sticky sidebar (`Watchlist`, always visible — a real trading
+terminal keeps the watchlist reachable regardless of what else is on screen), and a
+tabbed main content area (Trade / Orders / Notifications) holding `TickerMetrics`,
+`OrderHistory`, and `NotificationPanel` respectively — none of those three components'
+internals changed, they're rendered exactly as before, just relocated into tab panels.
+Clicking a watchlist symbol now also switches to the Trade tab
+(`handleWatchlistSelect`) so the lookup it triggers is immediately visible from any
+tab. Tab panels use `hidden`, not conditional rendering, so switching tabs never loses
+in-progress state (a partially-typed symbol, a pending order refresh) in the panel
+left behind — and all three panels' components mount immediately on page load same as
+before (no fetch-on-tab-activation change), so there's no new loading state to handle.
+
+**Bug found via live-verification, not just build-passing**: the first version of
+`.app-tab-panel { display: flex }` silently defeated the `hidden` attribute — `[hidden]`
+and `.app-tab-panel` are equal specificity (0,1,0 each), and the class rule came later
+in the stylesheet, so all three tab panels rendered simultaneously regardless of which
+tab was "active" (confirmed by screenshot: Order history table rendering directly
+under the Trade tab's ticker lookup). Fixed with an explicit
+`.app-tab-panel[hidden] { display: none }` override placed after the base rule.
+Live-verified after the fix: Trade/Orders/Notifications each show only their own
+content, watchlist-click correctly jumps to and populates the Trade tab.
+
+**Visual detail** (`index.css`, plus small `TickerMetrics.tsx` additions): stat tiles
+gained a `tone` prop (price/momentum/volatility/volume) driving a left-border accent
+color, so the metrics grid groups by kind at a glance without a legend; the signal
+badge gained a directional glyph (▲ BUY / ▼ SELL / ■ HOLD) ahead of the call text; the
+order-history table gained a sticky header, zebra-striped rows, a row hover tint, and
+a colored status dot (`::before`, `background: currentColor`, reusing the existing
+success/warning/error/neutral tone classes — no new color values); the watchlist
+sidebar items get an accent border on hover. New tokens (`--color-surface-sunken`,
+`--color-accent-soft`, `--color-buy/sell/momentum/volume`, `--sidebar-width`,
+`--radius-lg`) were derived from colors already used elsewhere in the file (the
+existing signal-badge/chart-palette hues), not invented fresh. Sidebar collapses above
+the tab content under a 900px breakpoint.
+
+No backend changes. `npm run build` (typecheck), `npm run lint`, and `npm test` all
+pass unchanged. Live-verified in the running app (existing dev stack, not a fresh
+boot): Trade tab (ticker lookup → tone-coded stat tiles → SELL glyph badge → trade
+form → price chart, all inside one card), Orders tab (zebra table, status dots), and
+Notifications tab, plus the watchlist-click-jumps-to-Trade interaction. Did not
+re-verify the sub-900px stacked layout live (window-resize automation didn't visibly
+change the captured viewport in this session) — the breakpoint itself is a standard,
+low-risk `grid-template-columns` collapse.
