@@ -123,9 +123,17 @@ Binance Futures Testnet.
   else (every param/response field name, `ALGO_ORDER_DOES_NOT_EXIST_CODE`
   matching the entry endpoint's `-2013`, and the `FINISHED`-on-trigger
   status) was confirmed correct on the first guess. `EXPIRED`/`REJECTED`
-  weren't directly observed (low-risk, unambiguous spellings). See
-  `docs/CHANGELOG.md`'s E4-F3-S3 entry for the raw request/response bodies
-  and the full design-gate rationale.
+  weren't directly observed (low-risk, unambiguous spellings). Full-stack
+  follow-up: a real bracket order (BTCUSDT SELL, $100, 1x) submitted through
+  the actual running dashboard (logged in via the browser, not a direct API
+  call) came back `OrderStatus.FILLED` — not `PARTIALLY_PROTECTED` — and a
+  direct Binance cross-check via `GET /fapi/v1/openAlgoOrders` confirmed
+  both legs genuinely resting (`TAKE_PROFIT_MARKET`/`STOP_MARKET`, correct
+  trigger prices, correctly-derived `clientAlgoId`s) before being cancelled
+  and the position flattened as cleanup. Proves `OrderService.submitOrder`
+  actually drives this migration correctly end-to-end, not just the
+  adapter in isolation. See `docs/CHANGELOG.md`'s E4-F3-S3 entries for the
+  raw request/response bodies and the full design-gate rationale.
 
 ### E5 — Auto-Trade Execution
 - E5-F1-S1: Trade input form (amount, leverage, take-profit, stop-loss)

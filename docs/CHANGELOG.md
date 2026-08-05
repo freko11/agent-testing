@@ -3882,3 +3882,44 @@ container was brought up). The adapter-level behavior this story is actually abo
 (the Algo Order API's real shape) is now proven against the live testnet; a
 full-stack, entry-plus-both-legs bracket order through the running dashboard remains
 untested end-to-end, matching the scope of what was asked.
+
+## E4-F3-S3 second follow-up — full-stack verification through the running app
+
+The previous follow-up entry above verified the Algo Order API migration directly
+against Binance (bypassing Oracle/Spring), and flagged one remaining scope gap: nobody
+had driven a full `OrderService.submitOrder` round trip through the actual running
+dashboard for this migration. The user asked to close that gap too.
+
+**Method.** Brought up the real stack: Oracle XE was already running; found a stale
+backend process on :8080 that predated the vocabulary fix from the prior follow-up
+(started before the `NEW`/`CANCELED` correction), killed it, and started a fresh
+`./mvnw spring-boot:run` with `.env`'s vars exported (`ORACLE_APP_USER_PASSWORD`,
+`BINANCE_TRADING_API_KEY`/`SECRET`, etc. — local profile, no `spring-dotenv`
+dependency, so vars must be exported into the shell before launch). Confirmed via the
+process start time and `Started BackendApplication` log line that this was a genuinely
+fresh process, not the stale-port situation this repo's known gotchas warn about.
+Logged into the already-running frontend (`localhost:5173`) as `admin` through the
+browser (not a direct API call, to exercise the real login/CSRF/session path too),
+opened the existing BTCUSDT watchlist entry (signal was SELL at the time), and
+submitted a real bracket order through the actual `TradeForm` UI: $100, 1x leverage,
+take-profit 60000, stop-loss 68000 (correct SELL-side placement — profit below entry,
+stop above). First attempt at $50 was correctly rejected client-side before any broker
+call (`quantity rounds to zero at BTCUSDT's precision` — the same guard from E4-F3-S2's
+original follow-up), confirming that pre-flight check still works; $100 cleared it.
+
+**Result.** The order came back `ORDER_FILLED` (confirmed via the dashboard's
+notification panel), not `PARTIALLY_PROTECTED` — entry filled at $64,062, broker order
+id `28285677397`. Cross-checked directly against Binance (bypassing the app) via
+`GET /fapi/v1/openAlgoOrders?symbol=BTCUSDT`: both protective legs were genuinely
+resting — `TAKE_PROFIT_MARKET` at `triggerPrice=60000`, `STOP_MARKET` at
+`triggerPrice=68000`, both with `algoStatus=NEW` and `clientAlgoId`s correctly derived
+from the entry's `clientOrderId` (`...-T`/`...-S` suffixes, matching `legIds`' scheme).
+This is the real proof the story's AC asked for: `OrderService.submitOrder` genuinely
+drives `BinanceFuturesTradingAdapter`'s new Algo Order API path correctly end-to-end,
+not just the adapter in isolation against direct signed calls.
+
+**Cleanup.** Cancelled both algo legs (`DELETE /fapi/v1/algoOrder` for each
+`clientAlgoId`) and flattened the resulting position with a reduce-only market BUY,
+confirmed flat via a final `GET /fapi/v3/positionRisk` returning `[]` — no dangling
+test position or orders left on the account. No code changes this pass — this was
+verification only, closing the scope note flagged in the prior follow-up entry.

@@ -65,8 +65,8 @@
     "semantic_hash": "3875330a04b3aa69c1c9150e7332ce81"
   },
   "backend/src/main/java/com/autotrade/dashboard/brokeradapter/BinanceFuturesTradingAdapter.java": {
-    "mtime": 1785912001.10136,
-    "ast_hash": "4071ed9599176a63a383e580038e5a67",
+    "mtime": 1785913984.304579,
+    "ast_hash": "07fa069184ce0e60f87d254e41cc12fb",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/brokeradapter/BinanceFuturesTradingProperties.java": {
@@ -810,8 +810,8 @@
     "semantic_hash": "11a458c12c15b3610f45bb712baba650"
   },
   "backend/src/test/java/com/autotrade/dashboard/brokeradapter/BinanceFuturesTradingAdapterTest.java": {
-    "mtime": 1785912173.17662,
-    "ast_hash": "d97bd88bc6625abf67b84ad16b1d180f",
+    "mtime": 1785914024.9757304,
+    "ast_hash": "5295feb8d33594e80d0f9a9b9dba4eb0",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/brokeradapter/BrokerAdapterContractTest.java": {
@@ -830,8 +830,8 @@
     "semantic_hash": "2433b4cf79bc296a062df492aa8b950a"
   },
   "backend/src/test/java/com/autotrade/dashboard/brokeradapter/FakeBinanceFuturesTradingServer.java": {
-    "mtime": 1785912052.8237865,
-    "ast_hash": "51eb3e5393497692f90f5504f2082b27",
+    "mtime": 1785913991.888137,
+    "ast_hash": "808fd293e6513e96f74af3bf5c165ad4",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/brokeradapter/MockBrokerAdapter.java": {
@@ -1280,8 +1280,8 @@
     "semantic_hash": "ba2aaaac807614916be42c0c7583990e"
   },
   "CLAUDE.md": {
-    "mtime": 1785912319.8037896,
-    "ast_hash": "c1cb8c21da66b4c31dbd50742108560d",
+    "mtime": 1785915328.406754,
+    "ast_hash": "4000b79839729879ac8477c87f5d4723",
     "semantic_hash": ""
   },
   "docker-compose.yml": {
@@ -1330,8 +1330,8 @@
     "semantic_hash": ""
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1785912443.017123,
-    "ast_hash": "d3411fabd55d214583d15b1744103024",
+    "mtime": 1785915345.4747765,
+    "ast_hash": "f7d5994b48e87925eba78336e8a05868",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/risk/RiskExceptionHandler.java": {
