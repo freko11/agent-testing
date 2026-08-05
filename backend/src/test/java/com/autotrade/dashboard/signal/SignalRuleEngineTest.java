@@ -129,6 +129,38 @@ class SignalRuleEngineTest {
                 SignalRuleEngine.evaluate(RSI_OVERSOLD, MACD_BULLISH, MA_BULLISH, VOLATILITY_NORMAL, new BigDecimal("0.10")));
     }
 
+    /** E8-F3-S1: pins {@link SignalRuleEngine#computeVotes} down independently of {@link
+     * SignalRuleEngine#evaluate}'s gates/counting, since {@link WeightedVoteRuleEngine} now
+     * reuses it directly as its own single source of truth for "what counts as a bullish/bearish
+     * read". */
+    @Test
+    void computeVotes_allThreeBullish() {
+        SignalRuleEngine.IndicatorVotes votes = SignalRuleEngine.computeVotes(RSI_OVERSOLD, MACD_BULLISH, MA_BULLISH,
+                SignalRuleEngine.RuleThresholds.DEFAULT);
+        assertEquals(new SignalRuleEngine.IndicatorVotes(true, false, true, false, true, false), votes);
+    }
+
+    @Test
+    void computeVotes_allThreeBearish() {
+        SignalRuleEngine.IndicatorVotes votes = SignalRuleEngine.computeVotes(RSI_OVERBOUGHT, MACD_BEARISH, MA_BEARISH,
+                SignalRuleEngine.RuleThresholds.DEFAULT);
+        assertEquals(new SignalRuleEngine.IndicatorVotes(false, true, false, true, false, true), votes);
+    }
+
+    @Test
+    void computeVotes_allNeutral() {
+        SignalRuleEngine.IndicatorVotes votes = SignalRuleEngine.computeVotes(RSI_NEUTRAL, MACD_NEUTRAL, MA_NEUTRAL,
+                SignalRuleEngine.RuleThresholds.DEFAULT);
+        assertEquals(new SignalRuleEngine.IndicatorVotes(false, false, false, false, false, false), votes);
+    }
+
+    @Test
+    void computeVotes_mixedReads() {
+        SignalRuleEngine.IndicatorVotes votes = SignalRuleEngine.computeVotes(RSI_OVERSOLD, MACD_BEARISH, MA_NEUTRAL,
+                SignalRuleEngine.RuleThresholds.DEFAULT);
+        assertEquals(new SignalRuleEngine.IndicatorVotes(true, false, false, true, false, false), votes);
+    }
+
     private static MacdResult macd(String histogram) {
         return new MacdResult(new BigDecimal("1.0"), new BigDecimal("1.0"), new BigDecimal(histogram));
     }

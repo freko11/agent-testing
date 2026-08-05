@@ -11,8 +11,10 @@ import com.autotrade.dashboard.indicator.VolumeTrendCalculator;
 import com.autotrade.dashboard.marketdata.Candle;
 import com.autotrade.dashboard.signal.HoldTerm;
 import com.autotrade.dashboard.signal.HoldTermCalculator;
+import com.autotrade.dashboard.signal.IndicatorId;
 import com.autotrade.dashboard.signal.SignalCall;
 import com.autotrade.dashboard.signal.SignalRuleEngine;
+import com.autotrade.dashboard.signal.SignalRuleEngine.IndicatorVotes;
 import com.autotrade.dashboard.signal.SignalRuleId;
 
 import java.math.BigDecimal;
@@ -43,17 +45,47 @@ public final class BacktestHarness {
     private BacktestHarness() {
     }
 
+    /** E8-F3-S1: a swappable combined-rule decision, matching {@link SignalRuleEngine#evaluate}'s
+     * and {@code WeightedVoteRuleEngine.evaluate}'s shared 5-arg shape, so either can be replayed
+     * through {@link #run(String, List, RuleEvaluator, SignalRuleEngine.RuleThresholds)}. */
+    @FunctionalInterface
+    public interface RuleEvaluator {
+        SignalRuleId evaluate(BigDecimal rsi, MacdResult macd, MovingAverageResult movingAverage,
+                               BigDecimal volatility, BigDecimal volumeTrend);
+    }
+
     public static BacktestReport run(String label, List<Candle> candles) {
         return run(label, candles, SignalRuleEngine.RuleThresholds.DEFAULT);
     }
 
     /** E8-F1-S1: accepts candidate {@link SignalRuleEngine.RuleThresholds} so
      * {@code ThresholdCalibrationTest} can sweep threshold candidates without touching
-     * {@link SignalRuleEngine}'s production constants. */
+     * {@link SignalRuleEngine}'s production constants. Delegates to the {@link RuleEvaluator}
+     * overload below, using {@link SignalRuleEngine#evaluate} itself (the unweighted table) as
+     * the evaluator. */
     public static BacktestReport run(String label, List<Candle> candles, SignalRuleEngine.RuleThresholds thresholds) {
+        return run(label, candles,
+                (rsi, macd, ma, volatility, volumeTrend) -> SignalRuleEngine.evaluate(rsi, macd, ma, volatility, volumeTrend, thresholds),
+                thresholds);
+    }
+
+    /**
+     * E8-F3-S1: accepts any {@link RuleEvaluator} (e.g. {@code WeightedVoteRuleEngine::evaluate})
+     * in place of the hardcoded {@link SignalRuleEngine#evaluate} call, so a candidate rule
+     * engine can be replayed through the exact same walk-forward machinery — decision points,
+     * TP/SL-aware scoring, per-indicator scoring — as the production table, for a direct,
+     * side-by-side "A/B against the current table" comparison ({@code
+     * IndicatorExpectancyCalibrationTest}'s weighted-vs-unweighted run). {@code thresholds} is
+     * threaded separately (not read off the evaluator) because per-indicator scoring
+     * (E8-F3-S1) needs {@link SignalRuleEngine#computeVotes}'s own threshold-gated bullish/bearish
+     * read regardless of which combined-rule evaluator is under test.
+     */
+    public static BacktestReport run(String label, List<Candle> candles, RuleEvaluator evaluator,
+                                      SignalRuleEngine.RuleThresholds thresholds) {
         Map<SignalRuleId, Integer> callCounts = new EnumMap<>(SignalRuleId.class);
         Map<SignalRuleId, DirectionalAccumulator> directional = new EnumMap<>(SignalRuleId.class);
         Map<SignalRuleId, HoldGateAccumulator> holdGate = new EnumMap<>(SignalRuleId.class);
+        Map<IndicatorId, IndicatorAccumulator> indicatorAcc = new EnumMap<>(IndicatorId.class);
         List<BacktestDecisionPoint> buySellPoints = new ArrayList<>();
 
         for (SignalRuleId ruleId : SignalRuleId.values()) {
@@ -63,6 +95,9 @@ public final class BacktestHarness {
             } else {
                 holdGate.put(ruleId, new HoldGateAccumulator());
             }
+        }
+        for (IndicatorId indicatorId : IndicatorId.values()) {
+            indicatorAcc.put(indicatorId, new IndicatorAccumulator());
         }
 
         int decisionPoints = 0;
@@ -79,11 +114,19 @@ public final class BacktestHarness {
             BigDecimal volumeTrend = VolumeTrendCalculator.calculate(window,
                     VolumeTrendCalculator.DEFAULT_SHORT_PERIOD, VolumeTrendCalculator.DEFAULT_LONG_PERIOD);
 
-            SignalRuleId matchedRule = SignalRuleEngine.evaluate(rsi, macd, ma, volatility, volumeTrend, thresholds);
+            SignalRuleId matchedRule = evaluator.evaluate(rsi, macd, ma, volatility, volumeTrend);
             HoldTerm holdTerm = HoldTermCalculator.calculate(matchedRule, volatility);
 
             callCounts.merge(matchedRule, 1, Integer::sum);
             BigDecimal decisionClose = candles.get(i).close();
+
+            IndicatorVotes votes = SignalRuleEngine.computeVotes(rsi, macd, ma, thresholds);
+            scoreIndicator(candles, i, decisionClose, votes.rsiBullish(), votes.rsiBearish(),
+                    indicatorAcc.get(IndicatorId.RSI));
+            scoreIndicator(candles, i, decisionClose, votes.macdBullish(), votes.macdBearish(),
+                    indicatorAcc.get(IndicatorId.MACD));
+            scoreIndicator(candles, i, decisionClose, votes.maBullish(), votes.maBearish(),
+                    indicatorAcc.get(IndicatorId.MA_CROSSOVER));
 
             if (holdTerm != null) {
                 DirectionalAccumulator acc = directional.get(matchedRule);
@@ -113,6 +156,8 @@ public final class BacktestHarness {
         directional.forEach((ruleId, acc) -> directionalStats.put(ruleId, acc.toStats()));
         Map<SignalRuleId, HoldGateStats> holdGateStats = new EnumMap<>(SignalRuleId.class);
         holdGate.forEach((ruleId, acc) -> holdGateStats.put(ruleId, acc.toStats()));
+        Map<IndicatorId, CheckpointStats> indicatorStats = new EnumMap<>(IndicatorId.class);
+        indicatorAcc.forEach((indicatorId, acc) -> indicatorStats.put(indicatorId, acc.toStats()));
 
         DirectionalOutcomeStats overallBuy = combine(directionalStats.get(SignalRuleId.BULLISH_UNANIMOUS),
                 directionalStats.get(SignalRuleId.BULLISH_MAJORITY));
@@ -120,7 +165,29 @@ public final class BacktestHarness {
                 directionalStats.get(SignalRuleId.BEARISH_MAJORITY));
 
         return new BacktestReport(label, candles.size(), decisionPoints, callCounts, directionalStats, overallBuy,
-                overallSell, holdGateStats, buySellPoints);
+                overallSell, holdGateStats, buySellPoints, indicatorStats);
+    }
+
+    /**
+     * Scores one indicator's own directional read at this decision point (E8-F3-S1), independent
+     * of the combined rule table's matched rule/hold-term — reuses the same TP/SL-aware {@link
+     * #findFirstCrossing}/{@link #score} walk-forward scan the combined rules use, but bounded by
+     * the fixed {@link BacktestConfig#HOLD_REFERENCE_HORIZON_DAYS} horizon rather than a
+     * rule-derived hold term, since a lone indicator's read has no hold-term of its own to derive
+     * one from (the same horizon {@link #scoreHoldGate} already uses for the same reason). A
+     * no-op when the indicator gave a neutral (non-directional) read.
+     */
+    private static void scoreIndicator(List<Candle> candles, int decisionIndex, BigDecimal decisionClose,
+                                        boolean bullish, boolean bearish, IndicatorAccumulator acc) {
+        if (!bullish && !bearish) {
+            return;
+        }
+        acc.totalCalls++;
+        Optional<CrossingEvent> crossing = findFirstCrossing(candles, decisionIndex,
+                BacktestConfig.HOLD_REFERENCE_HORIZON_DAYS, decisionClose, bullish);
+        Optional<DirectionalScoreResult> result = score(candles, decisionIndex,
+                BacktestConfig.HOLD_REFERENCE_HORIZON_DAYS, decisionClose, bullish, crossing);
+        acc.record(result);
     }
 
     /**
@@ -211,7 +278,12 @@ public final class BacktestHarness {
                 combineCheckpoint(a.mid(), b.mid()), combineCheckpoint(a.max(), b.max()));
     }
 
-    private static CheckpointStats combineCheckpoint(CheckpointStats a, CheckpointStats b) {
+    /** Package-private (not {@code private}) so {@code IndicatorExpectancyCalibrationTest} can
+     * combine one indicator's per-fixture {@link CheckpointStats} (BTCUSDT + DOGEUSDT) into a
+     * single call-count-weighted figure to compute {@code WeightedVoteRuleEngine.IndicatorWeights.DEFAULT}
+     * from — the same call-count-weighted-average treatment {@link #combine} already gives
+     * UNANIMOUS+MAJORITY, just reused across fixtures instead of across rules. */
+    static CheckpointStats combineCheckpoint(CheckpointStats a, CheckpointStats b) {
         int win = a.win() + b.win();
         int loss = a.loss() + b.loss();
         double avgWin = win == 0 ? 0.0 : (a.avgWinReturnPct() * a.win() + b.avgWinReturnPct() * b.win()) / win;
@@ -276,6 +348,56 @@ public final class BacktestHarness {
             return new CheckpointStats(win, loss, counts.get(DirectionalOutcome.WASH), notScoredCounts.get(checkpoint),
                     avgWin, avgLoss, reasons.get(ExitReason.TP_HIT), reasons.get(ExitReason.SL_HIT),
                     reasons.get(ExitReason.HORIZON_EXPIRED));
+        }
+    }
+
+    /**
+     * One {@link com.autotrade.dashboard.signal.IndicatorId}'s own directional-read outcome
+     * tally (E8-F3-S1) — structurally {@link DirectionalAccumulator}'s single-checkpoint sibling:
+     * a lone indicator has no rule-derived hold term to bracket a MIN/MID/MAX range with, so
+     * there's exactly one horizon ({@link BacktestConfig#HOLD_REFERENCE_HORIZON_DAYS}) instead of
+     * three. Reuses the existing {@link CheckpointStats} output shape unchanged.
+     */
+    private static final class IndicatorAccumulator {
+        int totalCalls;
+        final EnumMap<DirectionalOutcome, Integer> outcomeCounts = new EnumMap<>(DirectionalOutcome.class);
+        final EnumMap<ExitReason, Integer> exitReasonCounts = new EnumMap<>(ExitReason.class);
+        int notScored;
+        BigDecimal winReturnSum = BigDecimal.ZERO;
+        BigDecimal lossReturnSum = BigDecimal.ZERO;
+
+        IndicatorAccumulator() {
+            for (DirectionalOutcome outcome : DirectionalOutcome.values()) {
+                outcomeCounts.put(outcome, 0);
+            }
+            for (ExitReason reason : ExitReason.values()) {
+                exitReasonCounts.put(reason, 0);
+            }
+        }
+
+        void record(Optional<DirectionalScoreResult> result) {
+            if (result.isEmpty()) {
+                notScored++;
+                return;
+            }
+            DirectionalScoreResult scoreResult = result.get();
+            outcomeCounts.merge(scoreResult.outcome(), 1, Integer::sum);
+            exitReasonCounts.merge(scoreResult.exitReason(), 1, Integer::sum);
+            if (scoreResult.outcome() == DirectionalOutcome.WIN) {
+                winReturnSum = winReturnSum.add(scoreResult.signedReturnPct());
+            } else if (scoreResult.outcome() == DirectionalOutcome.LOSS) {
+                lossReturnSum = lossReturnSum.add(scoreResult.signedReturnPct());
+            }
+        }
+
+        CheckpointStats toStats() {
+            int win = outcomeCounts.get(DirectionalOutcome.WIN);
+            int loss = outcomeCounts.get(DirectionalOutcome.LOSS);
+            double avgWin = win == 0 ? 0.0 : winReturnSum.doubleValue() / win;
+            double avgLoss = loss == 0 ? 0.0 : lossReturnSum.doubleValue() / loss;
+            return new CheckpointStats(win, loss, outcomeCounts.get(DirectionalOutcome.WASH), notScored, avgWin,
+                    avgLoss, exitReasonCounts.get(ExitReason.TP_HIT), exitReasonCounts.get(ExitReason.SL_HIT),
+                    exitReasonCounts.get(ExitReason.HORIZON_EXPIRED));
         }
     }
 

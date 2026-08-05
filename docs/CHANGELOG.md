@@ -4537,3 +4537,298 @@ to the live rule table or order path.
 (15 tests, including the 4 new `CheckpointStatsTest` cases) and the full
 `./mvnw verify` (415 tests, up from 411, 0 failures/errors, jar packaged)
 both pass clean. No frontend changes.
+
+## E8-F3-S1 — weighted-vote scoring layer (indicator votes weighted by backtested expectancy)
+
+**Design gate, confirmed with the user before implementation** (this story's
+five numbered decisions in the task brief, restated here for the historical
+record): (1) build `WeightedVoteRuleEngine` as a real, tested, but
+deliberately **unwired** production class — `SignalService`/`OrderService`
+keep calling `SignalRuleEngine.evaluate` exactly as today, no config flag, no
+`RULE_TABLE_VERSION` bump, no `OrderAuditEntry` change, mirroring E8-F1-S1's
+`RuleThresholds` pattern (new overload/class added, production call path
+untouched), explicitly provisional pending E8-F4-S1's not-yet-implemented
+out-of-sample validation; (2) weight transform `weight_i = max(0,
+expectancyPctAfterCosts_i)` — a negative-expectancy indicator is silenced to
+zero weight but never votes against its own direction, no normalization
+requirement since weights are only ever compared as ratios inside the vote;
+(3) weight source is `CheckpointStats.expectancyPctAfterCosts()` (E8-F2-S2's
+after-transaction-cost figure), not raw `expectancyPct()`; (4) lone-indicator
+promotion — a single dominant indicator resolving a directional call where
+today's unweighted table always calls `NO_STRONG_SIGNAL`/HOLD — is the
+intended point of "proportionally more influence," not an edge case to
+guard against; (5) a lone indicator's scoring horizon reuses the existing
+`BacktestConfig.HOLD_REFERENCE_HORIZON_DAYS` (5 days, already used to score
+HOLD-gate calls, which face the identical "no rule-derived hold term
+available" situation) rather than adding a second fixed-horizon constant.
+
+**`SignalRuleEngine.computeVotes`/`IndicatorVotes` extraction (no behavior
+change).** The three bullish/bearish vote booleans per indicator existed
+only as locals inside `evaluate`. Pulled out into:
+
+```java
+public record IndicatorVotes(boolean rsiBullish, boolean rsiBearish, boolean macdBullish, boolean macdBearish,
+                              boolean maBullish, boolean maBearish) {
+}
+
+public static IndicatorVotes computeVotes(BigDecimal rsi, MacdResult macd, MovingAverageResult movingAverage,
+                                           RuleThresholds thresholds) {
+    boolean rsiBullish = rsi.compareTo(thresholds.rsiOversold()) < 0;
+    boolean rsiBearish = rsi.compareTo(thresholds.rsiOverbought()) > 0;
+    boolean macdBullish = macd.histogram().signum() > 0;
+    boolean macdBearish = macd.histogram().signum() < 0;
+    boolean maBullish = movingAverage.relation() == MovingAverageRelation.SHORT_ABOVE_LONG;
+    boolean maBearish = movingAverage.relation() == MovingAverageRelation.SHORT_BELOW_LONG;
+    return new IndicatorVotes(rsiBullish, rsiBearish, macdBullish, macdBearish, maBullish, maBearish);
+}
+```
+
+`evaluate` now calls `computeVotes` and unpacks the record in place of the
+inline locals — byte-for-byte the same logic, confirmed by a new
+`SignalRuleEngineTest.computeVotes_*` group (all-bullish, all-bearish,
+all-neutral, mixed) pinning the extraction down independently of `evaluate`'s
+own gate/counting tests. Made **`public`** rather than package-private,
+deliberately deviating from the task brief's literal wording ("package-visible
+helper") — `BacktestHarness` lives in the separate `com.autotrade.dashboard.backtest`
+package and needs to call it too (per this story's own AC: "for each of the
+three indicators ... use `SignalRuleEngine.computeVotes`"), and Java has no
+visibility level between package-private and public that would satisfy both
+callers. `IndicatorVotes` is public for the same reason.
+
+**New `signal.IndicatorId` enum** (`RSI`, `MACD`, `MA_CROSSOVER`) — the key
+type for per-indicator data everywhere else in this story (backtest
+accumulation, report output, indicator weights).
+
+**`BacktestHarness` per-indicator scoring — genuinely new capability, not a
+refactor.** Previously the harness only scored the *combined matched rule's*
+outcome per decision point; it had no way to ask "how good is RSI alone at
+predicting direction." Inside the existing decision-point loop (no second
+pass over candles), for each of the three indicators: if `computeVotes` says
+that indicator's own read is directional (bullish or bearish) at this point,
+score it independently via the *existing* E8-F2-S1 TP/SL-aware
+`findFirstCrossing`/`score` walk-forward scan, bounded by
+`BacktestConfig.HOLD_REFERENCE_HORIZON_DAYS` rather than a rule-derived hold
+term (a lone indicator has none):
+
+```java
+private static void scoreIndicator(List<Candle> candles, int decisionIndex, BigDecimal decisionClose,
+                                    boolean bullish, boolean bearish, IndicatorAccumulator acc) {
+    if (!bullish && !bearish) {
+        return;
+    }
+    acc.totalCalls++;
+    Optional<CrossingEvent> crossing = findFirstCrossing(candles, decisionIndex,
+            BacktestConfig.HOLD_REFERENCE_HORIZON_DAYS, decisionClose, bullish);
+    Optional<DirectionalScoreResult> result = score(candles, decisionIndex,
+            BacktestConfig.HOLD_REFERENCE_HORIZON_DAYS, decisionClose, bullish, crossing);
+    acc.record(result);
+}
+```
+
+A new package-private `IndicatorAccumulator` — structurally
+`DirectionalAccumulator`'s single-checkpoint sibling (no MIN/MID/MAX split,
+since there's no rule-derived hold-term range to bracket) — accumulates into
+the existing `CheckpointStats` shape unchanged (it already carries
+win/loss/wash, avgWin/avgLoss, tpHit/slHit/horizonExpired,
+`expectancyPct()`/`expectancyPctAfterCosts()` — nothing new needed). Surfaced
+as a new `BacktestReport.indicatorStats` field (`Map<IndicatorId,
+CheckpointStats>`) and a new `printIndicatorExpectancy` print block following
+the existing print-block pattern in `printTo`.
+
+**`BacktestHarness.RuleEvaluator` + a swappable-evaluator `run` overload —
+added so the weighted engine could be A/B-replayed through the exact same
+walk-forward machinery as the production table**, the literal "existing
+2-of-3 unanimous/majority behavior remains available as a fallback/
+comparison mode" the AC asks for:
+
+```java
+@FunctionalInterface
+public interface RuleEvaluator {
+    SignalRuleId evaluate(BigDecimal rsi, MacdResult macd, MovingAverageResult movingAverage,
+                           BigDecimal volatility, BigDecimal volumeTrend);
+}
+
+public static BacktestReport run(String label, List<Candle> candles, RuleEvaluator evaluator,
+                                  SignalRuleEngine.RuleThresholds thresholds) { ... }
+```
+
+The existing `run(label, candles, thresholds)` now delegates to this,
+constructing its evaluator as `(rsi, macd, ma, volatility, volumeTrend) ->
+SignalRuleEngine.evaluate(rsi, macd, ma, volatility, volumeTrend,
+thresholds)` — `ThresholdCalibrationTest`'s call site is unchanged and its
+behavior is identical. `thresholds` is threaded as a separate parameter
+(not read off the evaluator) because per-indicator scoring needs
+`computeVotes`'s own threshold-gated read regardless of which combined-rule
+evaluator is under test. `combineCheckpoint` (previously `private`) was
+relaxed to package-private, same precedent as E8-F2-S1's `score`/
+`findFirstCrossing` relaxation, so `IndicatorExpectancyCalibrationTest` could
+combine one indicator's BTCUSDT and DOGEUSDT `CheckpointStats` into one
+call-count-weighted figure.
+
+**`WeightedVoteRuleEngine` (new, `src/main/java/.../signal/`).** Reuses
+`SignalRuleEngine.computeVotes` for "what counts as a bullish/bearish read"
+(one source of truth) and keeps the three safety gates and the
+conflict/dissent gate byte-for-byte identical to `SignalRuleEngine.evaluate`
+— weighting never overrides "at least one indicator disagrees." Once those
+gates pass:
+
+```java
+BigDecimal totalWeight = weights.rsiWeight().add(weights.macdWeight()).add(weights.maCrossoverWeight());
+BigDecimal majorityThreshold = totalWeight.multiply(WEIGHTED_MAJORITY_FRACTION);
+
+if (bullishCount == 3) {
+    return SignalRuleId.BULLISH_UNANIMOUS;
+}
+if (bullishCount > 0) {
+    return clearsMajorityBar(votes.rsiBullish(), votes.macdBullish(), votes.maBullish(), weights, totalWeight, majorityThreshold)
+            ? SignalRuleId.BULLISH_MAJORITY : SignalRuleId.NO_STRONG_SIGNAL;
+}
+// symmetric for bearish
+```
+
+`WEIGHTED_MAJORITY_FRACTION = 0.5` (half of total weight) is an explicit,
+documented uncalibrated placeholder — the same treatment as
+`BacktestConfig.TAKE_PROFIT_PCT`/`STOP_LOSS_PCT` — chosen for being a
+defensible, easy-to-reason-about default ("majority of weighted confidence,"
+mirroring "majority of votes" in the unweighted table) rather than
+backtest-derived; a future story could sweep it the way E8-F1-S1 swept RSI
+thresholds. `evaluate` maps onto the *existing* `SignalRuleId` values only —
+no new enum values, so this stays compatible with a future story wiring it
+in. Two entry points: a 7-arg `evaluate(..., thresholds, weights)` plus a
+5-arg convenience overload using `RuleThresholds.DEFAULT`/
+`IndicatorWeights.DEFAULT` (mirroring `RuleThresholds`'s own overload
+pattern), and `evaluateUnweighted` — a pure delegation to
+`SignalRuleEngine.evaluate` — the literal fallback/comparison mode.
+
+**Design decision beyond the brief: `bullishCount == 3`/`bearishCount == 3`
+checked explicitly, not via a `weightedSum >= totalWeight` comparison.** The
+brief's own mapping said "`weightedBullish >= totalWeight` → BULLISH_UNANIMOUS
+(only reachable when all 3 already agree ... weighting can't change this
+branch, keep it that way)" — but weights are nonnegative and a subset sum can
+only equal the *full* total either when all three participate, or,
+incidentally, when every non-participating indicator's weight happens to be
+exactly zero. With `IndicatorWeights.DEFAULT` computing to all-zero (see
+below), a 2-of-3 vote where the third (non-voting, neutral) indicator's
+weight is zero would otherwise vacuously satisfy `weightedSum >= totalWeight`
+and wrongly resolve UNANIMOUS off only 2 real votes. Checking the raw vote
+count directly guarantees the stated invariant unconditionally rather than
+incidentally.
+
+**Second, related bug caught while writing `WeightedVoteBacktestTest`
+against real calibration output: a zero-total-weight vacuous comparison.**
+When every indicator's weight floors to zero, `totalWeight` is zero, so
+`majorityThreshold` (`totalWeight * 0.5`) is also zero, and a lone/2-of-3
+vote's own `weightedSum` (sum of zero-weighted indicators) is zero too —
+`0 >= 0` reads as true, which would "promote" *every* lone or majority vote
+to a directional call regardless of which indicator produced it, the exact
+opposite of what a weight of zero should mean. Fixed with an explicit guard
+in the extracted `clearsMajorityBar` helper:
+
+```java
+private static boolean clearsMajorityBar(boolean rsiVoted, boolean macdVoted, boolean maVoted,
+                                          IndicatorWeights weights, BigDecimal totalWeight, BigDecimal majorityThreshold) {
+    if (totalWeight.signum() <= 0) {
+        return false;
+    }
+    return weightedSum(rsiVoted, macdVoted, maVoted, weights).compareTo(majorityThreshold) >= 0;
+}
+```
+
+Covered directly by `WeightedVoteRuleEngineTest.zeroTotalWeight_loneIndicator_staysNoStrongSignal`
+and `allThreeBullish_returnsBullishUnanimous_evenWithZeroWeights` (proving
+UNANIMOUS still fires off the raw count even when every weight is zero, while
+MAJORITY correctly cannot).
+
+**`IndicatorWeights.DEFAULT` — computed, not guessed, and the actual finding
+is a null result.** New `IndicatorExpectancyCalibrationTest`
+(`backend/src/test/java/.../backtest/`) runs `BacktestHarness`'s new
+per-indicator scoring against the real checked-in BTCUSDT/DOGEUSDT fixtures
+and prints each indicator's win rate/expectancy, combined call-count-weighted
+across both fixtures via `BacktestHarness.combineCheckpoint`. The printed
+result:
+
+```
+RSI:          COMBINED:  33.3% win (105 scored)  | expectancy -0.528% (after costs -0.728%)
+MACD:         COMBINED:  41.4% win (1928 scored) | expectancy +0.161% (after costs -0.039%)
+MA_CROSSOVER: COMBINED:  39.6% win (1928 scored) | expectancy +0.069% (after costs -0.131%)
+```
+
+All three come back *negative* after transaction costs — under this fixed
+5-day/5%-TP/3%-SL scoring, stop-loss hits substantially outnumber
+take-profit hits for every indicator at this short a horizon (e.g. RSI
+combined: 26 TP hits vs. 65 SL hits). So `max(0, x)` floors every weight to
+zero: `IndicatorWeights.DEFAULT = new IndicatorWeights(new
+BigDecimal("0.000"), new BigDecimal("0.000"), new BigDecimal("0.000"))`. This
+is a real, computed result — not a placeholder standing in for "figure this
+out later" — and it has a real consequence for `evaluate`'s default
+behavior: with `DEFAULT`, only the raw-count UNANIMOUS branch can ever
+resolve a directional call; the "lone dominant indicator" and "2-of-3
+majority-by-weight" promotion paths this story exists to add are dormant
+under this specific calibration (they're proven independently, using
+non-default injected weights, in `WeightedVoteRuleEngineTest`). A future
+recalibration — e.g. against a longer horizon than the fixed 5-day
+`HOLD_REFERENCE_HORIZON_DAYS`, or after E8-F4-S1's out-of-sample pass — could
+produce a positive weight for at least one indicator; this pass is
+explicitly provisional, the same caveat `ThresholdCalibrationTest`
+(E8-F1-S1) already documents for threshold calibration, since both fixtures
+here are also the only tuning data.
+
+**`WeightedVoteBacktestTest` — the actual A/B comparison the AC asks for.**
+Replays both `SignalRuleEngine.evaluate` (via `BacktestHarness.run(label,
+candles)`) and `WeightedVoteRuleEngine::evaluate` (via the new `run(label,
+candles, evaluator, thresholds)` overload) through the identical walk-forward
+machinery and prints both reports' expectancy side by side. Confirmed
+directly: with `IndicatorWeights.DEFAULT`, the weighted engine calls
+`NO_STRONG_SIGNAL` on literally every decision point in both fixtures (513
+for BTCUSDT, 325 for DOGEUSDT) — because `BULLISH_UNANIMOUS`/
+`BEARISH_UNANIMOUS` never occur in either fixture under the unweighted table
+either (all three indicators never agree simultaneously on this data, only
+ever 2-of-3), so the one weight-independent directional branch never fires,
+and majority is unreachable with zero total weight. This is the honest,
+current state of the A/B comparison, not a bug to paper over: this story
+delivers the scoring layer and the comparison harness the AC asks for: the
+comparison currently shows the unweighted table calling BULLISH_MAJORITY/
+BEARISH_MAJORITY throughout (positive expectancy in both fixtures, per
+E8-F2-S1's prior finding) while the weighted engine, under this specific
+zero-weight calibration, calls nothing at all — a legitimate, if
+anticlimactic, side-by-side result for a future recalibration or E8-F4-S1 to
+act on.
+
+**`WeightedVoteRuleEngineTest`** (mirroring `SignalRuleEngineTest`'s
+per-branch coverage style): all three safety gates fire identically; the
+conflict gate still fires even with lopsided weights (dissent is checked on
+raw vote counts, before any weight comparison); all-three-agree resolves
+UNANIMOUS regardless of weights, including the zero-weight case; a dominant
+lone indicator (`IndicatorWeights(10, 1, 1)`) promotes what the unweighted
+table calls `NO_STRONG_SIGNAL` to `BULLISH_MAJORITY`/`BEARISH_MAJORITY` (the
+story's core intended behavior, proven directly); a weak lone indicator
+(`IndicatorWeights(1, 10, 10)`) still resolves `NO_STRONG_SIGNAL` (proves the
+threshold actually gates, not just that weighting exists); `evaluateUnweighted`
+matches `SignalRuleEngine.evaluate` exactly across every branch
+`SignalRuleEngineTest` covers.
+
+**`BacktestHarnessTest`** gained a new structural invariant loop: the same
+`assertCheckpointStatsAreSane` checks (avg win/loss sign consistency,
+`tpHit+slHit+horizonExpired` partitions `scored()`, after-cost expectancy
+never exceeds raw) already applied to the three combined-rule checkpoints,
+reapplied to each `IndicatorId`'s single `CheckpointStats` in
+`report.indicatorStats()` — factored out of the existing per-checkpoint loop
+so both call sites share one assertion helper.
+
+**Scope boundaries, confirmed against the design gate.** Not wired into
+`SignalService`/`OrderService`/any config flag; no `RULE_TABLE_VERSION` bump;
+no `OrderAuditEntry` change; the conflict/dissent gate is not redesigned into
+a weighted-tolerance model; no per-asset-type weight differentiation (one
+flat weight set across both fixtures, the same limitation E8-F2-S2 already
+documented and left alone); E8-F3-S2 (regime/trend-strength filter) and
+E8-F4-S1 (out-of-sample validation) are separate, unimplemented follow-up
+stories.
+
+`./mvnw test -Dtest=SignalRuleEngineTest,WeightedVoteRuleEngineTest,BacktestHarnessTest,IndicatorExpectancyCalibrationTest,WeightedVoteBacktestTest,ThresholdCalibrationTest`
+and the full `./mvnw verify` (437 tests, up from 415, 0 failures/errors, jar
+packaged) both pass clean. Backend-only; no frontend changes. "Live
+verification" for this story is the calibration/comparison tests' printed
+output (there's no running-dashboard surface to exercise, since nothing new
+is wired into a controller or the order path) — both are reproducible via
+`./mvnw test -Dtest=IndicatorExpectancyCalibrationTest` and `./mvnw test
+-Dtest=WeightedVoteBacktestTest`.

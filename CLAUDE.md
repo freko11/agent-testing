@@ -22,8 +22,8 @@ Order API migration) added after E4-F3-S2's post-launch verification found
 Binance rejecting conditional exit-leg orders on the old endpoint — see
 that story's entry below, live-verified end-to-end against the real
 Binance Futures Testnet. E8 (Signal Quality & Quant Rigor) is a backlog
-epic added after E7 shipped; E8-F1-S1, E8-F2-S1, and E8-F2-S2 are done, the
-rest of E8 (E8-F3 through E8-F5) is not yet started.
+epic added after E7 shipped; E8-F1-S1, E8-F2-S1, E8-F2-S2, and E8-F3-S1 are
+done, the rest of E8 (E8-F3-S2 through E8-F5) is not yet started.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -529,6 +529,75 @@ rest of E8 (E8-F3 through E8-F5) is not yet started.
   the AC's "spread/slippage/fees" wording doesn't cover. Backend,
   `src/test/java`-only, same precedent as every other E8 story so far — no
   `SignalRuleEngine`/`OrderService`/`PlaceOrderRequest` changes.
+- E8-F3-S1: Weighted-vote scoring layer, built as a new, deliberately
+  **unwired** `signal.WeightedVoteRuleEngine` — `SignalService`/`OrderService`
+  keep calling `SignalRuleEngine.evaluate` exactly as before, no config flag,
+  no `RULE_TABLE_VERSION` bump, no `OrderAuditEntry` change, same "add a new
+  class, don't touch the production call path" pattern as E8-F1-S1's
+  `RuleThresholds`. `SignalRuleEngine`'s three vote booleans-per-indicator
+  were extracted out of `evaluate` into a new public `computeVotes`/
+  `IndicatorVotes` (public, not package-private, since `BacktestHarness` in
+  the separate `backtest` package needs it too) with a pinned-down unit test
+  proving zero behavior change; a new `signal.IndicatorId` enum (RSI/MACD/
+  MA_CROSSOVER) keys per-indicator data everywhere else. `BacktestHarness`
+  gained genuinely new capability — per-indicator scoring, independent of the
+  combined rule table's matched rule/hold-term, using the existing E8-F2-S1
+  TP/SL-aware `findFirstCrossing`/`score` walk-forward scan bounded by the
+  existing `BacktestConfig.HOLD_REFERENCE_HORIZON_DAYS` (5 days, reused
+  rather than adding a second fixed-horizon constant, confirmed with the
+  user) — accumulated into a new single-checkpoint `IndicatorAccumulator`
+  (no MIN/MID/MAX split, since a lone indicator has no rule-derived hold
+  term) reusing the existing `CheckpointStats` shape unchanged, surfaced as
+  `BacktestReport.indicatorStats` and a new `printIndicatorExpectancy` block.
+  `WeightedVoteRuleEngine.IndicatorWeights` is `weight_i = max(0,
+  expectancyPctAfterCosts_i)` (confirmed with the user: after-costs, not raw
+  expectancy, so a weight already reflects real trading friction) — `DEFAULT`
+  is computed, not guessed, from a new `IndicatorExpectancyCalibrationTest`
+  run against the real checked-in BTCUSDT/DOGEUSDT fixtures, combined
+  call-count-weighted across both (reusing `BacktestHarness.combineCheckpoint`,
+  relaxed from `private` to package-private for the test, same precedent as
+  E8-F2-S1's `score`/`findFirstCrossing`). The actual computed finding: under
+  this fixed 5-day/5%-TP/3%-SL scoring, all three indicators' combined
+  after-cost expectancy came back *negative* (RSI -0.728%, MACD -0.039%,
+  MA-crossover -0.131% — stop-loss hits substantially outnumber take-profit
+  hits for every indicator at this short a horizon), so `IndicatorWeights.
+  DEFAULT` is `(0.000, 0.000, 0.000)` — every weight floors to zero. This is
+  a real result, not a bug: a new `WeightedVoteBacktestTest` A/B-replays both
+  engines through the same walk-forward machinery (a new `BacktestHarness.
+  RuleEvaluator` functional interface + a `run(label, candles, evaluator,
+  thresholds)` overload, so any 5-arg-shaped rule engine can be swapped in)
+  and confirms that with `DEFAULT`, the weighted engine calls `NO_STRONG_
+  SIGNAL` on every single decision point in both fixtures (BULLISH_UNANIMOUS/
+  BEARISH_UNANIMOUS never occur in this data either — all three indicators
+  never agree simultaneously — so the "always-reachable-regardless-of-weight"
+  UNANIMOUS branch never fires, and majority is unreachable with zero total
+  weight). Rather than let a naive `weightedSum >= totalWeight * fraction`
+  comparison vacuously read `0 >= 0` as true and "promote" every lone/
+  majority vote once every weight is zero, `evaluate` explicitly guards
+  `totalWeight.signum() <= 0` before the majority comparison. The story's
+  actual intended mechanism — a dominant lone/2-of-3 indicator promoting a
+  call the unweighted table would call `NO_STRONG_SIGNAL`, and a low-weight
+  one still failing to — is proven independently in `WeightedVoteRuleEngineTest`
+  using non-default injected weights (the constructor-level `evaluate`
+  overload, mirroring `RuleThresholds`'s pattern), since `DEFAULT`'s own
+  current calibration can't currently exercise it; `evaluateUnweighted` (pure
+  delegation to `SignalRuleEngine.evaluate`) is verified to match exactly
+  across every `SignalRuleEngineTest` branch — the literal "fallback/
+  comparison mode" the AC asks for. All three safety gates and the conflict/
+  dissent gate are unchanged from `SignalRuleEngine` (reused via
+  `computeVotes`, not duplicated); all-three-agree resolves UNANIMOUS off the
+  raw 3-of-3 count rather than a weight comparison, specifically so one
+  zero-weighted indicator agreeing alongside the other two can never
+  vacuously read as clearing the UNANIMOUS bar with only 2 real votes.
+  `WEIGHTED_MAJORITY_FRACTION` (0.5 of total weight) is an explicit,
+  documented uncalibrated placeholder, same treatment as `BacktestConfig.
+  TAKE_PROFIT_PCT`. Explicitly provisional pending E8-F4-S1's out-of-sample
+  validation — both fixtures are this calibration's only tuning data, the
+  same caveat `ThresholdCalibrationTest` (E8-F1-S1) already documents.
+  Backend, `src/main/java` for `IndicatorId`/`WeightedVoteRuleEngine` (new,
+  unwired classes) plus the `computeVotes` extraction inside
+  `SignalRuleEngine` (no behavior change), `src/test/java` for everything
+  else — no `SignalService`/`OrderService`/`PlaceOrderRequest` changes.
 
 ## Build / lint / test
 
@@ -559,7 +628,11 @@ rest of E8 (E8-F3 through E8-F5) is not yet started.
   `IndicatorService`/`IndicatorSnapshot` persistence.
 - `signal` — `SignalRuleEngine` (versioned rule table, safety gates + 2-of-3
   directional vote → BUY/SELL/HOLD), `HoldTermCalculator` (versioned day-range
-  table), `SignalCallEntry` audit log.
+  table), `SignalCallEntry` audit log. `WeightedVoteRuleEngine` (E8-F3-S1) is
+  an alternative, deliberately **unwired** weighted-vote scoring layer —
+  reuses `SignalRuleEngine.computeVotes`/`IndicatorVotes`, not called by
+  `SignalService`/`OrderService`. `IndicatorId` (RSI/MACD/MA_CROSSOVER) keys
+  per-indicator data for both.
 - `broker` — `BrokerCredentialService`/`CredentialEncryptionService` (keyring-based
   rotation), per-broker credential bootstraps from env vars.
 - `brokeradapter` — `BrokerAdapter` interface, `RetryingBrokerAdapter` decorator

@@ -1,6 +1,7 @@
 package com.autotrade.dashboard.backtest;
 
 import com.autotrade.dashboard.signal.HoldTermCalculator;
+import com.autotrade.dashboard.signal.IndicatorId;
 import com.autotrade.dashboard.signal.SignalRuleEngine;
 import com.autotrade.dashboard.signal.SignalRuleId;
 
@@ -11,15 +12,18 @@ import java.util.Map;
 /**
  * Aggregate result of one {@link BacktestHarness#run} call: raw call frequency per rule,
  * directional win/loss/expectancy stats (E2-F4-S1/E2-F4-S2) for the four BUY/SELL rules (plus an
- * "overall BUY"/"overall SELL" roll-up combining UNANIMOUS+MAJORITY), and hold-gate large-move
- * stats for the five HOLD rules.
+ * "overall BUY"/"overall SELL" roll-up combining UNANIMOUS+MAJORITY), hold-gate large-move stats
+ * for the five HOLD rules, and each individual indicator's own directional-read expectancy
+ * (E8-F3-S1's {@code indicatorStats}) — the evidence {@code WeightedVoteRuleEngine.IndicatorWeights}
+ * is calibrated from.
  */
 public record BacktestReport(String label, int totalCandles, int totalDecisionPoints,
                               Map<SignalRuleId, Integer> callCounts,
                               Map<SignalRuleId, DirectionalOutcomeStats> directionalStats,
                               DirectionalOutcomeStats overallBuy, DirectionalOutcomeStats overallSell,
                               Map<SignalRuleId, HoldGateStats> holdGateStats,
-                              List<BacktestDecisionPoint> buySellDecisionPoints) {
+                              List<BacktestDecisionPoint> buySellDecisionPoints,
+                              Map<IndicatorId, CheckpointStats> indicatorStats) {
 
     private static final List<SignalRuleId> DIRECTIONAL_RULES = List.of(SignalRuleId.BULLISH_UNANIMOUS,
             SignalRuleId.BULLISH_MAJORITY, SignalRuleId.BEARISH_UNANIMOUS, SignalRuleId.BEARISH_MAJORITY);
@@ -65,6 +69,23 @@ public record BacktestReport(String label, int totalCandles, int totalDecisionPo
             String maxExit = point.maxResult().map(r -> r.exitReason().name()).orElse("-");
             out.printf("  %-25s %-8d %-22s %-12s %s%n", point.date(), point.index(), point.matchedRule(),
                     point.holdTerm() == null ? "-" : point.holdTerm().label(), maxExit);
+        }
+
+        printIndicatorExpectancy(out);
+    }
+
+    /** E8-F3-S1: each indicator's own directional-read win rate/expectancy, scored independently
+     * of which combined rule (if any) matched — the per-indicator evidence a weighted vote's
+     * weights are calibrated from. Reuses {@link #printCheckpoint}'s single-line format. */
+    private void printIndicatorExpectancy(PrintStream out) {
+        out.println();
+        out.printf("Per-indicator expectancy (own directional read, %d-day reference horizon, deadband +/-%s%%, round-trip cost %sbps):%n",
+                BacktestConfig.HOLD_REFERENCE_HORIZON_DAYS, BacktestConfig.WIN_LOSS_DEADBAND_PCT,
+                BacktestConfig.TRANSACTION_COST_BPS);
+        for (IndicatorId indicatorId : IndicatorId.values()) {
+            CheckpointStats stats = indicatorStats.get(indicatorId);
+            out.printf("  %-22s (n=%d)%n", indicatorId, stats.win() + stats.loss() + stats.wash() + stats.notScored());
+            printCheckpoint(out, "  -", stats);
         }
     }
 

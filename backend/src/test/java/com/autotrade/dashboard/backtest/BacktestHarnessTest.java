@@ -1,6 +1,7 @@
 package com.autotrade.dashboard.backtest;
 
 import com.autotrade.dashboard.marketdata.Candle;
+import com.autotrade.dashboard.signal.IndicatorId;
 import com.autotrade.dashboard.signal.SignalCall;
 import com.autotrade.dashboard.signal.SignalRuleId;
 import org.junit.jupiter.api.Test;
@@ -62,6 +63,10 @@ class BacktestHarnessTest {
         }
         assertExpectancySignsAreSane("Overall BUY", report.overallBuy());
         assertExpectancySignsAreSane("Overall SELL", report.overallSell());
+
+        for (IndicatorId indicatorId : IndicatorId.values()) {
+            assertCheckpointStatsAreSane(indicatorId.name(), report.indicatorStats().get(indicatorId));
+        }
     }
 
     /**
@@ -78,16 +83,27 @@ class BacktestHarnessTest {
         for (Checkpoint checkpoint : Checkpoint.values()) {
             CheckpointStats cp = checkpoint == Checkpoint.MIN ? stats.min()
                     : checkpoint == Checkpoint.MID ? stats.mid() : stats.max();
-            if (cp.win() > 0) {
-                assertTrue(cp.avgWinReturnPct() > 0, label + " " + checkpoint + ": avg win size must be positive");
-            }
-            if (cp.loss() > 0) {
-                assertTrue(cp.avgLossReturnPct() < 0, label + " " + checkpoint + ": avg loss size must be negative");
-            }
-            assertEquals(cp.scored(), cp.tpHit() + cp.slHit() + cp.horizonExpired(),
-                    label + " " + checkpoint + ": tpHit+slHit+horizonExpired must partition scored()");
-            assertTrue(cp.expectancyPctAfterCosts() <= cp.expectancyPct(),
-                    label + " " + checkpoint + ": after-cost expectancy must never exceed raw expectancy");
+            assertCheckpointStatsAreSane(label + " " + checkpoint, cp);
         }
+    }
+
+    /**
+     * E8-F3-S1: the same structural invariants above, factored out so they can be reapplied to
+     * {@code BacktestReport.indicatorStats()} — a single {@link CheckpointStats} per indicator
+     * (no MIN/MID/MAX split, since a lone indicator's read has no rule-derived hold term to
+     * bracket a range with), not just the three checkpoints of a combined rule's {@link
+     * DirectionalOutcomeStats}.
+     */
+    private void assertCheckpointStatsAreSane(String label, CheckpointStats cp) {
+        if (cp.win() > 0) {
+            assertTrue(cp.avgWinReturnPct() > 0, label + ": avg win size must be positive");
+        }
+        if (cp.loss() > 0) {
+            assertTrue(cp.avgLossReturnPct() < 0, label + ": avg loss size must be negative");
+        }
+        assertEquals(cp.scored(), cp.tpHit() + cp.slHit() + cp.horizonExpired(),
+                label + ": tpHit+slHit+horizonExpired must partition scored()");
+        assertTrue(cp.expectancyPctAfterCosts() <= cp.expectancyPct(),
+                label + ": after-cost expectancy must never exceed raw expectancy");
     }
 }

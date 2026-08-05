@@ -50,7 +50,33 @@ public final class SignalRuleEngine {
                 RSI_OVERBOUGHT_THRESHOLD, VOLATILITY_EXTREME_THRESHOLD, VOLUME_DRIED_UP_THRESHOLD);
     }
 
+    /**
+     * The three indicators' bullish/bearish reads (E8-F3-S1), extracted out of {@link #evaluate}
+     * so both this class's own unweighted vote-counting and {@link WeightedVoteRuleEngine}'s
+     * weighted vote share the exact same "what counts as a bullish/bearish read" logic — one
+     * source of truth, not two copies that could quietly drift apart. Public (not just
+     * package-private) because {@code BacktestHarness} (a different package, under
+     * {@code com.autotrade.dashboard.backtest}) also needs it to score each indicator's own
+     * directional read independently, per that story's AC.
+     */
+    public record IndicatorVotes(boolean rsiBullish, boolean rsiBearish, boolean macdBullish, boolean macdBearish,
+                                  boolean maBullish, boolean maBearish) {
+    }
+
     private SignalRuleEngine() {
+    }
+
+    /** Computes each indicator's bullish/bearish read against {@code thresholds}, with no gating
+     * or vote-counting applied — a pure per-indicator classification. See {@link IndicatorVotes}. */
+    public static IndicatorVotes computeVotes(BigDecimal rsi, MacdResult macd, MovingAverageResult movingAverage,
+                                               RuleThresholds thresholds) {
+        boolean rsiBullish = rsi.compareTo(thresholds.rsiOversold()) < 0;
+        boolean rsiBearish = rsi.compareTo(thresholds.rsiOverbought()) > 0;
+        boolean macdBullish = macd.histogram().signum() > 0;
+        boolean macdBearish = macd.histogram().signum() < 0;
+        boolean maBullish = movingAverage.relation() == MovingAverageRelation.SHORT_ABOVE_LONG;
+        boolean maBearish = movingAverage.relation() == MovingAverageRelation.SHORT_BELOW_LONG;
+        return new IndicatorVotes(rsiBullish, rsiBearish, macdBullish, macdBearish, maBullish, maBearish);
     }
 
     public static SignalRuleId evaluate(BigDecimal rsi, MacdResult macd, MovingAverageResult movingAverage,
@@ -70,15 +96,10 @@ public final class SignalRuleEngine {
             return SignalRuleId.VOLATILITY_TOO_EXTREME;
         }
 
-        boolean rsiBullish = rsi.compareTo(thresholds.rsiOversold()) < 0;
-        boolean rsiBearish = rsi.compareTo(thresholds.rsiOverbought()) > 0;
-        boolean macdBullish = macd.histogram().signum() > 0;
-        boolean macdBearish = macd.histogram().signum() < 0;
-        boolean maBullish = movingAverage.relation() == MovingAverageRelation.SHORT_ABOVE_LONG;
-        boolean maBearish = movingAverage.relation() == MovingAverageRelation.SHORT_BELOW_LONG;
+        IndicatorVotes votes = computeVotes(rsi, macd, movingAverage, thresholds);
 
-        int bullishCount = count(rsiBullish, macdBullish, maBullish);
-        int bearishCount = count(rsiBearish, macdBearish, maBearish);
+        int bullishCount = count(votes.rsiBullish(), votes.macdBullish(), votes.maBullish());
+        int bearishCount = count(votes.rsiBearish(), votes.macdBearish(), votes.maBearish());
 
         if (bullishCount > 0 && bearishCount > 0) {
             return SignalRuleId.CONFLICTING_SIGNALS;
