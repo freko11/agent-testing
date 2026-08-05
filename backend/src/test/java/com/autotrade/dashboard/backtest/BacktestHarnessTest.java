@@ -69,6 +69,10 @@ class BacktestHarnessTest {
      * classification winRate() already reports (win = signedReturnPct > deadband, loss =
      * signedReturnPct < -deadband), so their sign is a structural invariant, not a value under
      * review — an average of strictly-positive numbers can't come out <= 0, and vice versa.
+     *
+     * <p>E8-F2-S1 adds: tpHit/slHit/horizonExpired always partition scored() exactly (every
+     * scored call has exactly one exit reason), by construction of {@code
+     * DirectionalAccumulator.record} tallying exactly one {@code ExitReason} per result.
      */
     private void assertExpectancySignsAreSane(String label, DirectionalOutcomeStats stats) {
         for (Checkpoint checkpoint : Checkpoint.values()) {
@@ -80,6 +84,8 @@ class BacktestHarnessTest {
             if (cp.loss() > 0) {
                 assertTrue(cp.avgLossReturnPct() < 0, label + " " + checkpoint + ": avg loss size must be negative");
             }
+            assertEquals(cp.scored(), cp.tpHit() + cp.slHit() + cp.horizonExpired(),
+                    label + " " + checkpoint + ": tpHit+slHit+horizonExpired must partition scored()");
         }
     }
 }

@@ -22,8 +22,8 @@ Order API migration) added after E4-F3-S2's post-launch verification found
 Binance rejecting conditional exit-leg orders on the old endpoint — see
 that story's entry below, live-verified end-to-end against the real
 Binance Futures Testnet. E8 (Signal Quality & Quant Rigor) is a backlog
-epic added after E7 shipped; E8-F1-S1 is done, the rest of E8 (E8-F2
-through E8-F5) is not yet started.
+epic added after E7 shipped; E8-F1-S1 and E8-F2-S1 are done, the rest of
+E8 (E8-F2-S2 through E8-F5) is not yet started.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -445,6 +445,51 @@ through E8-F5) is not yet started.
   fixtures were both the tuning set and the only evidence used here — no
   train/held-out split was attempted, since that's E8-F4-S1's own AC to
   close, not preempted here.
+- E8-F2-S1: TP/SL-aware backtest scoring. `BacktestHarness` now runs a
+  day-by-day walk-forward scan (`findFirstCrossing`) per BUY/SELL decision
+  point, checking each candle's high/low against a take-profit/stop-loss
+  price before falling back to the existing fixed-day MIN/MID/MAX endpoint
+  scoring — so reported win rate/expectancy reflects what a real bracket
+  order would have realized (an early TP/SL exit), not just the forward
+  price at an arbitrary day count. New `BacktestConfig.TAKE_PROFIT_PCT`/
+  `STOP_LOSS_PCT` (5%/3%, harness-only diagnostic constants, same treatment
+  as this file's other backtest-only thresholds) since neither the signal
+  path nor `PlaceOrderRequest` (E5-F2-S1's free-form user-entered TP/SL
+  prices) had anything to derive a percentage from — confirmed with the
+  user before implementation as an explicitly uncalibrated placeholder, not
+  data-backed. New `ExitReason` enum (`TP_HIT`/`SL_HIT`/`HORIZON_EXPIRED`)
+  threaded through `DirectionalScoreResult`, new `tpHit`/`slHit`/
+  `horizonExpired` counts on `CheckpointStats`, and `minResult`/`midResult`/
+  `maxResult` on `BacktestDecisionPoint` for the spot-check table.
+  Per-checkpoint-bound design (confirmed with the user over the AC's
+  ambiguity): the shared crossing scan is bounded by `holdTerm.maxDays()`,
+  but each of MIN/MID/MAX only adopts that crossing if it happened at or
+  before that checkpoint's own day — so an early TP hit doesn't collapse
+  all three checkpoints to an identical result, preserving E2-F4-S1's point
+  of comparing the hold-term range itself. Same-day tie-break (a daily OHLC
+  bar can't say which of high/low happened first intraday) resolves
+  conservatively to stop-loss. New `BacktestHarnessTpSlTest` with
+  hand-crafted synthetic candles pins the crossing algorithm down exactly
+  (TP hit, SL hit, same-day tie, horizon-expired fallback, per-checkpoint
+  bound) — the two real BTCUSDT/DOGEUSDT fixtures can't provide ground
+  truth for this, only evidence under review, so `score`/`findFirstCrossing`
+  were relaxed from `private` to package-private specifically to make this
+  test possible. `BacktestHarnessTest`/`ThresholdCalibrationTest` gained a
+  new structural invariant (`tpHit+slHit+horizonExpired` partitions
+  `scored()` exactly); `ThresholdCalibrationTest` itself needed no other
+  changes since it only calls `CheckpointStats` accessor methods. Backend,
+  `src/test/java`-only, same precedent as E2-F4-S1/S2 and E8-F1-S1 — no
+  `SignalRuleEngine`/`RULE_TABLE_VERSION`/`OrderService`/`PlaceOrderRequest`
+  changes. Live run against the real fixtures found nearly every scored
+  BUY/SELL call at the MAX checkpoint now resolves via an early TP/SL
+  crossing rather than the fixed horizon (e.g. DOGEUSDT BULLISH_MAJORITY's
+  max checkpoint: `avgWinReturnPct`/`avgLossReturnPct` land almost exactly
+  on +5.00%/-3.00%, with `horizonExpired=0` of 179 scored) — the old
+  fixed-day endpoint scoring was systematically letting winners run past
+  (and losers fall past) where a real bracket order would have already
+  closed the position, so this is a materially different, more realistic
+  measurement than E2-F4-S1/S2's, not just a refinement. E8-F2-S2
+  (transaction costs) is a separate follow-up story, not implemented here.
 
 ## Build / lint / test
 

@@ -58,11 +58,13 @@ public record BacktestReport(String label, int totalCandles, int totalDecisionPo
         }
 
         out.println();
-        out.println("BUY/SELL decision points (spot-check detail):");
-        out.printf("  %-25s %-8s %-22s %s%n", "date", "index", "matchedRule", "holdTerm");
+        out.printf("BUY/SELL decision points (spot-check detail, exit reason at max checkpoint, TP/SL +%s%%/-%s%%):%n",
+                BacktestConfig.TAKE_PROFIT_PCT, BacktestConfig.STOP_LOSS_PCT);
+        out.printf("  %-25s %-8s %-22s %-12s %s%n", "date", "index", "matchedRule", "holdTerm", "maxExit");
         for (BacktestDecisionPoint point : buySellDecisionPoints) {
-            out.printf("  %-25s %-8d %-22s %s%n", point.date(), point.index(), point.matchedRule(),
-                    point.holdTerm() == null ? "-" : point.holdTerm().label());
+            String maxExit = point.maxResult().map(r -> r.exitReason().name()).orElse("-");
+            out.printf("  %-25s %-8d %-22s %-12s %s%n", point.date(), point.index(), point.matchedRule(),
+                    point.holdTerm() == null ? "-" : point.holdTerm().label(), maxExit);
         }
     }
 
@@ -78,8 +80,9 @@ public record BacktestReport(String label, int totalCandles, int totalDecisionPo
     }
 
     private void printCheckpoint(PrintStream out, String checkpointLabel, CheckpointStats cp) {
-        out.printf("    %-3s %5.1f%% win (%d scored) | avg win %+6.2f%% | avg loss %+6.2f%% | expectancy %+6.3f%%%n",
+        out.printf("    %-3s %5.1f%% win (%d scored) | avg win %+6.2f%% | avg loss %+6.2f%% | expectancy %+6.3f%%"
+                        + " | tpHit=%d slHit=%d horizonExpired=%d%n",
                 checkpointLabel, cp.winRate(), cp.scored(), cp.avgWinReturnPct(), cp.avgLossReturnPct(),
-                cp.expectancyPct());
+                cp.expectancyPct(), cp.tpHit(), cp.slHit(), cp.horizonExpired());
     }
 }

@@ -22,6 +22,20 @@ public final class BacktestConfig {
     /** A forward move (absolute value) beyond this over the reference horizon counts as "large". */
     public static final BigDecimal LARGE_MOVE_THRESHOLD_PCT = new BigDecimal("3.0");
 
+    /**
+     * Take-profit / stop-loss distance (percent of decision-close price) the day-by-day
+     * walk-forward scan (E8-F2-S1) checks each candle's high/low against. Unlike this class's
+     * other constants, these aren't derived from anything in the signal or order path: {@code
+     * PlaceOrderRequest.takeProfitPrice}/{@code stopLossPrice} are free-form user-entered
+     * absolute prices with no percentage relationship to the signal, and neither the frontend
+     * trade form nor the rule table suggests a default. These are a representative,
+     * deliberately uncalibrated placeholder bracket (5% target / 3% stop) — the same treatment
+     * as this file's other harness-only diagnostic thresholds, pending a future calibration
+     * pass akin to E8-F1-S1's threshold sweep.
+     */
+    public static final BigDecimal TAKE_PROFIT_PCT = new BigDecimal("5.0");
+    public static final BigDecimal STOP_LOSS_PCT = new BigDecimal("3.0");
+
     private BacktestConfig() {
     }
 }

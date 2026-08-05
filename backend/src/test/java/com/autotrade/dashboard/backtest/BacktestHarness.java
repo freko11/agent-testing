@@ -91,12 +91,17 @@ public final class BacktestHarness {
                 boolean isBuy = matchedRule.call() == SignalCall.BUY;
                 int midDays = (int) Math.round((holdTerm.minDays() + holdTerm.maxDays()) / 2.0);
 
-                acc.record(Checkpoint.MIN, score(candles, i, holdTerm.minDays(), decisionClose, isBuy));
-                acc.record(Checkpoint.MID, score(candles, i, midDays, decisionClose, isBuy));
-                acc.record(Checkpoint.MAX, score(candles, i, holdTerm.maxDays(), decisionClose, isBuy));
+                Optional<CrossingEvent> crossing = findFirstCrossing(candles, i, holdTerm.maxDays(), decisionClose, isBuy);
+                Optional<DirectionalScoreResult> minResult = score(candles, i, holdTerm.minDays(), decisionClose, isBuy, crossing);
+                Optional<DirectionalScoreResult> midResult = score(candles, i, midDays, decisionClose, isBuy, crossing);
+                Optional<DirectionalScoreResult> maxResult = score(candles, i, holdTerm.maxDays(), decisionClose, isBuy, crossing);
+
+                acc.record(Checkpoint.MIN, minResult);
+                acc.record(Checkpoint.MID, midResult);
+                acc.record(Checkpoint.MAX, maxResult);
 
                 buySellPoints.add(new BacktestDecisionPoint(i, candles.get(i).timestamp(), rsi, macd.histogram(),
-                        volatility, volumeTrend, matchedRule, holdTerm));
+                        volatility, volumeTrend, matchedRule, holdTerm, minResult, midResult, maxResult));
             } else {
                 HoldGateAccumulator acc = holdGate.get(matchedRule);
                 acc.totalCalls++;
@@ -118,9 +123,22 @@ public final class BacktestHarness {
                 overallSell, holdGateStats, buySellPoints);
     }
 
-    /** @return empty if {@code daysForward} candles past the decision point don't exist in the fixture. */
-    private static Optional<DirectionalScoreResult> score(List<Candle> candles, int decisionIndex, int daysForward,
-                                                            BigDecimal decisionClose, boolean isBuy) {
+    /**
+     * @param crossing this decision point's shared TP/SL scan result (E8-F2-S1), if any — applied
+     *                  to this checkpoint only when it occurred at or before {@code daysForward},
+     *                  so an early crossing doesn't collapse MIN/MID/MAX to identical results.
+     * @return empty if {@code daysForward} candles past the decision point don't exist in the
+     *         fixture and no TP/SL crossing within {@code daysForward} resolved it first.
+     */
+    static Optional<DirectionalScoreResult> score(List<Candle> candles, int decisionIndex, int daysForward,
+                                                    BigDecimal decisionClose, boolean isBuy,
+                                                    Optional<CrossingEvent> crossing) {
+        if (crossing.isPresent() && crossing.get().daysForward() <= daysForward) {
+            CrossingEvent event = crossing.get();
+            DirectionalOutcome outcome = event.exitReason() == ExitReason.TP_HIT ? DirectionalOutcome.WIN : DirectionalOutcome.LOSS;
+            return Optional.of(new DirectionalScoreResult(outcome, event.signedReturnPct(), event.exitReason()));
+        }
+
         int futureIndex = decisionIndex + daysForward;
         if (futureIndex >= candles.size()) {
             return Optional.empty();
@@ -131,7 +149,47 @@ public final class BacktestHarness {
         DirectionalOutcome outcome = signedForCall.abs().compareTo(BacktestConfig.WIN_LOSS_DEADBAND_PCT) <= 0
                 ? DirectionalOutcome.WASH
                 : (signedForCall.signum() > 0 ? DirectionalOutcome.WIN : DirectionalOutcome.LOSS);
-        return Optional.of(new DirectionalScoreResult(outcome, signedForCall));
+        return Optional.of(new DirectionalScoreResult(outcome, signedForCall, ExitReason.HORIZON_EXPIRED));
+    }
+
+    /**
+     * Day-by-day walk-forward scan (E8-F2-S1) for the first day, within {@code maxDaysForward} of
+     * the decision point, whose high/low crosses the take-profit or stop-loss price implied by
+     * {@link BacktestConfig#TAKE_PROFIT_PCT}/{@link BacktestConfig#STOP_LOSS_PCT}. Runs once per
+     * decision point and is then applied to each {@link Checkpoint} independently by {@link
+     * #score}, bounded by that checkpoint's own day count.
+     *
+     * <p>A single daily OHLC bar can't say whether the high or low happened first intraday — if
+     * both TP and SL cross on the same day, stop-loss wins (the conservative assumption).
+     */
+    static Optional<CrossingEvent> findFirstCrossing(List<Candle> candles, int decisionIndex,
+                                                       int maxDaysForward, BigDecimal decisionClose,
+                                                       boolean isBuy) {
+        BigDecimal tpDistance = decisionClose.multiply(BacktestConfig.TAKE_PROFIT_PCT)
+                .divide(BigDecimal.valueOf(100), 8, RoundingMode.HALF_UP);
+        BigDecimal slDistance = decisionClose.multiply(BacktestConfig.STOP_LOSS_PCT)
+                .divide(BigDecimal.valueOf(100), 8, RoundingMode.HALF_UP);
+        BigDecimal tpPrice = isBuy ? decisionClose.add(tpDistance) : decisionClose.subtract(tpDistance);
+        BigDecimal slPrice = isBuy ? decisionClose.subtract(slDistance) : decisionClose.add(slDistance);
+
+        int lastIndex = Math.min(decisionIndex + maxDaysForward, candles.size() - 1);
+        for (int i = decisionIndex + 1; i <= lastIndex; i++) {
+            Candle candle = candles.get(i);
+            boolean slHit = isBuy ? candle.low().compareTo(slPrice) <= 0 : candle.high().compareTo(slPrice) >= 0;
+            if (slHit) {
+                return Optional.of(new CrossingEvent(i - decisionIndex, ExitReason.SL_HIT, BacktestConfig.STOP_LOSS_PCT.negate()));
+            }
+            boolean tpHit = isBuy ? candle.high().compareTo(tpPrice) >= 0 : candle.low().compareTo(tpPrice) <= 0;
+            if (tpHit) {
+                return Optional.of(new CrossingEvent(i - decisionIndex, ExitReason.TP_HIT, BacktestConfig.TAKE_PROFIT_PCT));
+            }
+        }
+        return Optional.empty();
+    }
+
+    /** One decision point's shared TP/SL scan result: how many days forward it resolved, which
+     * side crossed first, and the signed return (in call-direction terms) that side represents. */
+    record CrossingEvent(int daysForward, ExitReason exitReason, BigDecimal signedReturnPct) {
     }
 
     private static Optional<HoldGateOutcome> scoreHoldGate(List<Candle> candles, int decisionIndex, BigDecimal decisionClose) {
@@ -158,12 +216,14 @@ public final class BacktestHarness {
         int loss = a.loss() + b.loss();
         double avgWin = win == 0 ? 0.0 : (a.avgWinReturnPct() * a.win() + b.avgWinReturnPct() * b.win()) / win;
         double avgLoss = loss == 0 ? 0.0 : (a.avgLossReturnPct() * a.loss() + b.avgLossReturnPct() * b.loss()) / loss;
-        return new CheckpointStats(win, loss, a.wash() + b.wash(), a.notScored() + b.notScored(), avgWin, avgLoss);
+        return new CheckpointStats(win, loss, a.wash() + b.wash(), a.notScored() + b.notScored(), avgWin, avgLoss,
+                a.tpHit() + b.tpHit(), a.slHit() + b.slHit(), a.horizonExpired() + b.horizonExpired());
     }
 
     private static final class DirectionalAccumulator {
         int totalCalls;
         final Map<Checkpoint, EnumMap<DirectionalOutcome, Integer>> outcomeCounts = new EnumMap<>(Checkpoint.class);
+        final Map<Checkpoint, EnumMap<ExitReason, Integer>> exitReasonCounts = new EnumMap<>(Checkpoint.class);
         final Map<Checkpoint, Integer> notScoredCounts = new EnumMap<>(Checkpoint.class);
         final Map<Checkpoint, BigDecimal> winReturnSums = new EnumMap<>(Checkpoint.class);
         final Map<Checkpoint, BigDecimal> lossReturnSums = new EnumMap<>(Checkpoint.class);
@@ -175,6 +235,11 @@ public final class BacktestHarness {
                     counts.put(outcome, 0);
                 }
                 outcomeCounts.put(checkpoint, counts);
+                EnumMap<ExitReason, Integer> reasons = new EnumMap<>(ExitReason.class);
+                for (ExitReason reason : ExitReason.values()) {
+                    reasons.put(reason, 0);
+                }
+                exitReasonCounts.put(checkpoint, reasons);
                 notScoredCounts.put(checkpoint, 0);
                 winReturnSums.put(checkpoint, BigDecimal.ZERO);
                 lossReturnSums.put(checkpoint, BigDecimal.ZERO);
@@ -188,6 +253,7 @@ public final class BacktestHarness {
             }
             DirectionalScoreResult scoreResult = result.get();
             outcomeCounts.get(checkpoint).merge(scoreResult.outcome(), 1, Integer::sum);
+            exitReasonCounts.get(checkpoint).merge(scoreResult.exitReason(), 1, Integer::sum);
             if (scoreResult.outcome() == DirectionalOutcome.WIN) {
                 winReturnSums.merge(checkpoint, scoreResult.signedReturnPct(), BigDecimal::add);
             } else if (scoreResult.outcome() == DirectionalOutcome.LOSS) {
@@ -206,8 +272,10 @@ public final class BacktestHarness {
             int loss = counts.get(DirectionalOutcome.LOSS);
             double avgWin = win == 0 ? 0.0 : winReturnSums.get(checkpoint).doubleValue() / win;
             double avgLoss = loss == 0 ? 0.0 : lossReturnSums.get(checkpoint).doubleValue() / loss;
+            EnumMap<ExitReason, Integer> reasons = exitReasonCounts.get(checkpoint);
             return new CheckpointStats(win, loss, counts.get(DirectionalOutcome.WASH), notScoredCounts.get(checkpoint),
-                    avgWin, avgLoss);
+                    avgWin, avgLoss, reasons.get(ExitReason.TP_HIT), reasons.get(ExitReason.SL_HIT),
+                    reasons.get(ExitReason.HORIZON_EXPIRED));
         }
     }
 

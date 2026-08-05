@@ -156,6 +156,8 @@ class ThresholdCalibrationTest {
             if (cp.loss() > 0) {
                 assertTrue(cp.avgLossReturnPct() < 0, label + " " + checkpoint + ": avg loss size must be negative");
             }
+            assertEquals(cp.scored(), cp.tpHit() + cp.slHit() + cp.horizonExpired(),
+                    label + " " + checkpoint + ": tpHit+slHit+horizonExpired must partition scored()");
         }
     }
 }

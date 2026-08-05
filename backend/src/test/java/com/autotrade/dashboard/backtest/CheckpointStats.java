@@ -12,9 +12,14 @@ package com.autotrade.dashboard.backtest;
  * {@link #winRate()}) — a near-coin-flip win rate can still be profitable if wins run bigger than
  * losses, which win rate alone can't show. WASH calls contribute zero to both, matching
  * {@link #expectancyPct()} treating a wash as a zero-return outcome.
+ *
+ * <p>{@code tpHit}/{@code slHit}/{@code horizonExpired} (E8-F2-S1) partition the same {@code
+ * scored()} calls by {@link ExitReason} — a decision point resolved by a take-profit/stop-loss
+ * crossing before this checkpoint's day, vs. one that fell back to the fixed-day endpoint scoring
+ * this checkpoint used prior to E8-F2-S1. Always sums to {@code scored()}.
  */
 public record CheckpointStats(int win, int loss, int wash, int notScored, double avgWinReturnPct,
-                               double avgLossReturnPct) {
+                               double avgLossReturnPct, int tpHit, int slHit, int horizonExpired) {
 
     public int scored() {
         return win + loss + wash;

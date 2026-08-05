@@ -4294,3 +4294,129 @@ DOGE candles are ~$0.07, filenames match their contents correctly). The
 underlying test code and fixture data were never wrong, only that entry's written
 description. Left as-is rather than edited, to keep this story's diff scoped to
 its own AC — worth a correction pass if anyone revisits that entry.
+
+## E8-F2-S1 — TP/SL-aware backtest scoring
+
+E8-F2-S1 ("simulate whether a trade's actual TP/SL would be hit before its
+fixed hold-term checkpoint") is done. Design-gated via the `Plan` subagent
+before any code was written, per CLAUDE.md's mandatory workflow for
+backtest-harness changes.
+
+**The open design gap the plan had to resolve.** Nothing in this codebase had
+a take-profit/stop-loss *percentage* to backtest against. `PlaceOrderRequest`
+(E5-F2-S1) takes `takeProfitPrice`/`stopLossPrice` as free-form user-entered
+absolute `BigDecimal` prices with zero relationship to the signal, rule table,
+or hold-term — whatever the user types into the trade form. Confirmed by
+reading `TradeForm.tsx`/`validation.ts`: the frontend suggests no default or
+percentage either. So "simulate whether TP/SL would be hit" had nothing to
+simulate against until this story invented one.
+
+**Resolved via two `AskUserQuestion` confirmations before implementation**
+(the plan explicitly flagged both as judgment calls a reasonable engineer
+could disagree with):
+1. **TP/SL magnitude**: new `BacktestConfig.TAKE_PROFIT_PCT`/`STOP_LOSS_PCT`
+   constants (5%/3%), explicitly documented in Javadoc as an uncalibrated
+   placeholder — the same "harness-only diagnostic constant, not versioned
+   with `RULE_TABLE_VERSION`" treatment as this file's existing
+   `WIN_LOSS_DEADBAND_PCT`/`LARGE_MOVE_THRESHOLD_PCT`. Two other candidates
+   considered and rejected for now: a volatility/ATR-derived distance (more
+   realistic, but a whole new calibration surface with zero evidence to pick
+   an ATR multiplier from, and the AC doesn't ask for it) and a 2:1
+   reward/risk ratio (equally arbitrary, no more justified).
+2. **AC ambiguity — does one shared crossing result apply to all three
+   checkpoints, or does each checkpoint only count a crossing within its own
+   day bound?** Chose per-checkpoint-bound: the day-by-day scan
+   (`findFirstCrossing`) runs once per decision point, bounded by
+   `holdTerm.maxDays()`, but `score()` only applies that crossing to a given
+   `Checkpoint` if `crossing.daysForward() <= checkpoint's own daysForward`.
+   Rejected the alternative (one scan result applied identically to
+   MIN/MID/MAX) because it would collapse the three checkpoints to duplicate
+   rows whenever an early crossing happens, defeating E2-F4-S1's whole point
+   of comparing the hold-term range itself — confirmed this reading with the
+   user rather than silently picking one.
+
+**Implementation.** `BacktestHarness.findFirstCrossing(candles, decisionIndex,
+maxDaysForward, decisionClose, isBuy)` walks candles day-by-day from
+`decisionIndex + 1` to `min(decisionIndex + maxDaysForward, candles.size() -
+1)`, comparing each candle's high/low against a TP/SL price computed as
+`decisionClose ± (decisionClose * pct / 100)` (mirroring the sign flip
+`isBuy` already uses elsewhere in this file), returning the first day either
+side crosses as a package-private `CrossingEvent(daysForward, exitReason,
+signedReturnPct)` record. **Same-day tie-break**: a daily OHLC bar can't say
+whether the high or low happened first intraday, so if both TP and SL cross
+on the same day, stop-loss wins — the conservative assumption, checked before
+take-profit in the loop body. `score()` (also relaxed from `private` to
+package-private, see testing note below) now takes an `Optional<CrossingEvent>`
+parameter: if present and at-or-before this checkpoint's `daysForward`, it
+returns immediately with `TP_HIT ⟹ WIN` / `SL_HIT ⟹ LOSS` and the crossing's
+own signed return (no deadband applied — a genuine bracket exit is
+definitionally a real move, not a fuzzy classification) instead of the old
+"read one fixed future candle's close" logic, which now only runs as the
+fallback, tagged `ExitReason.HORIZON_EXPIRED`.
+
+**New/changed types**, all `backend/src/test/java/.../backtest/`:
+- New `ExitReason` enum: `TP_HIT`, `SL_HIT`, `HORIZON_EXPIRED`.
+- `DirectionalScoreResult` gained an `exitReason` field. Grepped first to
+  confirm it's constructed only inside `BacktestHarness.score()` — no
+  external call sites needed updating.
+- `CheckpointStats` gained `tpHit`/`slHit`/`horizonExpired` int counts,
+  parallel to the existing `win`/`loss`/`wash`/`notScored` — pure counts, no
+  averaging needed. Constructed in exactly two places
+  (`DirectionalAccumulator.statsFor()`, `combineCheckpoint()`), both updated;
+  `ThresholdCalibrationTest` only calls accessor methods so it compiled
+  unchanged.
+- `BacktestDecisionPoint` gained `minResult`/`midResult`/`maxResult`
+  (`Optional<DirectionalScoreResult>`) — the same three per-checkpoint
+  results already computed in `run()`, threaded through at zero extra
+  compute cost so the spot-check table can show exit reason at
+  decision-point granularity.
+- `BacktestReport.printTo()`: each checkpoint line now appends
+  `tpHit=N slHit=N horizonExpired=N`; the per-day spot-check table gained a
+  `maxExit` column (MAX-checkpoint's exit reason only, to keep the row width
+  sane per this class's existing "keep the report readable" javadoc — a
+  deliberate scope-reduction over showing all three checkpoints' reasons).
+
+**Testing.** The two real BTCUSDT/DOGEUSDT fixtures can't provide ground
+truth for the crossing algorithm itself — their win rate is evidence under
+review, not a value to assert exact outcomes against. So `score` and
+`findFirstCrossing` were relaxed from `private` to package-private
+specifically to make a new `BacktestHarnessTpSlTest` possible: hand-crafted
+synthetic `Candle` lists engineer a TP hit on a specific day, an SL hit on a
+specific day, a same-day tie (both cross — asserts SL wins), a
+neither-crosses horizon-expired fallback, and a BUY vs. SELL direction check,
+plus one test proving the per-checkpoint-bound behavior itself (a day-2
+crossing resolves the day-2+ checkpoint but leaves a day-1 checkpoint to fall
+back to its own endpoint scoring). `BacktestHarnessTest`/
+`ThresholdCalibrationTest` both gained the same new structural invariant
+(`tpHit + slHit + horizonExpired == scored()`, mirroring their existing
+avg-win/avg-loss sign-invariant style) rather than any hardcoded-value
+assertion, consistent with both files' existing "printed report is evidence
+under review" framing.
+
+**Live-verified against the real fixtures.** Rerunning `BacktestHarnessTest`
+shows nearly every scored BUY/SELL call at the MAX checkpoint now resolves
+via an early TP/SL crossing rather than the old fixed-day close: DOGEUSDT
+BULLISH_MAJORITY's max checkpoint moved from E8-F1-S1's baseline numbers to
+`avgWinReturnPct`/`avgLossReturnPct` landing almost exactly on
++5.00%/-3.00% (i.e. almost every win/loss at that checkpoint is now a TP/SL
+exit, not a horizon-expired one — `horizonExpired=0` of 179 scored calls).
+This is a materially different, more realistic measurement than E2-F4-S1/S2's
+original endpoint-only scoring, not just a cosmetic refinement — the old
+scoring was systematically letting a simulated "position" run past where a
+real bracket order would already have closed it, in both directions.
+
+**Scope boundaries, confirmed against precedent.** Backend,
+`src/test/java`-only — `BacktestHarness` and friends are never touched from
+`src/main`, matching E2-F4-S1/S2 and E8-F1-S1. No `SignalRuleEngine`,
+`HoldTermCalculator`, `RULE_TABLE_VERSION`/`HOLD_TERM_TABLE_VERSION`,
+`OrderService`, or `PlaceOrderRequest` changes — this doesn't touch the rule
+table or the live order path, only how the diagnostic backtest scores a
+decision point after the fact. `scoreHoldGate` (the HOLD-rule path)
+untouched — no direction/entry to size TP/SL against. E8-F2-S2 (transaction
+costs) is a separate follow-up story, not implemented here, though the
+crossing's exit-price computation point is the natural place a future bps
+deduction would plug in.
+
+`./mvnw test -Dtest=BacktestHarnessTest,ThresholdCalibrationTest,BacktestHarnessTpSlTest`
+(11 tests) and the full `./mvnw verify` (411 tests across 57 test classes, 0
+failures/errors, jar packaged) both pass clean. No frontend changes.
