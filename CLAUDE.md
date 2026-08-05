@@ -17,7 +17,9 @@ Testnet) with risk/safety guardrails (E6).
 ## Status
 
 All stories below are done, including E6 (Risk & Safety Controls) and E7
-(Observability & Hardening).
+(Observability & Hardening), except E4-F3-S3 (Binance Algo Order API
+migration), added to `docs/agile-plan.md` as backlog after E4-F3-S2's
+post-launch verification found it — see that story's entry below.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -101,6 +103,8 @@ All stories below are done, including E6 (Risk & Safety Controls) and E7
   change since this story was built, so every crypto bracket order's
   protective legs currently fail after retry (correctly surfaced as
   `PARTIALLY_PROTECTED`, not hidden). See `docs/CHANGELOG.md` for detail.
+  Tracked as backlog story E4-F3-S3 in `docs/agile-plan.md` (not yet
+  implemented — scoped, not built).
 
 ### E5 — Auto-Trade Execution
 - E5-F1-S1: Trade input form (amount, leverage, take-profit, stop-loss)

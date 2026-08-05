@@ -144,6 +144,7 @@ acceptance criteria so "done" isn't a judgment call.
 |---|---|---|---|
 | E4-F3-S1 | As a user, I want my Binance testnet account connected so crypto orders route through a simulated exchange. | Adapter authenticates with testnet keys; `getAccountStatus` returns balances. | 5 |
 | E4-F3-S2 | As a user, I want to place a leveraged order via Binance testnet so crypto trades support the same flow as stocks. | Order submitted with leverage param bounded by adapter limits; order ID returned, status pollable. | 8 |
+| E4-F3-S3 | As a user, I want a Binance crypto order's stop-loss/take-profit legs to actually place, so a leveraged position is never left unprotected because Binance changed how conditional orders are submitted. | Exit legs (`STOP_MARKET`/`TAKE_PROFIT_MARKET`) are submitted via Binance's Algo Order API (`POST/GET/DELETE /fapi/v1/algoOrder`, `algoType=CONDITIONAL`) instead of the now-rejected conditional-order path on `/fapi/v1/order`; a full bracket order (entry + both exit legs) fills and shows both legs protected end-to-end against the real Binance Futures Testnet, not just mocks. Found live during E4-F3-S2's post-launch verification — see `docs/CHANGELOG.md`'s "E4-F3-S2 follow-up" entry for the root cause and the entry-order precision bug fixed alongside it. | 3 |
 
 ### E5 — Auto-Trade Execution
 *The button: amount, leverage, TP/SL → a real order.*
