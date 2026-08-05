@@ -4420,3 +4420,120 @@ deduction would plug in.
 `./mvnw test -Dtest=BacktestHarnessTest,ThresholdCalibrationTest,BacktestHarnessTpSlTest`
 (11 tests) and the full `./mvnw verify` (411 tests across 57 test classes, 0
 failures/errors, jar packaged) both pass clean. No frontend changes.
+
+## E8-F2-S2 — transaction-cost-aware backtest expectancy
+
+E8-F2-S2 (transaction-cost-aware backtest scoring) is done, closing the
+follow-up E8-F2-S1 flagged. AC: "A configurable cost-per-trade (bps) is
+subtracted from every scored outcome; report shows expectancy with and
+without costs side by side." Design gate run first via the `Plan` subagent
+(same workflow as E8-F1-S1/E8-F2-S1), then two open judgment calls
+confirmed with the user before implementation via `AskUserQuestion`:
+
+1. **A single flat `TRANSACTION_COST_BPS = 20` constant, not
+   asset-differentiated.** Derivation: Binance Futures taker fees run
+   ~10bps round trip; an added ~10bps slippage buffer is deliberately
+   biased toward DOGEUSDT's (the smaller-cap of the two checked-in
+   fixtures) worse execution quality rather than BTCUSDT's tighter one,
+   since overstating cost is the safer failure mode for a story whose whole
+   point is not overstating paper profitability. Confirmed over the
+   alternative of splitting cost by symbol liquidity (e.g. BTCUSDT 12bps /
+   DOGEUSDT 25bps) — rejected because `BacktestHarness.run`/`score`/
+   `findFirstCrossing` carry no asset-type parameter through their call
+   chain at all today, so per-symbol costs would be a materially larger
+   change than this 3-point story implies, matching `TAKE_PROFIT_PCT`/
+   `STOP_LOSS_PCT`'s existing single-flat-constant precedent.
+2. **Binance Futures perpetual funding-rate carry cost is out of scope.**
+   Unlike spread/slippage/fees (paid once, flat, regardless of hold
+   duration), funding is paid periodically and scales with how long a
+   position is held — E8-F2-S1's hold-terms can span several days, so this
+   would matter for a "realistic transaction cost" story in the abstract.
+   But the AC's literal wording ("spread/slippage/fees") doesn't include
+   it, and modeling it would require the cost to scale with
+   `daysForward`/checkpoint instead of being a flat constant — a materially
+   different design. Confirmed as a deliberate scope boundary, not an
+   oversight; a candidate follow-up story if funding cost turns out to
+   matter in practice.
+
+**Design: a derived method, not new tallied state.** `CheckpointStats`
+gained one new method, `expectancyPctAfterCosts()`:
+
+```java
+public double expectancyPctAfterCosts() {
+    return scored() == 0 ? 0.0
+            : expectancyPct() - BacktestConfig.TRANSACTION_COST_BPS.doubleValue() / 100.0;
+}
+```
+
+No new record fields, no changes to `DirectionalScoreResult`,
+`DirectionalAccumulator`, `BacktestDecisionPoint`, `ExitReason`, or
+`DirectionalAccumulator.combineCheckpoint` in `BacktestHarness.java`. The
+key insight (verified algebraically in the design gate, not just asserted):
+since `expectancyPct()` already treats every WASH call as contributing zero
+to the aggregate, subtracting a flat per-trade cost from *every individual
+scored outcome* before re-averaging is mathematically identical to
+subtracting that same flat cost once from the aggregate — `Σ(return_i -
+cost)/n = Σ(return_i)/n - cost` for any partition of `n` into win/loss/wash.
+So "subtracted from every scored outcome" (the AC's wording) and "subtract
+once from the aggregate" (the actual implementation) are the same
+operation, and cost applies identically whether the exit was `TP_HIT`,
+`SL_HIT`, or `HORIZON_EXPIRED`, and identically at MIN/MID/MAX (each
+checkpoint represents an independent hypothetical trade that pays its own
+single round-trip cost, unlike a time-scaling cost such as funding).
+Because it's a pure function of the record's own fields plus a fixed
+constant, `combineCheckpoint`'s existing win/loss/avg-size combining logic
+for `overallBuy`/`overallSell` needed zero changes — `expectancyPctAfterCosts()`
+is automatically correct on the combined roll-up too. The WIN/LOSS/WASH
+deadband classification itself is untouched; only the reported expectancy
+*magnitude* changes, matching the AC's ask for expectancy specifically, not
+a cost-adjusted win rate.
+
+**Report output.** `BacktestReport.printCheckpoint` now prints both figures
+side by side:
+
+```
+min  45.3%win (179 scored) | avg win  +2.10% | avg loss  -1.80% | expectancy  +0.236% (after costs  +0.036%) | tpHit=52 slHit=41 horizonExpired=86
+```
+
+and the section header states the cost figure once: `"...deadband
++/-0.25%, round-trip cost 20bps) at min/mid/max hold-term day:"`.
+`ThresholdCalibrationTest`'s own compact sweep printer was deliberately
+left unchanged — that tool's scope is E8-F1-S1's rule-threshold sweep, not
+this story's target (`BacktestReport`), and its `CheckpointStats` calls
+still compile/run unmodified since the record's constructor didn't change.
+
+**New `CheckpointStatsTest`** (hand-constructed `CheckpointStats` records —
+no need to go through `BacktestHarness`'s accumulator/combine machinery at
+all, unlike E8-F2-S1's `BacktestHarnessTpSlTest`, since this method needs
+no `private`→package-private relaxation) pins the arithmetic down exactly,
+including the story's actual motivating scenario: a win-heavy, thin-margin
+branch (`win=6 @ avgWinReturnPct=+0.5%, loss=4 @ avgLossReturnPct=-0.4%`)
+has raw expectancy `+0.14%` — positive, paper-profitable — but flips to
+`-0.06%` once the flat 20bps round-trip cost is subtracted, demonstrating
+the AC's "isn't reported as positive on paper when it wouldn't survive real
+execution costs" claim is actually true of the arithmetic, not just
+plausible. Three more cases: the empty-checkpoint zero-guard (asserts
+exactly `0.0`, not `-0.20`, so an unscored checkpoint never reports a
+phantom negative expectancy), a direct subtraction check against a
+hand-computed raw expectancy, and a general `expectancyPctAfterCosts() <=
+expectancyPct()` non-increase check across both a win-heavy and a
+loss-heavy case.
+
+`BacktestHarnessTest`/`ThresholdCalibrationTest` both gained one new line
+in their existing `assertExpectancySignsAreSane` structural-invariant
+helper (`expectancyPctAfterCosts() <= expectancyPct()`, since cost is never
+negative by construction) alongside their existing avg-win/avg-loss-sign
+and `tpHit+slHit+horizonExpired`-partition checks — same "printed report is
+evidence under review, structural invariants are what's actually asserted"
+framing as every prior E8 backtest story.
+
+**Scope boundaries, confirmed against precedent.** Backend,
+`src/test/java`-only — matching E2-F4-S1/S2, E8-F1-S1, and E8-F2-S1. No
+`SignalRuleEngine`, `OrderService`, or `PlaceOrderRequest` changes; this is
+still a diagnostic-only measurement of the backtest harness, not a change
+to the live rule table or order path.
+
+`./mvnw test -Dtest=CheckpointStatsTest,BacktestHarnessTest,ThresholdCalibrationTest,BacktestHarnessTpSlTest`
+(15 tests, including the 4 new `CheckpointStatsTest` cases) and the full
+`./mvnw verify` (415 tests, up from 411, 0 failures/errors, jar packaged)
+both pass clean. No frontend changes.

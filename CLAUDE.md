@@ -22,8 +22,8 @@ Order API migration) added after E4-F3-S2's post-launch verification found
 Binance rejecting conditional exit-leg orders on the old endpoint — see
 that story's entry below, live-verified end-to-end against the real
 Binance Futures Testnet. E8 (Signal Quality & Quant Rigor) is a backlog
-epic added after E7 shipped; E8-F1-S1 and E8-F2-S1 are done, the rest of
-E8 (E8-F2-S2 through E8-F5) is not yet started.
+epic added after E7 shipped; E8-F1-S1, E8-F2-S1, and E8-F2-S2 are done, the
+rest of E8 (E8-F3 through E8-F5) is not yet started.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -490,6 +490,45 @@ E8 (E8-F2-S2 through E8-F5) is not yet started.
   closed the position, so this is a materially different, more realistic
   measurement than E2-F4-S1/S2's, not just a refinement. E8-F2-S2
   (transaction costs) is a separate follow-up story, not implemented here.
+- E8-F2-S2: Transaction-cost-aware backtest expectancy. New
+  `BacktestConfig.TRANSACTION_COST_BPS` (20bps, harness-only diagnostic
+  placeholder — same treatment as this file's other backtest-only
+  thresholds) approximating a flat round-trip spread+slippage+fee cost
+  (~10bps Binance Futures taker fees, plus an added ~10bps slippage buffer
+  biased toward DOGEUSDT's worse execution quality rather than BTCUSDT's,
+  since overstating cost is the safer failure mode for a story about not
+  overstating paper profitability); single flat value across both
+  fixtures, not asset-differentiated, confirmed with the user before
+  implementation, since the harness carries no asset-type parameter through
+  its call chain today. New `CheckpointStats.expectancyPctAfterCosts()`
+  derived method (`expectancyPct() - costPct`) — no new record fields, no
+  changes to `DirectionalScoreResult`/`DirectionalAccumulator`/
+  `BacktestDecisionPoint`/`ExitReason`/`combineCheckpoint`, since a flat
+  per-trade cost applies identically regardless of exit reason or
+  MIN/MID/MAX checkpoint and needs no new per-outcome state to compute; the
+  WIN/LOSS/WASH deadband classification itself is untouched, only the
+  reported expectancy magnitude changes. `BacktestReport.printCheckpoint`
+  now prints both figures side by side (`expectancy +X% (after costs
+  +/-Y%)`) per the AC. New `CheckpointStatsTest` (hand-constructed records,
+  no need to go through the harness's accumulator/combine machinery since
+  the method is a pure function of the record's own fields) pins the
+  arithmetic down exactly, including the story's motivating case: a
+  win-heavy, thin-margin branch (`win=6 @ +0.5%, loss=4 @ -0.4%`, raw
+  expectancy +0.14%) flips negative (-0.06%) once the flat cost is
+  subtracted — a branch that looks paper-profitable but wouldn't survive
+  real execution costs, now visible on one report line instead of requiring
+  separate manual arithmetic. `BacktestHarnessTest`/`ThresholdCalibrationTest`
+  gained one new structural invariant (`expectancyPctAfterCosts() <=
+  expectancyPct()`, since cost is never negative) alongside their existing
+  ones; `ThresholdCalibrationTest`'s own compact sweep printer was
+  deliberately left unchanged (that tool's report scope is E8-F1-S1's
+  threshold sweep, not this story's target). Deliberately out of scope,
+  confirmed with the user: Binance Futures perpetual funding-rate carry
+  cost — unlike spread/slippage/fees, funding is paid periodically and
+  scales with hold duration rather than being a flat one-time cost, which
+  the AC's "spread/slippage/fees" wording doesn't cover. Backend,
+  `src/test/java`-only, same precedent as every other E8 story so far — no
+  `SignalRuleEngine`/`OrderService`/`PlaceOrderRequest` changes.
 
 ## Build / lint / test
 

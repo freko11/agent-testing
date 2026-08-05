@@ -35,4 +35,19 @@ public record CheckpointStats(int win, int loss, int wash, int notScored, double
     public double expectancyPct() {
         return scored() == 0 ? 0.0 : (avgWinReturnPct * win + avgLossReturnPct * loss) / scored();
     }
+
+    /** {@link #expectancyPct()} after subtracting {@link BacktestConfig#TRANSACTION_COST_BPS}'s
+     * flat round-trip cost (E8-F2-S2) — the number a real bracket order's expectancy would land
+     * on after paying spread/slippage/fees, not just the paper price-action outcome. Cost is
+     * subtracted once per trade regardless of whether it exited via TP/SL/horizon, so this is
+     * exactly {@code expectancyPct() - costPct} rather than needing its own win/loss tally: since
+     * {@link #expectancyPct()} already treats every WASH call as a zero-return outcome, applying
+     * the flat cost to every individual scored call before re-averaging is algebraically
+     * identical to subtracting it once from the aggregate. 0.0 (not a negative cost) when nothing
+     * at this checkpoint was scored, matching {@link #expectancyPct()}'s own empty-checkpoint
+     * guard. */
+    public double expectancyPctAfterCosts() {
+        return scored() == 0 ? 0.0
+                : expectancyPct() - BacktestConfig.TRANSACTION_COST_BPS.doubleValue() / 100.0;
+    }
 }

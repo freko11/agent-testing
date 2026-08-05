@@ -36,6 +36,22 @@ public final class BacktestConfig {
     public static final BigDecimal TAKE_PROFIT_PCT = new BigDecimal("5.0");
     public static final BigDecimal STOP_LOSS_PCT = new BigDecimal("3.0");
 
+    /**
+     * Round-trip transaction cost (spread + slippage + fees for entry AND exit combined), in
+     * basis points, subtracted from every scored outcome's expectancy (E8-F2-S2). Like {@link
+     * #TAKE_PROFIT_PCT}/{@link #STOP_LOSS_PCT}, this is a deliberately uncalibrated placeholder:
+     * Binance Futures taker fees run ~10bps round trip, with an added ~10bps slippage buffer
+     * biased toward DOGEUSDT's (the smaller-cap of the two checked-in fixtures) worse execution
+     * quality rather than BTCUSDT's, since overstating cost is the safer failure mode for a
+     * story about not overstating paper profitability. A single flat value across both fixtures,
+     * not asset-differentiated — the harness carries no asset-type parameter through its call
+     * chain today, so a per-symbol figure would be a materially larger change than this constant.
+     * Excludes Binance Futures funding-rate carry cost (paid periodically, scales with hold
+     * duration rather than being a flat one-time cost) — out of scope per this story's AC, which
+     * covers spread/slippage/fees only.
+     */
+    public static final BigDecimal TRANSACTION_COST_BPS = new BigDecimal("20");
+
     private BacktestConfig() {
     }
 }

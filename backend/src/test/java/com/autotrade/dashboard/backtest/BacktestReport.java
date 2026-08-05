@@ -40,8 +40,8 @@ public record BacktestReport(String label, int totalCandles, int totalDecisionPo
         }
 
         out.println();
-        out.printf("BUY/SELL win rate + expectancy (avg win/loss size, deadband +/-%s%%) at min/mid/max hold-term day:%n",
-                BacktestConfig.WIN_LOSS_DEADBAND_PCT);
+        out.printf("BUY/SELL win rate + expectancy (avg win/loss size, deadband +/-%s%%, round-trip cost %sbps) at min/mid/max hold-term day:%n",
+                BacktestConfig.WIN_LOSS_DEADBAND_PCT, BacktestConfig.TRANSACTION_COST_BPS);
         for (SignalRuleId ruleId : DIRECTIONAL_RULES) {
             printDirectional(out, ruleId.name(), directionalStats.get(ruleId));
         }
@@ -80,9 +80,9 @@ public record BacktestReport(String label, int totalCandles, int totalDecisionPo
     }
 
     private void printCheckpoint(PrintStream out, String checkpointLabel, CheckpointStats cp) {
-        out.printf("    %-3s %5.1f%% win (%d scored) | avg win %+6.2f%% | avg loss %+6.2f%% | expectancy %+6.3f%%"
+        out.printf("    %-3s %5.1f%% win (%d scored) | avg win %+6.2f%% | avg loss %+6.2f%% | expectancy %+6.3f%% (after costs %+6.3f%%)"
                         + " | tpHit=%d slHit=%d horizonExpired=%d%n",
                 checkpointLabel, cp.winRate(), cp.scored(), cp.avgWinReturnPct(), cp.avgLossReturnPct(),
-                cp.expectancyPct(), cp.tpHit(), cp.slHit(), cp.horizonExpired());
+                cp.expectancyPct(), cp.expectancyPctAfterCosts(), cp.tpHit(), cp.slHit(), cp.horizonExpired());
     }
 }

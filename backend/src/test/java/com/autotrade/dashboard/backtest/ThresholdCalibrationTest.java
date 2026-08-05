@@ -158,6 +158,8 @@ class ThresholdCalibrationTest {
             }
             assertEquals(cp.scored(), cp.tpHit() + cp.slHit() + cp.horizonExpired(),
                     label + " " + checkpoint + ": tpHit+slHit+horizonExpired must partition scored()");
+            assertTrue(cp.expectancyPctAfterCosts() <= cp.expectancyPct(),
+                    label + " " + checkpoint + ": after-cost expectancy must never exceed raw expectancy");
         }
     }
 }
