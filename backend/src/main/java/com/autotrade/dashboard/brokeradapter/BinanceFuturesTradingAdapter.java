@@ -25,6 +25,7 @@ import org.springframework.web.client.RestClientException;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
@@ -122,6 +123,35 @@ public class BinanceFuturesTradingAdapter implements BrokerAdapter {
     // Hyphen allowed only for this codebase's own "-NOACTIVITY" test-symbol convention
     // (see BrokerAdapterContractTest); real Binance symbols are plain alphanumeric.
     private static final Pattern SYMBOL_PATTERN = Pattern.compile("^[A-Z0-9-]{1,20}$");
+
+    /**
+     * Binance USD&#9328;-M Futures per-symbol {@code quantityPrecision}/{@code
+     * pricePrecision} (from {@code /fapi/v1/exchangeInfo}) for the symbols this app's
+     * watchlist/backtest fixtures actually use — hardcoded rather than fetched live,
+     * same bias as {@link #MAX_LEVERAGE} above. {@code OrderService} computes {@code
+     * quantity} as {@code amountUsd / price} at scale 8, and take-profit/stop-loss
+     * prices come straight from user input, so both routinely carry more decimal
+     * places than Binance's own filters allow; without truncation to this precision
+     * Binance rejects the order outright with {@code -1111 "Precision is over the
+     * maximum defined for this asset"} — a real rejection hit during a live paper-mode
+     * verification run, never caught by the existing unit tests since those construct
+     * already-precision-safe request fixtures directly rather than routing through
+     * {@code OrderService}'s real computation.
+     */
+    private static final Map<String, Integer> QUANTITY_PRECISION = Map.of(
+            "BTCUSDT", 3,
+            "ETHUSDT", 3,
+            "DOGEUSDT", 0,
+            "SOLUSDT", 1);
+    private static final Map<String, Integer> PRICE_PRECISION = Map.of(
+            "BTCUSDT", 1,
+            "ETHUSDT", 2,
+            "DOGEUSDT", 5,
+            "SOLUSDT", 3);
+    // Fallback for a symbol not in the maps above — conservative enough that Binance's
+    // own filters, not this app, remain the final authority on any given symbol's real limits.
+    private static final int DEFAULT_QUANTITY_PRECISION = 3;
+    private static final int DEFAULT_PRICE_PRECISION = 2;
 
     private final Map<TradingMode, RestClient> restClientsByMode;
     private final BrokerCredentialService credentialService;
@@ -342,7 +372,14 @@ public class BinanceFuturesTradingAdapter implements BrokerAdapter {
         params.put("symbol", request.symbol());
         params.put("side", request.side().name());
         params.put("type", "MARKET");
-        params.put("quantity", request.quantity().toPlainString());
+        BigDecimal quantity = roundToPrecision(request.quantity(), QUANTITY_PRECISION, request.symbol(), DEFAULT_QUANTITY_PRECISION);
+        if (quantity.signum() <= 0) {
+            throw new BrokerAdapterException(Broker.BINANCE,
+                    "Requested quantity rounds to zero at " + request.symbol() + "'s precision ("
+                            + QUANTITY_PRECISION.getOrDefault(request.symbol(), DEFAULT_QUANTITY_PRECISION)
+                            + " decimals) — increase amount or leverage");
+        }
+        params.put("quantity", quantity.toPlainString());
         params.put("newClientOrderId", entryLegId);
         params.put("newOrderRespType", "RESULT");
         return signedRequest(restClient, creds, HttpMethod.POST, "/fapi/v1/order", params, BinanceOrderResponse.class, null);
@@ -367,7 +404,7 @@ public class BinanceFuturesTradingAdapter implements BrokerAdapter {
                 params.put("symbol", symbol);
                 params.put("side", closeSide.name());
                 params.put("type", orderType);
-                params.put("stopPrice", stopPrice.toPlainString());
+                params.put("stopPrice", roundToPrecision(stopPrice, PRICE_PRECISION, symbol, DEFAULT_PRICE_PRECISION).toPlainString());
                 params.put("closePosition", "true");
                 params.put("newClientOrderId", legClientOrderId);
                 params.put("newOrderRespType", "RESULT");
@@ -396,6 +433,20 @@ public class BinanceFuturesTradingAdapter implements BrokerAdapter {
             Thread.currentThread().interrupt();
             return false;
         }
+    }
+
+    /**
+     * Truncates (never rounds up — a caller-approved notional/price must never be
+     * exceeded) to the symbol's known precision, only when the value actually carries
+     * more decimal places than that precision allows. Leaving an already-coarser value
+     * untouched (e.g. a test fixture's {@code "0.01"} against BTCUSDT's 3-decimal
+     * quantity precision) matters: {@link BigDecimal#setScale} unconditionally would
+     * pad it to {@code "0.010"} instead.
+     */
+    private static BigDecimal roundToPrecision(BigDecimal value, Map<String, Integer> precisionBySymbol,
+                                                String symbol, int defaultPrecision) {
+        int precision = precisionBySymbol.getOrDefault(symbol, defaultPrecision);
+        return value.scale() > precision ? value.setScale(precision, RoundingMode.DOWN) : value;
     }
 
     private static String missingLegsDescription(boolean stopLossPlaced, boolean takeProfitPlaced) {

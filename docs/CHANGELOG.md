@@ -3659,3 +3659,59 @@ a real symbol, which isn't reliably reproducible from a fresh session; relied on
 unit test coverage above (cache hit/miss/case-insensitivity at the service layer, JSON
 shape at the controller layer) instead.
 
+## E4-F3-S2 follow-up — Binance order quantity/price precision truncation
+
+Found live, during a first real end-to-end paper-mode run against Binance Futures
+Testnet (user asked to exercise the golden path — ticker lookup → signal → paper
+order — for real, not just against unit-test fixtures): a BTCUSDT SELL for $100 at
+2x leverage was rejected outright by Binance with `-1111 "Precision is over the
+maximum defined for this asset"`. Root cause: `OrderService.submitOrder` computes
+`quantity = amountUsd / price` at scale 8 (`BigDecimal.divide(price, 8, DOWN)`), and
+take-profit/stop-loss prices come straight from user input — both routinely carry
+more decimal places than Binance's per-symbol `LOT_SIZE`/`PRICE_FILTER` allow (e.g.
+BTCUSDT futures: 3-decimal quantity, 1-decimal price), and
+`BinanceFuturesTradingAdapter.placeEntryOrder`/`ensureExitLeg` sent
+`request.quantity()`/`stopPrice` straight through via `toPlainString()` with no
+truncation. Never caught by `BinanceFuturesTradingAdapterTest` because those tests
+construct already-precision-safe request fixtures directly (e.g. `new
+BigDecimal("0.01")`) rather than routing through `OrderService`'s real computation —
+this only surfaces against the real exchange with a realistic amount/price.
+
+Fixed by adding a hardcoded per-symbol `QUANTITY_PRECISION`/`PRICE_PRECISION` map
+(`BinanceFuturesTradingAdapter`, values for `BTCUSDT`/`ETHUSDT`/`DOGEUSDT`/`SOLUSDT` —
+the symbols this app's watchlist/backtest fixtures actually use, with a conservative
+3-decimal/2-decimal fallback for anything else) and a `roundToPrecision` helper
+applied to the entry order's `quantity` and each exit leg's `stopPrice` before they're
+sent. Hardcoded rather than fetched live from `/fapi/v1/exchangeInfo` — same bias as
+the existing `MAX_LEVERAGE` constant's javadoc ("an extra live-data dependency this
+codebase avoids for this kind of check"). Truncates (`RoundingMode.DOWN`, never up —
+a caller-approved notional must never be silently exceeded) only when the value's
+scale actually exceeds the symbol's precision, so an already-coarser value (like a
+test fixture's `"0.01"`) is left untouched rather than zero-padded by an unconditional
+`setScale`. A quantity that truncates all the way to zero (e.g. a too-small order
+against `DOGEUSDT`'s whole-coin-only precision) now fails with a clear
+`RISK`-adjacent-style rejection message instead of Binance's opaque precision error.
+
+Tested: `BinanceFuturesTradingAdapterTest` gained
+`placeOrder_highPrecisionQuantityAndPrices_truncatedToSymbolPrecisionBeforeSubmission`
+(a scale-8 quantity and two-decimal-heavy TP/SL prices, asserting the exact truncated
+query-param values Binance receives) and
+`placeOrder_quantityRoundsToZeroAtSymbolPrecision_returnsRejectedWithoutPlacingEntry`.
+All 401 backend tests pass (`./mvnw verify`). Live-verified end-to-end against the
+real Binance Futures Testnet API (not mocked): the same BTCUSDT SELL that previously
+hard-rejected on precision now fills successfully (`orderId=28266206621`).
+
+Second, separate issue surfaced by the same live run, left open: Binance now rejects
+`STOP_MARKET`/`TAKE_PROFIT_MARKET` exit legs sent to `/fapi/v1/order` with `"Order
+type not supported for this endpoint. Please use the Algo Order API endpoints
+instead"` — an apparent breaking change on Binance's side to the Futures Testnet API
+surface since E4-F3-S2 was originally built/verified. Effect: every crypto bracket
+order's entry now fills, but both protective legs currently fail after retry,
+correctly surfacing as `PARTIALLY_PROTECTED` (E4-F3-S2's designed-for partial-failure
+path working as intended, not silently hiding the gap) rather than a false success.
+Confirmed independently via a direct signed call to Binance's `/fapi/v3/positionRisk`
+(bypassing this app entirely) that the resulting entry position is real and open on
+the testnet account. Not fixed in this pass — migrating exit-leg placement to
+Binance's Algo Order API is a separate, real scope of work (new endpoint, likely a
+different request/response shape) tracked as a follow-up, not a quick truncation fix.
+

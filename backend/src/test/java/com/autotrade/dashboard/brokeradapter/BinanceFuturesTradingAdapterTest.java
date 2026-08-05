@@ -307,6 +307,64 @@ class BinanceFuturesTradingAdapterTest {
     }
 
     @Test
+    void placeOrder_highPrecisionQuantityAndPrices_truncatedToSymbolPrecisionBeforeSubmission() {
+        // Mirrors what OrderService actually computes (amountUsd / price at scale 8) and
+        // raw user-entered TP/SL prices — both routinely finer than Binance's own
+        // per-symbol filters (BTCUSDT: quantityPrecision=3, pricePrecision=1), which
+        // rejects the request outright rather than rounding it server-side.
+        BrokerOrderRequest request = new BrokerOrderRequest(
+                "co-precision", "BTCUSDT", AssetType.CRYPTO, OrderSide.SELL, new BigDecimal("0.0031086427"),
+                EntryOrderType.MARKET, null, new BigDecimal("63000.126"), new BigDecimal("65500.987"), new BigDecimal("5"));
+
+        expectOrderCheckNotFound();
+        server.expect(method(HttpMethod.POST))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/leverage?")))
+                .andRespond(withSuccess("{\"leverage\":5,\"maxNotionalValue\":\"1000000\",\"symbol\":\"BTCUSDT\"}", MediaType.APPLICATION_JSON));
+        server.expect(method(HttpMethod.POST))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andExpect(queryParam("type", "MARKET"))
+                .andExpect(queryParam("quantity", "0.003"))
+                .andRespond(withSuccess(orderJson(555, "FILLED", "64340.01"), MediaType.APPLICATION_JSON));
+        expectOrderCheckNotFound();
+        server.expect(method(HttpMethod.POST))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andExpect(queryParam("type", "STOP_MARKET"))
+                .andExpect(queryParam("stopPrice", "65500.9"))
+                .andRespond(withSuccess(orderJson(556, "NEW", "0"), MediaType.APPLICATION_JSON));
+        expectOrderCheckNotFound();
+        server.expect(method(HttpMethod.POST))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/order?")))
+                .andExpect(queryParam("type", "TAKE_PROFIT_MARKET"))
+                .andExpect(queryParam("stopPrice", "63000.1"))
+                .andRespond(withSuccess(orderJson(557, "NEW", "0"), MediaType.APPLICATION_JSON));
+
+        BrokerOrderResult result = adapter.placeOrder(request, TradingMode.PAPER);
+
+        assertEquals(OrderStatus.FILLED, result.status());
+        assertNull(result.rejectionReason());
+        server.verify();
+    }
+
+    @Test
+    void placeOrder_quantityRoundsToZeroAtSymbolPrecision_returnsRejectedWithoutPlacingEntry() {
+        // DOGEUSDT's quantityPrecision is 0 (whole coins only) — 0.4 truncates to zero.
+        BrokerOrderRequest request = new BrokerOrderRequest(
+                "co-too-small", "DOGEUSDT", AssetType.CRYPTO, OrderSide.BUY, new BigDecimal("0.4"),
+                EntryOrderType.MARKET, null, new BigDecimal("0.2"), new BigDecimal("0.05"), new BigDecimal("1"));
+
+        expectOrderCheckNotFound();
+        server.expect(method(HttpMethod.POST))
+                .andExpect(requestTo(startsWith(BASE_URL + "/fapi/v1/leverage?")))
+                .andRespond(withSuccess("{\"leverage\":1,\"maxNotionalValue\":\"1000000\",\"symbol\":\"DOGEUSDT\"}", MediaType.APPLICATION_JSON));
+
+        BrokerOrderResult result = adapter.placeOrder(request, TradingMode.PAPER);
+
+        assertEquals(OrderStatus.REJECTED, result.status());
+        assertTrue(result.rejectionReason().contains("rounds to zero"));
+        server.verify();
+    }
+
+    @Test
     void placeOrder_leverageRejected_returnsRejectedResultWithoutPlacingEntry() {
         BrokerOrderRequest request = sampleRequest(AssetType.CRYPTO, EntryOrderType.MARKET, new BigDecimal("5"));
 

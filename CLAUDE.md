@@ -90,7 +90,17 @@ All stories below are done, including E6 (Risk & Safety Controls) and E7
 - E4-F2-S1: Alpaca paper account connected; `getAccountStatus`
 - E4-F2-S2: Place a market order via Alpaca
 - E4-F3-S1: Binance Futures Testnet account connected; `getAccountStatus`
-- E4-F3-S2: Place a leveraged order via Binance testnet
+- E4-F3-S2: Place a leveraged order via Binance testnet. Follow-up: order
+  quantity/take-profit/stop-loss prices are now truncated to each symbol's
+  known Binance precision before submission (`BinanceFuturesTradingAdapter`'s
+  `QUANTITY_PRECISION`/`PRICE_PRECISION` maps) — found live when a real paper
+  order was rejected with Binance's `-1111 "Precision is over the maximum
+  defined for this asset"`. Known open gap found by the same live run, not
+  yet fixed: Binance now rejects `STOP_MARKET`/`TAKE_PROFIT_MARKET` exit legs
+  with "use the Algo Order API endpoints instead" — an apparent breaking API
+  change since this story was built, so every crypto bracket order's
+  protective legs currently fail after retry (correctly surfaced as
+  `PARTIALLY_PROTECTED`, not hidden). See `docs/CHANGELOG.md` for detail.
 
 ### E5 — Auto-Trade Execution
 - E5-F1-S1: Trade input form (amount, leverage, take-profit, stop-loss)
