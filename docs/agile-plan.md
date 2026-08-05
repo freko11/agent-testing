@@ -205,6 +205,41 @@ acceptance criteria so "done" isn't a judgment call.
 | E7-F2-S1 | As a user, I want the credential-storage and order-submission code security-reviewed before any live account is connected so leaked keys or injection bugs don't cost real money. | `security-review` run against secrets + adapter code; findings triaged before E6 live-mode gate is closed. | 3 |
 | E7-F3-S1 | As a user, I want a tested backup/restore procedure for the Oracle instance so order history and the audit log aren't a single-disk-failure away from gone. | Documented/scripted backup command; a restore has been tested at least once against a fresh Oracle XE instance. | 3 |
 
+### E8 — Signal Quality & Quant Rigor
+*Close the gap between "the rule table looks profitable" and "the rule table is
+validated, execution-realistic, and monitored" — enhancements identified reviewing
+E2's existing rule engine (`SignalRuleEngine`) and backtest harness
+(`BacktestHarness`, E2-F4-S1/S2) against professional quant practice. Backlog added
+after E2 shipped, same pattern as E4-F3-S3's post-launch addition to E4 — not yet
+started.*
+
+**F8.1 Threshold calibration**
+| ID | Story | Acceptance Criteria | Pts |
+|---|---|---|---|
+| E8-F1-S1 | As a user, I want the RSI/volatility/volume-trend thresholds in `SignalRuleEngine` re-tuned against `BacktestHarness`'s per-branch expectancy output (E2-F4-S2), instead of left as the original hand-picked estimates, so the rule table's gates are backed by evidence rather than engineering intuition. | A documented calibration pass (script or test) sweeps threshold candidates against the existing BTCUSDT/DOGEUSDT fixtures, reports expectancy per candidate, and any resulting threshold change is versioned via a `RULE_TABLE_VERSION` bump per `SignalRuleEngine`'s existing versioning convention. | 5 |
+
+**F8.2 Execution-realistic backtesting**
+| ID | Story | Acceptance Criteria | Pts |
+|---|---|---|---|
+| E8-F2-S1 | As a user, I want the backtest to simulate whether a trade's actual take-profit/stop-loss price would be hit before its fixed hold-term checkpoint, so the reported win rate/expectancy reflects what a real bracket order (E5-F2-S1) would have realized, not just the forward price at an arbitrary day count. | `BacktestHarness` walks forward day-by-day within the hold-term window checking for TP/SL price crossing before falling back to the existing min/mid/max endpoint scoring; outcome and exit reason (TP hit / SL hit / horizon expired) recorded per decision point. | 8 |
+| E8-F2-S2 | As a user, I want the backtest to account for realistic transaction costs (spread/slippage/fees) so a branch's expectancy isn't reported as positive on paper when it wouldn't survive real execution costs. | A configurable cost-per-trade (bps) is subtracted from every scored outcome; report shows expectancy with and without costs side by side. | 3 |
+
+**F8.3 Adaptive weighting & regime awareness**
+| ID | Story | Acceptance Criteria | Pts |
+|---|---|---|---|
+| E8-F3-S1 | As a user, I want each of RSI/MACD/MA-crossover's votes weighted by its own backtested expectancy rather than counted equally, so the strongest-performing indicator has proportionally more influence on the BUY/SELL call. | Rule engine (or a new scoring layer alongside it) computes a weighted vote using per-indicator expectancy figures sourced from the backtest; existing 2-of-3 unanimous/majority behavior remains available as a fallback/comparison mode so the change is A/B-able against the current table. | 8 |
+| E8-F3-S2 | As a user, I want a trend-strength/regime filter so directional signals are trusted less in a choppy/ranging market than in a clear trend, since the same MA-crossover means different things in each. | A regime indicator (e.g. ADX-style or long/short ATR ratio) gates or down-weights the directional vote; backtest shows separate expectancy for trending vs. ranging regimes to prove the filter earns its keep. | 5 |
+
+**F8.4 Validation rigor**
+| ID | Story | Acceptance Criteria | Pts |
+|---|---|---|---|
+| E8-F4-S1 | As a user, I want threshold/weighting changes validated out-of-sample (not tuned and tested on the same fixture) so a re-tune doesn't just fit noise in the two checked-in candle histories. | Calibration runs (E8-F1-S1, E8-F3-S1) use a held-out split or additional untouched fixture symbol/period to confirm expectancy holds outside the tuning set before a change ships. | 5 |
+
+**F8.5 Live signal monitoring**
+| ID | Story | Acceptance Criteria | Pts |
+|---|---|---|---|
+| E8-F5-S1 | As a user, I want the rule table's live performance re-scored periodically against `OrderAuditEntry`'s frozen signal snapshots (E6-F3-S1/E6-F3-S2), so I can detect the rule table's edge decaying in live markets before it costs real money. | A scheduled or on-demand job replays `BacktestHarness`-style scoring against production audit-log entries, grouped by `rule_table_version`, and surfaces expectancy drift versus the original backtest. | 5 |
+
 ---
 
 ## Suggested build sequence (solo, sequential — not parallel workstreams)
@@ -214,6 +249,8 @@ E1 (Foundation) → E2 (Signal Engine) → E3.1/E3.2 (Dashboard core)
    → E4 (Adapter interface → Alpaca → Binance, paper/testnet keys only)
    → E5 (Auto-Trade Execution) → E6 (Risk Controls) → live-mode gate
 E7 threaded throughout; E3.3 (watchlist) slotted in whenever there's slack.
+E8 (Signal Quality & Quant Rigor) is backlog, picked up after E7 — depends on E2's
+rule engine/backtest harness and E6-F3's audit log already existing, which they do.
 ```
 
 Rationale: nothing in E3–E6 is testable without E1+E2 existing first, and the highest-risk
