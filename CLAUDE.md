@@ -22,8 +22,8 @@ Order API migration) added after E4-F3-S2's post-launch verification found
 Binance rejecting conditional exit-leg orders on the old endpoint — see
 that story's entry below, live-verified end-to-end against the real
 Binance Futures Testnet. E8 (Signal Quality & Quant Rigor) is a backlog
-epic added after E7 shipped; E8-F1-S1, E8-F2-S1, E8-F2-S2, E8-F3-S1, and
-E8-F3-S2 are done, the rest of E8 (E8-F4 and E8-F5) is not yet started.
+epic added after E7 shipped; E8-F1-S1, E8-F2-S1, E8-F2-S2, E8-F3-S1,
+E8-F3-S2, and E8-F4-S1 are done, E8-F5 is not yet started.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -668,6 +668,29 @@ E8-F3-S2 are done, the rest of E8 (E8-F4 and E8-F5) is not yet started.
   `AdxCalculator`/`Regime`/`RegimeClassifier`/`RegimeGatedRuleEngine` (new,
   unwired classes), `src/test/java` for everything else — no
   `SignalService`/`OrderService`/`PlaceOrderRequest` changes.
+- E8-F4-S1: Out-of-sample validation of E8-F1-S1's RSI 25/75 threshold shift
+  and E8-F3-S1's `WeightedVoteRuleEngine.IndicatorWeights.DEFAULT` — both
+  were previously tuned and evaluated on the same two checked-in
+  BTCUSDT/DOGEUSDT fixtures, with no held-out data. New
+  `backend/src/test/resources/backtest/solusdt-daily-history.csv` (1000
+  daily candles, same Nov 2023–Jul 2026 window as the existing two
+  fixtures, a symbol neither calibration has ever seen) plus a
+  chronological 70/30 split within BTCUSDT/DOGEUSDT (tune-on-earlier,
+  hold-out-on-later) feed a new `backtest.OutOfSampleValidationTest`,
+  `src/test/java`-only like every other E8 calibration test. Findings:
+  the weighted-vote `IndicatorWeights.DEFAULT` (all-zero) replicates
+  cleanly — every indicator's held-out/untouched-fixture combined
+  after-cost expectancy stayed negative. The RSI 25/75 shift does **not**
+  replicate uniformly: its SELL-side improvement holds across all three
+  assets, but its BUY-side improvement — an equally central part of the
+  original finding — reverses on two of the three out-of-sample checks,
+  including the fully-untouched SOLUSDT fixture. Per the confirmed scope
+  boundary (validate, not re-tune), `RULE_TABLE_VERSION` stays at v2 and
+  the shipped 25/75 thresholds are unchanged; the BUY-side mismatch is
+  reported as a flagged finding for a future recalibration story rather
+  than acted on here. E8-F3-S2's regime filter is out of scope (not named
+  in this story's AC). See `docs/CHANGELOG.md`'s E8-F4-S1 entry for the
+  full per-fixture figures.
 
 ## Build / lint / test
 

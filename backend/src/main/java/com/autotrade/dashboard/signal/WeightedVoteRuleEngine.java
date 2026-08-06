@@ -18,10 +18,13 @@ import java.math.BigDecimal;
  * standalone so it can be evaluated/backtested side by side with the current table ({@link
  * #evaluateUnweighted}), the literal "fallback/comparison mode" this story's AC asks for. Wiring
  * this in (a config flag, an {@code OrderService} change, a {@code RULE_TABLE_VERSION} bump) is
- * explicitly out of scope here, pending E8-F4-S1's out-of-sample validation — {@link
- * IndicatorWeights#DEFAULT} below is tuned and evaluated on the same two checked-in
- * BTCUSDT/DOGEUSDT fixtures, the same overfitting caveat {@code ThresholdCalibrationTest}
- * (E8-F1-S1) already documents for threshold calibration.
+ * explicitly out of scope here. {@link IndicatorWeights#DEFAULT} below was tuned on the same two
+ * checked-in BTCUSDT/DOGEUSDT fixtures, the same overfitting caveat {@code ThresholdCalibrationTest}
+ * (E8-F1-S1) already documents for threshold calibration — <b>E8-F4-S1's out-of-sample validation
+ * confirmed this replicates</b>: combined across held-out BTCUSDT/DOGEUSDT tails plus a genuinely
+ * untouched SOLUSDT fixture, every indicator's after-cost expectancy stayed negative, consistent
+ * with the all-zero {@code DEFAULT} below (see {@code OutOfSampleValidationTest} and
+ * docs/CHANGELOG.md's E8-F4-S1 entry).
  *
  * <p>Reuses {@link SignalRuleEngine#computeVotes} for "what counts as a bullish/bearish read" (one
  * source of truth, not a second copy) and keeps its three safety gates and its conflict/dissent
@@ -49,9 +52,11 @@ public final class WeightedVoteRuleEngine {
      * off the raw 3-of-3 vote count) or NO_STRONG_SIGNAL — the "lone dominant indicator" and
      * "2-of-3 majority" promotion paths this class adds are real and independently proven by
      * {@code WeightedVoteRuleEngineTest} using non-default weights, but are dormant under this
-     * specific calibration until a future recalibration (e.g. against a longer horizon, or after
-     * E8-F4-S1's out-of-sample pass) produces a positive weight for at least one indicator. See
-     * {@code IndicatorExpectancyCalibrationTest} for the run that produced these numbers and
+     * specific calibration until a future recalibration (e.g. against a longer horizon) produces a
+     * positive weight for at least one indicator — E8-F4-S1's out-of-sample pass ({@code
+     * OutOfSampleValidationTest}) confirmed this all-zero calibration replicates on held-out and
+     * genuinely untouched data, so it isn't a small-n fluke. See {@code
+     * IndicatorExpectancyCalibrationTest} for the run that produced these numbers and
      * docs/CHANGELOG.md's E8-F3-S1 entry for the printed per-indicator report they were read from.
      */
     public record IndicatorWeights(BigDecimal rsiWeight, BigDecimal macdWeight, BigDecimal maCrossoverWeight) {

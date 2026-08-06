@@ -21,8 +21,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p><b>Overfitting caveat (deliberate scope boundary), same as every other E8 calibration
  * test:</b> both fixtures are the only evidence this pass has; {@link
  * RegimeClassifier#ADX_TRENDING_THRESHOLD} is an uncalibrated industry-default placeholder, not
- * backtest-derived, and this pass doesn't attempt to calibrate it — that (and out-of-sample
- * validation generally) is E8-F4-S1's explicit follow-up.
+ * backtest-derived, and this pass doesn't attempt to calibrate it. E8-F4-S1's out-of-sample
+ * validation pass covered E8-F1-S1's threshold shift and {@code WeightedVoteRuleEngine}'s
+ * weights but explicitly left this story's regime filter out of scope (its calibration was
+ * already fixture-mixed rather than a clean value to validate) — still unvalidated
+ * out-of-sample, pending a future story.
  *
  * <p>Assertions here are structural only, mirroring every other E8 calibration test — the printed
  * report is the evidence under review, not a regression target. Read the printed output (rerun

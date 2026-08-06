@@ -5030,3 +5030,96 @@ packaged) both pass clean. Backend-only; no frontend changes. "Live verification
 story is the calibration test's printed output (there's no running-dashboard
 surface to exercise, since nothing new is wired into a controller or the
 order path), reproducible via `./mvnw test -Dtest=RegimeCalibrationTest`.
+
+## E8-F4-S1 — out-of-sample validation of the E8-F1-S1/E8-F3-S1 calibrations
+
+**Design gate, confirmed with the user before implementation.** The AC offers
+two validation mechanisms — "a held-out split *or* additional untouched
+fixture symbol/period" — and this story uses both rather than picking one:
+(1) a **chronological 70/30 split** within the existing BTCUSDT/DOGEUSDT
+fixtures (tune on the earlier ~700 candles, hold out the newest ~260-300,
+never reversed — a real deployment only ever sees data *after* whatever
+period a rule table was tuned on); (2) a **genuine third fixture, SOLUSDT**
+— confirmed with the user over ETHUSDT — same Nov 2023–Jul 2026 daily window
+as BTCUSDT/DOGEUSDT (isolates "does this generalize to another asset" as the
+one new variable, rather than also varying the time period), fetched the
+same way the original two fixtures were built: Binance's public `/api/v3/
+klines` endpoint, no auth, confirmed still reachable and returning the exact
+same 1000-candle count/date range live. Also confirmed: (3) **scope is
+report-only** — if a prior finding doesn't replicate, this story documents
+it rather than reverting the shipped value or bumping `RULE_TABLE_VERSION`
+in the same change (a revert is its own deliberate, auditable follow-up,
+matching how E8-F3-S2 handled its own mixed regime evidence); (4)
+**E8-F3-S2's regime filter is out of scope** — the AC only names E8-F1-S1
+and E8-F3-S1, and the regime calibration was already fixture-mixed rather
+than a clean value to validate.
+
+**New fixture: `backend/src/test/resources/backtest/solusdt-daily-history.csv`**
+— 1000 daily SOLUSDT candles, Nov 2023–Jul 2026, same `timestamp,open,high,
+low,close,volume` CSV shape and LF line endings as the existing two fixtures,
+loaded through the unmodified, symbol-agnostic `BacktestCandleCsvLoader`
+(zero loader changes needed).
+
+**New `backtest.OutOfSampleValidationTest`**, `src/test/java`-only, same
+precedent as every other E8 calibration test — no `SignalRuleEngine`,
+`WeightedVoteRuleEngine`, `RULE_TABLE_VERSION`, `OrderService`, or
+`SignalService` changes. `BacktestHarness.run`/`combineCheckpoint` already
+accepted a plain `List<Candle>` and were already package-private/public
+respectively (from E8-F2-S1/E8-F3-S1), so nothing needed relaxing to make
+this story possible — a first among E8's calibration stories, all of which
+previously had to widen some visibility to get their evidence. One
+documented methodological caveat: `BacktestHarness` computes every indicator
+over a growing window anchored at index 0 of whatever list it's given, so a
+chronological-split held-out slice re-seeds RSI's Wilder average/MACD's EMA
+at the split boundary instead of carrying forward continuous history —
+negligible after ~30-50 candles, called out explicitly in the class Javadoc
+rather than silently ignored.
+
+**Finding 1 — RSI 25/75 (E8-F1-S1) does *not* replicate uniformly
+out-of-sample.** Both mechanisms produced genuine counter-evidence, not just
+confirmation:
+
+- **BTCUSDT held-out tail**: SELL replicates cleanly (25/75: 53.7-56.7% win,
+  expectancy +0.94% to +1.20% across checkpoints, n=67; vs. 30/70: 52.6% win,
+  +0.73% to +1.09%, n=57 — 25/75 wins on both win rate *and* expectancy with
+  a larger scored sample). BUY does **not** replicate — 25/75 is slightly
+  *worse* at every checkpoint (min -0.225% vs. -0.209%, mid -0.114% vs.
+  -0.077%, max -0.227% vs. -0.191%) despite similar n.
+- **DOGEUSDT held-out tail**: BUY replicates (25/75 ahead at every
+  checkpoint with a larger n: 47 vs. 41). SELL is mixed — 25/75 ahead at
+  min/mid but behind 30/70 at max (+1.406% vs. +1.487%).
+- **SOLUSDT (genuinely untouched fixture)**: SELL replicates (25/75 ahead at
+  every checkpoint). **BUY does not** — 25/75 underperforms 30/70 at every
+  single checkpoint (min +0.047% vs. +0.135%, mid +0.084% vs. +0.250%, max
+  +0.029% vs. +0.196%) despite a larger scored sample (n=257 vs. 226) — this
+  is the single most out-of-sample data point available (a symbol neither
+  calibration has ever seen) and it directly contradicts the BUY-side
+  improvement E8-F1-S1's original sweep reported.
+
+Net read: the SELL-side widening from 30/70 to 25/75 replicates
+consistently across all three assets. The BUY-side widening — an equally
+central part of E8-F1-S1's original finding — does **not** replicate on two
+of the three out-of-sample checks, including the one genuinely-unseen asset.
+Per the confirmed scope boundary, **`RULE_TABLE_VERSION` stays at v2 and the
+shipped 25/75 thresholds are unchanged** — this is reported as a flagged
+finding for a future recalibration story (e.g. asymmetric RSI bounds, wider
+on the SELL side only) rather than acted on here.
+
+**Finding 2 — `WeightedVoteRuleEngine.IndicatorWeights.DEFAULT` (E8-F3-S1)
+does replicate.** Combined across both held-out tails plus the untouched
+SOLUSDT fixture, all three indicators' after-cost expectancy stayed negative
+— RSI -0.291%, MACD -0.134%, MA_CROSSOVER -0.041% — consistent with the
+tuning-set finding that floored every weight to zero. MA_CROSSOVER is the
+closest call (positive on both BTCUSDT/DOGEUSDT held-out tails, +0.077%/
++0.576%, pulled negative only by SOLUSDT's -0.243%) but the combined figure
+still lands on the same side of zero as the shipped `DEFAULT`. No change to
+`IndicatorWeights.DEFAULT`.
+
+Assertions are structural only (the same invariants every other E8
+calibration test checks — partition sums, win/loss sign consistency,
+after-cost ≤ raw expectancy), not gated on the magnitude findings above — the
+printed output is the evidence under review, reproducible via `./mvnw test
+-Dtest=OutOfSampleValidationTest`. `./mvnw verify` (454 tests, up from 452, 0
+failures/errors, jar packaged) passes clean. Backend-only, no frontend
+changes; no live-dashboard verification surface (same as every other E8
+story — nothing here is wired into a controller or the order path).

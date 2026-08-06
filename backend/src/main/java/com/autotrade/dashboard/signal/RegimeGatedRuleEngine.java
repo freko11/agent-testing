@@ -24,8 +24,11 @@ package com.autotrade.dashboard.signal;
  * still call {@link SignalRuleEngine#evaluate} directly, unfiltered — wiring this in is pending
  * evidence from {@code RegimeCalibrationTest} showing ranging-regime expectancy is consistently
  * and materially worse than trending-regime expectancy, the same evidence-gated approach {@code
- * WeightedVoteRuleEngine} (E8-F3-S1) took, and both remain pending E8-F4-S1's out-of-sample
- * validation regardless.
+ * WeightedVoteRuleEngine} (E8-F3-S1) took. E8-F4-S1's out-of-sample validation pass covered
+ * E8-F1-S1's threshold shift and {@code WeightedVoteRuleEngine}'s weights, but explicitly left
+ * this story's regime filter/{@code ADX_TRENDING_THRESHOLD} out of scope — its calibration was
+ * already fixture-mixed rather than a clean value to validate, so it remains unvalidated
+ * out-of-sample pending a future story.
  */
 public final class RegimeGatedRuleEngine {
 

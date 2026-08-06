@@ -20,9 +20,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p><b>Overfitting caveat (deliberate scope boundary), same as {@code ThresholdCalibrationTest}
  * and {@code SignalRuleEngine}'s RSI threshold calibration:</b> both fixtures are also this
- * pass's only tuning data, so the resulting weights are not yet validated out-of-sample — that
- * is E8-F4-S1's explicit follow-up, not attempted here. Treat {@code IndicatorWeights.DEFAULT}
- * as provisional pending that story.
+ * pass's only tuning data, so the resulting weights are not validated out-of-sample by this test
+ * alone. {@code OutOfSampleValidationTest} (E8-F4-S1) since re-ran this all-zero
+ * {@code IndicatorWeights.DEFAULT} finding against held-out BTCUSDT/DOGEUSDT tails plus a
+ * genuinely untouched SOLUSDT fixture and confirmed it replicates — every indicator's combined
+ * after-cost expectancy stayed negative on the unseen data too.
  *
  * <p>Assertions here are structural only, mirroring {@link BacktestHarnessTest} — the printed
  * report is the evidence under review, not a regression target. Read the printed output (rerun

@@ -22,10 +22,17 @@ import java.math.BigDecimal;
  * so the gain isn't a small-n artifact. {@link #VOLATILITY_EXTREME_THRESHOLD} and
  * {@link #VOLUME_DRIED_UP_THRESHOLD} showed no comparable signal in the swept range and were
  * left unchanged — the only volatility candidate that looked better (5.0) did so on an n=10
- * sample, not enough to trust. Still provisional pending E8-F4-S1's out-of-sample
- * validation, since both fixtures were also the tuning set. {@link #RULE_TABLE_VERSION}
- * exists so revising these thresholds later is an auditable, versioned change (feeds
- * E6-F3-S2).
+ * sample, not enough to trust.
+ *
+ * <p><b>E8-F4-S1's out-of-sample validation found this shift does not replicate uniformly:</b>
+ * the SELL-side widening holds on held-out BTCUSDT/DOGEUSDT tails and a genuinely untouched
+ * SOLUSDT fixture, but the BUY-side widening — an equally central part of the original
+ * finding above — reverses on two of those three out-of-sample checks, including SOLUSDT
+ * (see {@code OutOfSampleValidationTest} and docs/CHANGELOG.md's E8-F4-S1 entry for the exact
+ * figures). Per that story's confirmed report-only scope, RSI stays at 25/75/v2 here — the
+ * BUY-side mismatch is a flagged finding for a future recalibration (e.g. asymmetric bounds),
+ * not acted on yet. {@link #RULE_TABLE_VERSION} exists so revising these thresholds later is
+ * an auditable, versioned change (feeds E6-F3-S2).
  */
 public final class SignalRuleEngine {
 

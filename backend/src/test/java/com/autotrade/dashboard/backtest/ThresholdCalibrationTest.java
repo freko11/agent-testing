@@ -26,12 +26,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * gate.
  *
  * <p><b>Overfitting caveat (deliberate scope boundary):</b> both fixtures are also this
- * pass's only tuning data, so a candidate that wins here is not yet validated
- * out-of-sample — that is E8-F4-S1's explicit follow-up, not attempted here. Treat any
- * resulting threshold change as provisional pending that story, and prefer the existing
- * baseline over a marginal/noisy-looking improvement, especially where {@code n} (scored
- * call count) is small enough that the "difference" could just be sample noise — the same
- * small-n caution E2-F4-S2's win-rate-vs-expectancy gap already illustrates.
+ * pass's only tuning data, so a candidate that wins here is not validated out-of-sample by
+ * this test alone — prefer the existing baseline over a marginal/noisy-looking improvement,
+ * especially where {@code n} (scored call count) is small enough that the "difference" could
+ * just be sample noise — the same small-n caution E2-F4-S2's win-rate-vs-expectancy gap
+ * already illustrates. {@code OutOfSampleValidationTest} (E8-F4-S1) since re-ran the shipped
+ * RSI 25/75 finding against held-out/untouched data and found it does <b>not</b> replicate
+ * uniformly (the SELL-side gain holds, the BUY-side gain doesn't) — see that test and
+ * docs/CHANGELOG.md's E8-F4-S1 entry for the actual out-of-sample figures.
  *
  * <p>Assertions here are structural only, mirroring {@link BacktestHarnessTest} — the
  * printed report is the evidence under review, not a regression target. Read the printed
