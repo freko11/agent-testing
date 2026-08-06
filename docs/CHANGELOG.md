@@ -5123,3 +5123,291 @@ printed output is the evidence under review, reproducible via `./mvnw test
 failures/errors, jar packaged) passes clean. Backend-only, no frontend
 changes; no live-dashboard verification surface (same as every other E8
 story — nothing here is wired into a controller or the order path).
+
+## E8-F5-S1 — Live signal-drift monitoring (E8's last story — epic complete)
+
+E8-F5-S1 ("re-score the rule table's live performance against
+`OrderAuditEntry`'s frozen signal snapshots so a decaying edge is caught
+before it costs real money") is done. This closes out F8.5, E8's only
+remaining feature — **E8 (Signal Quality & Quant Rigor) is now fully
+complete**: E8-F1-S1 through E8-F5-S1, seven stories across five features.
+
+**Design gate finding that shaped the whole story.** Neither `Order` nor
+`OrderAuditEntry` records a trade's exit — no exit price, no TP/SL-hit flag,
+no close timestamp. E4-F3-S2/E6-F2-S2 deliberately stopped at "entry filled,
+protection legs resting on the broker," and E6-F3-S1/S2's audit log freezes
+only the submission-time decision, never updated afterward. So "re-score live
+performance" can't mean reading a recorded outcome — there isn't one. It has
+to mean re-fetching real forward market data after each audit entry's
+decision point and running the same TP/SL walk-forward scan `BacktestHarness`
+already runs against a fixture (E8-F2-S1). That's the crux this story's whole
+design turns on.
+
+**Confirmed scope** (design-gated before implementation, matching this
+story's own explicit instructions rather than left to interpretation):
+backend-only, no frontend changes; ephemeral computation only — no new table,
+no persisted report, every call recomputes fresh from `OrderAuditEntry` and
+real market data; rescore only `resultStatus` in `{FILLED,
+PARTIALLY_PROTECTED}` (both mean the entry leg actually filled — real market
+exposure existed; `REJECTED`/`FAILED`/`SUBMISSION_UNKNOWN`/`CANCELLED` never
+did); baseline computed for only the CURRENT `SignalRuleEngine.RULE_TABLE_VERSION`
+(`v2`) — an older/newer version's live calls still surface raw counts, never a
+fabricated comparison against a baseline that was never computed for them.
+Explicitly out of scope: `OrderService`/`SignalService`/`SignalRuleEngine`/
+`PlaceOrderRequest`/`OrderAuditEntry`'s write path (read-side only, the
+write-once audit contract from E6-F3-S1/S2 is untouched), funding-rate/carry
+costs (same exclusion E8-F2-S2 already made), execution-quality/slippage
+analysis (comparing `entryPrice` vs. `indicatorSnapshot.price` — this measures
+directional-edge decay only, apples-to-apples with how `BacktestHarness`
+itself scores, not fill quality).
+
+**Step 1 — promoting the scoring primitives to main scope.** `BacktestHarness`'s
+TP/SL-aware walk-forward machinery (E8-F2-S1) lived entirely in
+`src/test/java`, since every prior E8 story was a diagnostic/calibration
+pass with no production caller. This story needed the same scan to run from
+`src/main/java` (a real `@Service`), so seven pure, already-independently-
+unit-tested types moved as-is into a new `backend/src/main/java/.../backtest/`
+package — `BacktestConfig`, `Checkpoint`, `ExitReason`, `DirectionalOutcome`,
+`DirectionalScoreResult`, `CheckpointStats`, `DirectionalOutcomeStats` — plus
+two genuinely new files holding logic that used to be private/package-private
+nested inside `BacktestHarness`: `WalkForwardScorer` (the promoted
+`score`/`findFirstCrossing`/`percentChange` static methods, now `public`,
+with `CrossingEvent` moved out of `BacktestHarness`'s nesting into it) and a
+top-level `DirectionalAccumulator` (promoted out of `BacktestHarness`'s
+private nested class of the same name, its fields/methods now `public` so a
+different package — `monitoring` — can use it, whereas `IndicatorAccumulator`
+and `HoldGateAccumulator` stayed private nested classes in `BacktestHarness`,
+since the live monitor doesn't need per-indicator or hold-gate scoring).
+`BacktestHarness` itself, `BacktestReport`, `BacktestDecisionPoint`,
+`HoldGateStats`/`HoldGateOutcome`, and `RegimeSplitStats` stayed
+`src/test/java`-only — they're fixture-replay/reporting concerns the live
+monitor has no use for.
+
+**The one load-bearing signature change, not a straight copy-paste.**
+`findFirstCrossing`/`score` used to take `(List<Candle> candles, int
+decisionIndex, ...)`, indexing into one contiguous fixture series anchored at
+index 0. That shape assumes the decision day and its forward history live in
+the same list — true for a fixture replay, false for a live audit-log replay
+(the decision day's own candle isn't even necessarily fetched, only the
+forward candles are). The promoted methods instead take `forwardCandles`:
+candles strictly AFTER the decision day, index 0 = day+1.  `BacktestHarness`
+adapts every call site to pass `candles.subList(decisionIndex + 1,
+candles.size())` instead. `BacktestHarnessTpSlTest` (the one other file that
+called these methods directly, besides `BacktestHarness` itself — confirmed
+by grep before touching anything) was rewritten the same way, every fixture's
+`candles.subList(1, candles.size())` since every one of its hand-crafted
+fixtures decision-indexes at 0.
+
+**Verifying it was a pure relocation.** Ran `./mvnw test
+-Dtest=BacktestHarnessTpSlTest,BacktestHarnessTest,ThresholdCalibrationTest,
+IndicatorExpectancyCalibrationTest,RegimeCalibrationTest,
+OutOfSampleValidationTest,WeightedVoteBacktestTest,CheckpointStatsTest`
+immediately after the promotion/reshape — all 22 tests passed, 0
+failures/errors, before writing a single line of the new `monitoring`
+package — confirming the move genuinely changed nothing observable.
+(`ThresholdCalibrationTest`, `IndicatorExpectancyCalibrationTest`,
+`RegimeCalibrationTest`, `OutOfSampleValidationTest`, `WeightedVoteBacktestTest`,
+`CheckpointStatsTest` needed zero source changes at all — grep confirmed none
+of them call `findFirstCrossing`/`score`/`CrossingEvent` directly, only
+`BacktestHarness.run`/`combineCheckpoint` and `CheckpointStats` accessors, so
+same-package class resolution across the main/test source-root split — which
+this codebase already establishes as a pattern for `signal`/`order`/etc. —
+picked the promoted `main`-scope classes up with zero import changes.) A
+leftover unused `RoundingMode` import in `BacktestHarness.java` (its only
+uses moved to `WalkForwardScorer`) was caught and removed during the
+`simplify` pass.
+
+**Step 2 — the `monitoring` package.** `LiveSignalDriftService` mirrors
+`notification.WatchlistSignalPoller`'s established shape (the one prior
+scheduled-job precedent in this codebase): batches
+`MarketDataService.getPriceHistory` once per distinct ticker symbol (not once
+per audit entry — the same rate-limit hygiene), catches/logs/skips per-ticker
+market-data failures (`RuntimeException`) without aborting the rest of the
+run, gated by `@ConditionalOnProperty("monitoring.live-drift.enabled",
+matchIfMissing = true)`.
+
+For each `FILLED`/`PARTIALLY_PROTECTED` `OrderAuditEntry` in the lookback
+window: `signalCallEntry.getCall()` gives BUY/SELL directly (confirmed by
+reading `OrderService.submitOrder` — it throws `SignalNotActionableException`
+for a HOLD call before any `Order`/`OrderAuditEntry` row is ever created, so
+a HOLD audit row structurally cannot exist); `indicatorSnapshot.getPrice()`/
+`getSnapshotAt()` are the decision-day close/timestamp (never the order's
+broker fill price — directional-edge decay, not execution quality, per
+confirmed scope); `signalCallEntry`'s frozen `holdTermMinDays`/`holdTermMaxDays`
+give the MIN/MID/MAX checkpoints, same convention `BacktestHarness` uses.
+Forward candles are filtered to those after the snapshot timestamp and handed
+to `WalkForwardScorer`, accumulated into a `DirectionalAccumulator` keyed by
+`(ruleTableVersion, isBuy)`.
+
+**A real lazy-loading trap, caught before it shipped, not after.** This
+codebase's CLAUDE.md already documents a recurring gotcha: a `@ManyToOne`
+lazy field touched after its `@Transactional` method has returned throws
+`LazyInitializationException` in real usage. The obvious fix — mark
+`computeDrift` `@Transactional(readOnly = true)` — doesn't actually work
+here: the `@Scheduled` method (`scheduledDriftCheck`) calls `computeDrift`
+via plain same-class self-invocation, which bypasses Spring's transactional
+proxy entirely (a well-known Spring AOP limitation, not specific to this
+codebase). Rather than work around self-invocation (a second proxy-injection
+trick, or splitting into two beans), `OrderAuditEntryRepository`'s new query
+sidesteps the whole problem with `JOIN FETCH ticker`/`signalCallEntry`/
+`signalCallEntry.indicatorSnapshot` — eager-loading exactly what `scoreOne`
+needs, no transaction boundary required at all. This was caught by reasoning
+through the call path before writing the query, not discovered by a failing
+test — though the later full-context integration test (below) exercises this
+exact query against a real H2-in-Oracle-mode database and confirms it
+executes cleanly.
+
+**`LiveDriftBaseline` — real computed numbers, not fabricated placeholders.**
+The AC's baseline ("expectancy drift versus the original backtest") needed a
+concrete v2 BUY/SELL `expectancyPctAfterCosts` figure at MIN/MID/MAX. Checked
+docs/CHANGELOG.md's E8-F2-S1/E8-F2-S2 entries first, per this story's
+instructions — neither states a clean combined-across-fixtures BUY/SELL
+table (only per-rule spot figures as narrative illustration), so per the
+confirmed fallback, the real numbers were derived directly: a temporary
+`LiveDriftBaselineTest` ran `BacktestHarness.run` against the checked-in
+BTCUSDT/DOGEUSDT fixtures, combined `overallBuy()`/`overallSell()`
+call-count-weighted across both (the identical combination formula
+`IndicatorExpectancyCalibrationTest`, E8-F3-S1, already established for
+`WeightedVoteRuleEngine.IndicatorWeights.DEFAULT` — win/loss-count-weighted
+average of avg win/loss size — reimplemented locally in the `monitoring`
+package since `BacktestHarness.combineCheckpoint` is package-private to
+`backtest`), and printed the actual figures:
+
+```
+BUY combined (n=441):  min -0.053166  mid +0.027064  max +0.033141
+SELL combined (n=397): min -0.019962  mid +0.159881  max +0.153708
+```
+
+Those six numbers are `LiveDriftBaseline`'s constants, verbatim. A permanent
+`LiveDriftBaselineTest` re-derives the same combination from the same
+fixtures and asserts the constants match within a documented `1e-4` tolerance
+(absorbing only the printf-rounding gap between the console output the
+constants were transcribed from and full double precision, not because the
+underlying computation is expected to vary) — the same "computed once,
+pinned as a constant, guarded by a re-deriving test" pattern
+`IndicatorExpectancyCalibrationTest` established for `IndicatorWeights.DEFAULT`.
+
+**Decay gating.** `possibleDecay` on a `CheckpointDrift` is `true` only when
+that checkpoint's live-scored sample meets a configured minimum
+(`monitoring.live-drift.min-sample-size`) AND its drift (`live - baseline`)
+is at or below a configured negative threshold
+(`monitoring.live-drift.decay-threshold-pct`) — both explicit, documented
+uncalibrated placeholders (20 and 0.5 respectively), same treatment as
+`BacktestConfig.TAKE_PROFIT_PCT`. A two-trade sample with catastrophic-looking
+numbers never flags on its own, by construction, not just by convention — the
+unit test (`possibleDecayNeverFlaggedBelowTheConfiguredMinimumSampleSize`)
+proves the gate binds even when the raw drift arithmetic alone would clear
+the threshold.
+
+**Result shape** — `SignalDriftReport`/`RuleTableVersionDrift`/
+`DirectionalDrift`/`CheckpointDrift`, one file each (matching
+`backtest.BacktestReport`/`DirectionalOutcomeStats`/`CheckpointStats`'s own
+"several small records" precedent), field names deliberately mirroring
+`CheckpointStats`'s own (`expectancyPctAfterCosts`, etc.) so cross-referencing
+a live report against this CHANGELOG's E8-F2-S1/S2 prose needs no mental
+translation. `RuleTableVersionDrift.hasBaseline` is `true` only for
+`LiveDriftBaseline.RULE_TABLE_VERSION` — an older/newer version's bucket still
+reports `totalCalls` (so a near-empty audit log for that version reads as "no
+data yet," never "flat performance"), just with an empty `checkpoints` list
+rather than a fabricated comparison.
+
+**Endpoint and scheduled job, both calling the same method.** `GET
+/api/monitoring/signal-drift` (optional `lookbackDays` override; falls back
+to `computeDrift()`'s configured default otherwise) needs no new
+`SecurityConfig` carve-out — `anyRequest().authenticated()` already covers
+it. `scheduledDriftCheck` (`@Scheduled(fixedDelayString =
+"${monitoring.live-drift.fixed-delay-ms}")`) logs WARN per
+`(ruleTableVersion, direction, checkpoint)` bucket flagged `possibleDecay`,
+INFO otherwise — matching E7-F1-S1's WARN-for-real-signal/INFO-for-routine
+logging discipline.
+
+**A real wiring bug caught by writing the integration test, fixed the same
+way this codebase always fixes these.** Initially, `SignalDriftController`
+was gated by the same `@ConditionalOnProperty` as `LiveSignalDriftService` —
+correct on its own, but `SignalDriftController` constructor-injects
+`LiveSignalDriftService` directly, so if the whole feature were disabled in
+`src/test/resources/application.properties` (mirroring
+`notification.watchlist-poll.enabled=false`'s "no live network calls in CI"
+precedent) while any OTHER test needed the controller wired for real, the
+bean simply wouldn't exist — a `NoSuchBeanDefinitionException` waiting to
+happen the moment such a test got written. Confirmed correct in the end
+(both classes conditional on the same flag, so the whole feature appears/
+disappears together, matching `WatchlistSignalPoller`'s own "nothing else
+depends on it" precedent — except this story's controller *does* have a
+hard dependency, hence gating both, not just the service).
+
+Writing that verification test surfaced a second, sharper bug: initially
+`monitoring.live-drift.fixed-delay-ms`/`lookback-days`/`min-sample-size`/
+`decay-threshold-pct` were deliberately left OUT of
+`src/test/resources/application.properties` — reasoning by direct analogy to
+`notification.watchlist-poll.fixed-delay-ms`'s own absence there, since with
+the feature disabled by default, the service's constructor (which needs
+those `@Value`s) never runs, so nothing should need them resolved. That
+reasoning holds for the *default* test run — but breaks the moment any test
+deliberately re-enables the flag via `@TestPropertySource` (exactly what
+`SignalDriftControllerIntegrationTest`, below, needed to do to prove real
+wiring): `@Scheduled`'s `fixedDelayString` placeholder is resolved at bean
+post-processing time regardless of whether the method is ever invoked, so an
+unresolved `${monitoring.live-drift.fixed-delay-ms}` failed context startup
+with `IllegalStateException: Could not resolve placeholder`. Fixed by adding
+literal defaults for all four keys to the test properties file after all —
+this codebase's own CLAUDE.md gotcha about `@ConfigurationProperties`/`@Value`
+needing a literal test-side default turned out to apply here too, just
+triggered by a test enabling a normally-disabled feature rather than by an
+unconditionally-read config the way `RiskLimitsProperties` originally
+illustrated it.
+
+**Live verification — Docker wasn't available in this sandboxed worktree.**
+This story's mandatory `run`-skill verification step hit a genuine
+environmental wall: `docker ps` failed outright (`docker daemon is not
+running`), so the real Oracle XE + `./mvnw spring-boot:run` stack this
+codebase's `run` skill normally drives couldn't be started. A fallback
+attempt — running the actual `spring-boot:run` process against an in-memory
+H2 database instead of Oracle, via env-var datasource overrides — also
+failed: `Cannot load driver class: org.h2.Driver`, because the H2 dependency
+in `pom.xml` is `test`-scoped only, not on `spring-boot:run`'s runtime
+classpath. Both genuinely attempted and confirmed blocked, not skipped.
+
+Fell back to the strongest verification actually achievable: a new
+`SignalDriftControllerIntegrationTest`, a real `@SpringBootTest` (not a
+`@WebMvcTest` slice with the service mocked — this one boots the entire
+context for real) that overrides `monitoring.live-drift.enabled=true` via
+`@TestPropertySource` — the only place in this codebase's test suite that
+ever exercises this feature's *enabled* path, since every other test leaves
+it off. It authenticates via the same real session-cookie/CSRF login flow
+`SecurityConfigTest` already established (deliberately not `@WithMockUser` —
+tried first, failed with an unexpected 401 despite the mock principal, likely
+an interaction between this app's custom `SecurityFilterChain`/CSRF handler
+setup and `@WithMockUser`'s context-priming mechanism not present in this
+codebase's one existing full-context+@WithMockUser-free precedent; rather
+than debug that interaction further, the already-proven real-login pattern
+was reused instead, which doubles as one more genuine exercise of the actual
+auth path). Runs against an empty `order_audit_entries` table (no fixture
+rows), so `computeDrift` finds zero entries and never calls the real
+`MarketDataService` — zero outbound network calls despite the flag override,
+consistent with "no live network calls in CI." This proves, against a real
+Spring context and a real (H2-in-Oracle-mode) database: `@Value` constructor
+binding actually works, `@ConditionalOnProperty` actually creates the beans
+when the flag is on, the `JOIN FETCH` JPQL query actually executes without a
+syntax/mapping error, and the controller/service/repository chain responds
+correctly end-to-end over real HTTP/JSON — the two wiring bugs above were
+themselves caught by writing this exact test, which is the closest
+substitute available in this environment for the blocked live-process check.
+
+**Testing.** `LiveSignalDriftServiceTest` (mocked `OrderAuditEntryRepository`/
+`MarketDataService`, hand-crafted `Candle` fixtures — the same precedent
+`BacktestHarnessTpSlTest`/`AdxCalculatorTest` established for algorithms the
+two real fixtures can't provide ground truth for): a clean TP-hit bucket
+(win=1 @ +5.00%, expectancy after 20bps costs = +4.80%), a clean SL-hit
+bucket (loss=1 @ -3.00%, after costs -3.20%), sample-size gating proven both
+ways (2 SL-hit entries below a configured minimum of 3 never flag decay
+despite ~-3.2pp drift; the identical scenario with a 3rd entry added does
+flag), and a per-ticker market-data exception that's skipped without
+aborting a second, healthy ticker's scoring. `LiveDriftBaselineTest` and
+`SignalDriftControllerIntegrationTest` as described above. `./mvnw verify`:
+464 tests total (up from E8-F4-S1's 454 — 7 new from
+`LiveSignalDriftServiceTest`/`LiveDriftBaselineTest`, 3 more from
+`SignalDriftControllerIntegrationTest`), 0 failures/errors, jar packaged.
+
+Frontend: no changes, per confirmed scope. `graphify update .` run after
+implementation, per this repo's CLAUDE.md graphify rule.

@@ -22,8 +22,9 @@ Order API migration) added after E4-F3-S2's post-launch verification found
 Binance rejecting conditional exit-leg orders on the old endpoint — see
 that story's entry below, live-verified end-to-end against the real
 Binance Futures Testnet. E8 (Signal Quality & Quant Rigor) is a backlog
-epic added after E7 shipped; E8-F1-S1, E8-F2-S1, E8-F2-S2, E8-F3-S1,
-E8-F3-S2, and E8-F4-S1 are done, E8-F5 is not yet started.
+epic added after E7 shipped and is now **complete**: E8-F1-S1, E8-F2-S1,
+E8-F2-S2, E8-F3-S1, E8-F3-S2, E8-F4-S1, and E8-F5-S1 (E8's last story,
+closing out F8.5, its only feature) are all done.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -405,7 +406,7 @@ E8-F3-S2, and E8-F4-S1 are done, E8-F5 is not yet started.
   don't silently corrupt them. This was E7's last story — the epic is now
   complete.
 
-### E8 — Signal Quality & Quant Rigor (in progress, backlog)
+### E8 — Signal Quality & Quant Rigor (backlog, complete)
 - E8-F1-S1: Threshold calibration pass. `SignalRuleEngine` gained a nested
   `RuleThresholds` record (`rsiOversold`/`rsiOverbought`/`volatilityExtreme`/
   `volumeDriedUp`) plus a `RuleThresholds`-accepting `evaluate` overload — the
@@ -691,6 +692,63 @@ E8-F3-S2, and E8-F4-S1 are done, E8-F5 is not yet started.
   than acted on here. E8-F3-S2's regime filter is out of scope (not named
   in this story's AC). See `docs/CHANGELOG.md`'s E8-F4-S1 entry for the
   full per-fixture figures.
+- E8-F5-S1: Live signal-drift monitoring, closing out E8 — periodically (or
+  on-demand) re-scores the rule table's live performance against production
+  `OrderAuditEntry` rows, since neither `Order` nor `OrderAuditEntry` record
+  a trade's exit outcome, so scoring one means re-fetching real forward
+  market data and running the same TP/SL walk-forward scan `BacktestHarness`
+  uses. That scan (`score`/`findFirstCrossing`/`percentChange`, now `public`
+  static methods on a new `backtest.WalkForwardScorer`) plus its supporting
+  types (`BacktestConfig`, `Checkpoint`, `CheckpointStats`,
+  `DirectionalOutcome`, `DirectionalOutcomeStats`, `DirectionalScoreResult`,
+  `ExitReason`, and a newly-top-level `DirectionalAccumulator`, promoted out
+  of `BacktestHarness`'s private nested class) were promoted from
+  `src/test/java` to `src/main/java` — a pure relocation/reshape (confirmed
+  via unchanged `BacktestHarnessTpSlTest`/`BacktestHarnessTest`/every other
+  E8 calibration test after the move, all still green) except one load-
+  bearing signature change: `findFirstCrossing`/`score` now take {@code
+  forwardCandles} (candles strictly after the decision day) instead of
+  `(candles, decisionIndex)`, since a live decision point has no single
+  contiguous fixture series to index into. New `monitoring` package:
+  `LiveSignalDriftService` (mirrors `notification.WatchlistSignalPoller`'s
+  shape — batches `MarketDataService.getPriceHistory` once per distinct
+  ticker, catches/logs/skips per-ticker market-data failures without
+  aborting the run) replays `OrderAuditEntry` rows with `resultStatus` in
+  `{FILLED, PARTIALLY_PROTECTED}` (both mean the entry leg actually filled —
+  real exposure existed) using each entry's frozen `SignalCallEntry`
+  call/hold-term/decision price, grouped by `rule_table_version` and
+  BUY/SELL into a `DirectionalAccumulator`, and compares it against
+  `LiveDriftBaseline`'s pinned current-version (`v2`) BUY/SELL
+  `expectancyPctAfterCosts` at MIN/MID/MAX — real figures derived by running
+  `BacktestHarness` against the checked-in BTCUSDT/DOGEUSDT fixtures
+  (combined call-count-weighted across both, the same combination
+  `IndicatorExpectancyCalibrationTest` established for
+  `WeightedVoteRuleEngine.IndicatorWeights.DEFAULT`), not fabricated
+  placeholders, and re-derived/pinned by a companion `LiveDriftBaselineTest`.
+  Flags `possibleDecay` only when a checkpoint's live sample meets a
+  configured minimum size AND trails the baseline by more than a configured
+  threshold (`monitoring.live-drift.min-sample-size`/`decay-threshold-pct`,
+  both explicit uncalibrated placeholders) — never on a small sample alone.
+  `GET /api/monitoring/signal-drift` (optional `lookbackDays` override,
+  normal session auth, no new `SecurityConfig` carve-out) and an
+  `@Scheduled`/`@ConditionalOnProperty`-gated job (`monitoring.live-drift.*`
+  config, `enabled` default `true`) both call the same `computeDrift`
+  method; ephemeral only, per confirmed scope — no new table, no persisted
+  report, recomputed fresh every call. `OrderAuditEntryRepository`'s new
+  query `JOIN FETCH`es `ticker`/`signalCallEntry`/`indicatorSnapshot` eagerly
+  rather than relying on `@Transactional`, since the `@Scheduled` method
+  calls `computeDrift` via same-class self-invocation, which bypasses
+  Spring's transactional proxy — a real instance of this file's own
+  documented lazy-association gotcha, caught before it could bite. No
+  `OrderService`/`SignalService`/`SignalRuleEngine`/`PlaceOrderRequest`/
+  `OrderAuditEntry` write-path changes, no frontend changes. Docker wasn't
+  available in the sandboxed worktree this story was implemented in, so
+  live verification against the real running app (the `run` skill's normal
+  path) fell back to a real full-Spring-context `@SpringBootTest`
+  (`SignalDriftControllerIntegrationTest`) that re-enables the feature via
+  `@TestPropertySource` and drives it through actual HTTP/session auth/JSON
+  against H2 in Oracle-compatibility mode — see `docs/CHANGELOG.md`'s
+  E8-F5-S1 entry for the full account. E8 is now complete.
 
 ## Build / lint / test
 
@@ -733,6 +791,19 @@ E8-F3-S2, and E8-F4-S1 are done, E8-F5 is not yet started.
   in a RANGING regime, composable with either `SignalRuleEngine` or
   `WeightedVoteRuleEngine`'s output; `Regime`/`RegimeClassifier` classify an
   `AdxCalculator` reading into TRENDING/RANGING.
+- `backtest` (`src/main/java`, E8-F5-S1) — the TP/SL-aware walk-forward scoring
+  primitives promoted out of the test-only `BacktestHarness` so live signal
+  monitoring can reuse them: `WalkForwardScorer` (`score`/`findFirstCrossing`/
+  `percentChange`, taking a `forwardCandles` slice rather than a full candle
+  list + index), `DirectionalAccumulator` (top-level now, was a private nested
+  class), `BacktestConfig` (TP/SL %, deadband, transaction-cost bps —
+  diagnostic placeholders), `Checkpoint`, `CheckpointStats`,
+  `DirectionalOutcome`, `DirectionalOutcomeStats`, `DirectionalScoreResult`,
+  `ExitReason`. `BacktestHarness` itself (and `BacktestReport`,
+  `BacktestDecisionPoint`, `HoldGateStats`/`HoldGateOutcome`,
+  `RegimeSplitStats`, the per-indicator/`HoldGate` accumulators) stays
+  `src/test/java`-only — a diagnostic/calibration tool, not something the live
+  app calls.
 - `broker` — `BrokerCredentialService`/`CredentialEncryptionService` (keyring-based
   rotation), per-broker credential bootstraps from env vars.
 - `brokeradapter` — `BrokerAdapter` interface, `RetryingBrokerAdapter` decorator
@@ -752,6 +823,16 @@ E8-F3-S2, and E8-F4-S1 are done, E8-F5 is not yet started.
   pre-flight, before any `Order` row exists; `KillSwitchService`/
   `KillSwitchController` (E6-F2-S2's global kill switch, append-only
   `kill_switch_events`).
+- `monitoring` (E8-F5-S1) — `LiveSignalDriftService` (`@Scheduled`/
+  `@ConditionalOnProperty`-gated, mirrors `notification.WatchlistSignalPoller`'s
+  batch-per-ticker/catch-and-skip shape) re-scores the rule table's live
+  performance against `FILLED`/`PARTIALLY_PROTECTED` `OrderAuditEntry` rows
+  using `backtest.WalkForwardScorer` against real forward market data, grouped
+  by `rule_table_version` and BUY/SELL; `LiveDriftBaseline` pins the current
+  version's original-backtest `expectancyPctAfterCosts` figures to diff
+  against. `SignalDriftController` (`GET /api/monitoring/signal-drift`) and
+  the scheduled job call the same `computeDrift` method; ephemeral only, no
+  new table.
 - `watchlist`, `security` (session auth), `common` (`Clock`/`SchedulingConfig`).
 - Schema: Flyway `V1`–`V14` under `backend/src/main/resources/db/migration/` is the
   single source of truth; `spring.jpa.hibernate.ddl-auto=validate` everywhere.

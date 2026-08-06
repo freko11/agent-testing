@@ -21,7 +21,6 @@ import com.autotrade.dashboard.signal.SignalRuleEngine.IndicatorVotes;
 import com.autotrade.dashboard.signal.SignalRuleId;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
@@ -40,6 +39,14 @@ import java.util.Optional;
  * fixed trailing slice). Several calculators (MACD's EMA seed, RSI's Wilder seed) are anchored
  * at the list's start, so replaying with a fixed trailing window would produce different
  * numbers than production ever would have computed on that historical day.
+ *
+ * <p>E8-F5-S1: the TP/SL-aware walk-forward scoring primitives this class uses ({@link
+ * WalkForwardScorer}, {@link DirectionalAccumulator}, {@link BacktestConfig}, {@link Checkpoint},
+ * {@link CheckpointStats}, {@link DirectionalOutcome}, {@link DirectionalOutcomeStats}, {@link
+ * DirectionalScoreResult}, {@link ExitReason}) were promoted out of this class into main scope so
+ * {@code monitoring.LiveSignalDriftService} can reuse them against real forward market data —
+ * this class (and {@code IndicatorAccumulator}/{@code HoldGateAccumulator}, which the live
+ * monitor doesn't need) stays test-only.
  */
 public final class BacktestHarness {
 
@@ -133,13 +140,14 @@ public final class BacktestHarness {
 
             callCounts.merge(matchedRule, 1, Integer::sum);
             BigDecimal decisionClose = candles.get(i).close();
+            List<Candle> forward = candles.subList(i + 1, candles.size());
 
             IndicatorVotes votes = SignalRuleEngine.computeVotes(rsi, macd, ma, thresholds);
-            scoreIndicator(candles, i, decisionClose, votes.rsiBullish(), votes.rsiBearish(),
+            scoreIndicator(forward, decisionClose, votes.rsiBullish(), votes.rsiBearish(),
                     indicatorAcc.get(IndicatorId.RSI));
-            scoreIndicator(candles, i, decisionClose, votes.macdBullish(), votes.macdBearish(),
+            scoreIndicator(forward, decisionClose, votes.macdBullish(), votes.macdBearish(),
                     indicatorAcc.get(IndicatorId.MACD));
-            scoreIndicator(candles, i, decisionClose, votes.maBullish(), votes.maBearish(),
+            scoreIndicator(forward, decisionClose, votes.maBullish(), votes.maBearish(),
                     indicatorAcc.get(IndicatorId.MA_CROSSOVER));
 
             if (holdTerm != null) {
@@ -148,10 +156,14 @@ public final class BacktestHarness {
                 boolean isBuy = matchedRule.call() == SignalCall.BUY;
                 int midDays = (int) Math.round((holdTerm.minDays() + holdTerm.maxDays()) / 2.0);
 
-                Optional<CrossingEvent> crossing = findFirstCrossing(candles, i, holdTerm.maxDays(), decisionClose, isBuy);
-                Optional<DirectionalScoreResult> minResult = score(candles, i, holdTerm.minDays(), decisionClose, isBuy, crossing);
-                Optional<DirectionalScoreResult> midResult = score(candles, i, midDays, decisionClose, isBuy, crossing);
-                Optional<DirectionalScoreResult> maxResult = score(candles, i, holdTerm.maxDays(), decisionClose, isBuy, crossing);
+                Optional<WalkForwardScorer.CrossingEvent> crossing =
+                        WalkForwardScorer.findFirstCrossing(forward, holdTerm.maxDays(), decisionClose, isBuy);
+                Optional<DirectionalScoreResult> minResult =
+                        WalkForwardScorer.score(forward, holdTerm.minDays(), decisionClose, isBuy, crossing);
+                Optional<DirectionalScoreResult> midResult =
+                        WalkForwardScorer.score(forward, midDays, decisionClose, isBuy, crossing);
+                Optional<DirectionalScoreResult> maxResult =
+                        WalkForwardScorer.score(forward, holdTerm.maxDays(), decisionClose, isBuy, crossing);
 
                 acc.record(Checkpoint.MIN, minResult);
                 acc.record(Checkpoint.MID, midResult);
@@ -195,93 +207,23 @@ public final class BacktestHarness {
 
     /**
      * Scores one indicator's own directional read at this decision point (E8-F3-S1), independent
-     * of the combined rule table's matched rule/hold-term — reuses the same TP/SL-aware {@link
-     * #findFirstCrossing}/{@link #score} walk-forward scan the combined rules use, but bounded by
-     * the fixed {@link BacktestConfig#HOLD_REFERENCE_HORIZON_DAYS} horizon rather than a
-     * rule-derived hold term, since a lone indicator's read has no hold-term of its own to derive
-     * one from (the same horizon {@link #scoreHoldGate} already uses for the same reason). A
-     * no-op when the indicator gave a neutral (non-directional) read.
+     * of the combined rule table's matched rule/hold-term, using the shared {@link
+     * WalkForwardScorer} — but bounded by the fixed {@link BacktestConfig#HOLD_REFERENCE_HORIZON_DAYS}
+     * horizon rather than a rule-derived hold term, since a lone indicator's read has no
+     * hold-term of its own to derive one from (the same horizon {@link #scoreHoldGate} already
+     * uses for the same reason). A no-op when the indicator gave a neutral (non-directional) read.
      */
-    private static void scoreIndicator(List<Candle> candles, int decisionIndex, BigDecimal decisionClose,
+    private static void scoreIndicator(List<Candle> forward, BigDecimal decisionClose,
                                         boolean bullish, boolean bearish, IndicatorAccumulator acc) {
         if (!bullish && !bearish) {
             return;
         }
         acc.totalCalls++;
-        Optional<CrossingEvent> crossing = findFirstCrossing(candles, decisionIndex,
+        Optional<WalkForwardScorer.CrossingEvent> crossing = WalkForwardScorer.findFirstCrossing(forward,
                 BacktestConfig.HOLD_REFERENCE_HORIZON_DAYS, decisionClose, bullish);
-        Optional<DirectionalScoreResult> result = score(candles, decisionIndex,
+        Optional<DirectionalScoreResult> result = WalkForwardScorer.score(forward,
                 BacktestConfig.HOLD_REFERENCE_HORIZON_DAYS, decisionClose, bullish, crossing);
         acc.record(result);
-    }
-
-    /**
-     * @param crossing this decision point's shared TP/SL scan result (E8-F2-S1), if any — applied
-     *                  to this checkpoint only when it occurred at or before {@code daysForward},
-     *                  so an early crossing doesn't collapse MIN/MID/MAX to identical results.
-     * @return empty if {@code daysForward} candles past the decision point don't exist in the
-     *         fixture and no TP/SL crossing within {@code daysForward} resolved it first.
-     */
-    static Optional<DirectionalScoreResult> score(List<Candle> candles, int decisionIndex, int daysForward,
-                                                    BigDecimal decisionClose, boolean isBuy,
-                                                    Optional<CrossingEvent> crossing) {
-        if (crossing.isPresent() && crossing.get().daysForward() <= daysForward) {
-            CrossingEvent event = crossing.get();
-            DirectionalOutcome outcome = event.exitReason() == ExitReason.TP_HIT ? DirectionalOutcome.WIN : DirectionalOutcome.LOSS;
-            return Optional.of(new DirectionalScoreResult(outcome, event.signedReturnPct(), event.exitReason()));
-        }
-
-        int futureIndex = decisionIndex + daysForward;
-        if (futureIndex >= candles.size()) {
-            return Optional.empty();
-        }
-        BigDecimal pctChange = percentChange(decisionClose, candles.get(futureIndex).close());
-        BigDecimal signedForCall = isBuy ? pctChange : pctChange.negate();
-
-        DirectionalOutcome outcome = signedForCall.abs().compareTo(BacktestConfig.WIN_LOSS_DEADBAND_PCT) <= 0
-                ? DirectionalOutcome.WASH
-                : (signedForCall.signum() > 0 ? DirectionalOutcome.WIN : DirectionalOutcome.LOSS);
-        return Optional.of(new DirectionalScoreResult(outcome, signedForCall, ExitReason.HORIZON_EXPIRED));
-    }
-
-    /**
-     * Day-by-day walk-forward scan (E8-F2-S1) for the first day, within {@code maxDaysForward} of
-     * the decision point, whose high/low crosses the take-profit or stop-loss price implied by
-     * {@link BacktestConfig#TAKE_PROFIT_PCT}/{@link BacktestConfig#STOP_LOSS_PCT}. Runs once per
-     * decision point and is then applied to each {@link Checkpoint} independently by {@link
-     * #score}, bounded by that checkpoint's own day count.
-     *
-     * <p>A single daily OHLC bar can't say whether the high or low happened first intraday — if
-     * both TP and SL cross on the same day, stop-loss wins (the conservative assumption).
-     */
-    static Optional<CrossingEvent> findFirstCrossing(List<Candle> candles, int decisionIndex,
-                                                       int maxDaysForward, BigDecimal decisionClose,
-                                                       boolean isBuy) {
-        BigDecimal tpDistance = decisionClose.multiply(BacktestConfig.TAKE_PROFIT_PCT)
-                .divide(BigDecimal.valueOf(100), 8, RoundingMode.HALF_UP);
-        BigDecimal slDistance = decisionClose.multiply(BacktestConfig.STOP_LOSS_PCT)
-                .divide(BigDecimal.valueOf(100), 8, RoundingMode.HALF_UP);
-        BigDecimal tpPrice = isBuy ? decisionClose.add(tpDistance) : decisionClose.subtract(tpDistance);
-        BigDecimal slPrice = isBuy ? decisionClose.subtract(slDistance) : decisionClose.add(slDistance);
-
-        int lastIndex = Math.min(decisionIndex + maxDaysForward, candles.size() - 1);
-        for (int i = decisionIndex + 1; i <= lastIndex; i++) {
-            Candle candle = candles.get(i);
-            boolean slHit = isBuy ? candle.low().compareTo(slPrice) <= 0 : candle.high().compareTo(slPrice) >= 0;
-            if (slHit) {
-                return Optional.of(new CrossingEvent(i - decisionIndex, ExitReason.SL_HIT, BacktestConfig.STOP_LOSS_PCT.negate()));
-            }
-            boolean tpHit = isBuy ? candle.high().compareTo(tpPrice) >= 0 : candle.low().compareTo(tpPrice) <= 0;
-            if (tpHit) {
-                return Optional.of(new CrossingEvent(i - decisionIndex, ExitReason.TP_HIT, BacktestConfig.TAKE_PROFIT_PCT));
-            }
-        }
-        return Optional.empty();
-    }
-
-    /** One decision point's shared TP/SL scan result: how many days forward it resolved, which
-     * side crossed first, and the signed return (in call-direction terms) that side represents. */
-    record CrossingEvent(int daysForward, ExitReason exitReason, BigDecimal signedReturnPct) {
     }
 
     private static Optional<HoldGateOutcome> scoreHoldGate(List<Candle> candles, int decisionIndex, BigDecimal decisionClose) {
@@ -289,13 +231,9 @@ public final class BacktestHarness {
         if (futureIndex >= candles.size()) {
             return Optional.empty();
         }
-        BigDecimal pctChange = percentChange(decisionClose, candles.get(futureIndex).close()).abs();
+        BigDecimal pctChange = WalkForwardScorer.percentChange(decisionClose, candles.get(futureIndex).close()).abs();
         return Optional.of(pctChange.compareTo(BacktestConfig.LARGE_MOVE_THRESHOLD_PCT) > 0
                 ? HoldGateOutcome.LARGE_MOVE : HoldGateOutcome.STABLE);
-    }
-
-    private static BigDecimal percentChange(BigDecimal from, BigDecimal to) {
-        return to.subtract(from).divide(from, 8, RoundingMode.HALF_UP).multiply(BigDecimal.valueOf(100));
     }
 
     private static DirectionalOutcomeStats combine(DirectionalOutcomeStats a, DirectionalOutcomeStats b) {
@@ -317,71 +255,14 @@ public final class BacktestHarness {
                 a.tpHit() + b.tpHit(), a.slHit() + b.slHit(), a.horizonExpired() + b.horizonExpired());
     }
 
-    private static final class DirectionalAccumulator {
-        int totalCalls;
-        final Map<Checkpoint, EnumMap<DirectionalOutcome, Integer>> outcomeCounts = new EnumMap<>(Checkpoint.class);
-        final Map<Checkpoint, EnumMap<ExitReason, Integer>> exitReasonCounts = new EnumMap<>(Checkpoint.class);
-        final Map<Checkpoint, Integer> notScoredCounts = new EnumMap<>(Checkpoint.class);
-        final Map<Checkpoint, BigDecimal> winReturnSums = new EnumMap<>(Checkpoint.class);
-        final Map<Checkpoint, BigDecimal> lossReturnSums = new EnumMap<>(Checkpoint.class);
-
-        DirectionalAccumulator() {
-            for (Checkpoint checkpoint : Checkpoint.values()) {
-                EnumMap<DirectionalOutcome, Integer> counts = new EnumMap<>(DirectionalOutcome.class);
-                for (DirectionalOutcome outcome : DirectionalOutcome.values()) {
-                    counts.put(outcome, 0);
-                }
-                outcomeCounts.put(checkpoint, counts);
-                EnumMap<ExitReason, Integer> reasons = new EnumMap<>(ExitReason.class);
-                for (ExitReason reason : ExitReason.values()) {
-                    reasons.put(reason, 0);
-                }
-                exitReasonCounts.put(checkpoint, reasons);
-                notScoredCounts.put(checkpoint, 0);
-                winReturnSums.put(checkpoint, BigDecimal.ZERO);
-                lossReturnSums.put(checkpoint, BigDecimal.ZERO);
-            }
-        }
-
-        void record(Checkpoint checkpoint, Optional<DirectionalScoreResult> result) {
-            if (result.isEmpty()) {
-                notScoredCounts.merge(checkpoint, 1, Integer::sum);
-                return;
-            }
-            DirectionalScoreResult scoreResult = result.get();
-            outcomeCounts.get(checkpoint).merge(scoreResult.outcome(), 1, Integer::sum);
-            exitReasonCounts.get(checkpoint).merge(scoreResult.exitReason(), 1, Integer::sum);
-            if (scoreResult.outcome() == DirectionalOutcome.WIN) {
-                winReturnSums.merge(checkpoint, scoreResult.signedReturnPct(), BigDecimal::add);
-            } else if (scoreResult.outcome() == DirectionalOutcome.LOSS) {
-                lossReturnSums.merge(checkpoint, scoreResult.signedReturnPct(), BigDecimal::add);
-            }
-        }
-
-        DirectionalOutcomeStats toStats() {
-            return new DirectionalOutcomeStats(totalCalls, statsFor(Checkpoint.MIN), statsFor(Checkpoint.MID),
-                    statsFor(Checkpoint.MAX));
-        }
-
-        private CheckpointStats statsFor(Checkpoint checkpoint) {
-            EnumMap<DirectionalOutcome, Integer> counts = outcomeCounts.get(checkpoint);
-            int win = counts.get(DirectionalOutcome.WIN);
-            int loss = counts.get(DirectionalOutcome.LOSS);
-            double avgWin = win == 0 ? 0.0 : winReturnSums.get(checkpoint).doubleValue() / win;
-            double avgLoss = loss == 0 ? 0.0 : lossReturnSums.get(checkpoint).doubleValue() / loss;
-            EnumMap<ExitReason, Integer> reasons = exitReasonCounts.get(checkpoint);
-            return new CheckpointStats(win, loss, counts.get(DirectionalOutcome.WASH), notScoredCounts.get(checkpoint),
-                    avgWin, avgLoss, reasons.get(ExitReason.TP_HIT), reasons.get(ExitReason.SL_HIT),
-                    reasons.get(ExitReason.HORIZON_EXPIRED));
-        }
-    }
-
     /**
      * One {@link com.autotrade.dashboard.signal.IndicatorId}'s own directional-read outcome
      * tally (E8-F3-S1) — structurally {@link DirectionalAccumulator}'s single-checkpoint sibling:
      * a lone indicator has no rule-derived hold term to bracket a MIN/MID/MAX range with, so
      * there's exactly one horizon ({@link BacktestConfig#HOLD_REFERENCE_HORIZON_DAYS}) instead of
-     * three. Reuses the existing {@link CheckpointStats} output shape unchanged.
+     * three. Reuses the existing {@link CheckpointStats} output shape unchanged. Test-only — the
+     * live monitor (E8-F5-S1) doesn't need per-indicator scoring, only the combined rule table's
+     * own BUY/SELL call.
      */
     private static final class IndicatorAccumulator {
         int totalCalls;

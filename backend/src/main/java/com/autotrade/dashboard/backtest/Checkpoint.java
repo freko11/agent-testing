@@ -6,6 +6,8 @@ package com.autotrade.dashboard.backtest;
  * ({@link com.autotrade.dashboard.signal.HoldTerm#minDays()}/{@code #maxDays()}), MID is
  * their rounded midpoint. Scoring all three (not just one) is what lets the hold-term range
  * itself be evaluated, not just the call's direction.
+ *
+ * <p>Promoted to main scope (E8-F5-S1) — see {@link BacktestConfig}'s class Javadoc.
  */
 public enum Checkpoint {
     MIN,

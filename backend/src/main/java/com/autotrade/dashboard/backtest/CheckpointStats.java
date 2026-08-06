@@ -17,6 +17,8 @@ package com.autotrade.dashboard.backtest;
  * scored()} calls by {@link ExitReason} — a decision point resolved by a take-profit/stop-loss
  * crossing before this checkpoint's day, vs. one that fell back to the fixed-day endpoint scoring
  * this checkpoint used prior to E8-F2-S1. Always sums to {@code scored()}.
+ *
+ * <p>Promoted to main scope (E8-F5-S1) — see {@link BacktestConfig}'s class Javadoc.
  */
 public record CheckpointStats(int win, int loss, int wash, int notScored, double avgWinReturnPct,
                                double avgLossReturnPct, int tpHit, int slHit, int horizonExpired) {

@@ -3,11 +3,14 @@ package com.autotrade.dashboard.backtest;
 import java.math.BigDecimal;
 
 /**
- * Harness-only diagnostic thresholds used to measure backtest outcomes (E2-F4-S1) —
- * deliberately separate from and NOT versioned with
- * {@link com.autotrade.dashboard.signal.SignalRuleEngine#RULE_TABLE_VERSION} or
- * {@link com.autotrade.dashboard.signal.HoldTermCalculator#HOLD_TERM_TABLE_VERSION}, since these
- * measure outcomes rather than define the rule table under test.
+ * Diagnostic thresholds used to measure backtest outcomes (E2-F4-S1) — deliberately separate
+ * from and NOT versioned with {@link com.autotrade.dashboard.signal.SignalRuleEngine#RULE_TABLE_VERSION}
+ * or {@link com.autotrade.dashboard.signal.HoldTermCalculator#HOLD_TERM_TABLE_VERSION}, since
+ * these measure outcomes rather than define the rule table under test.
+ *
+ * <p>Promoted to main scope (E8-F5-S1) from {@code src/test/java} — originally a pure test-only
+ * fixture-scoring helper, now also reused by {@code monitoring.LiveSignalDriftService} to score
+ * real forward market data the same way {@code backtest.BacktestHarness} scores a fixture.
  */
 public final class BacktestConfig {
 
@@ -30,8 +33,8 @@ public final class BacktestConfig {
      * absolute prices with no percentage relationship to the signal, and neither the frontend
      * trade form nor the rule table suggests a default. These are a representative,
      * deliberately uncalibrated placeholder bracket (5% target / 3% stop) — the same treatment
-     * as this file's other harness-only diagnostic thresholds, pending a future calibration
-     * pass akin to E8-F1-S1's threshold sweep.
+     * as this file's other diagnostic thresholds, pending a future calibration pass akin to
+     * E8-F1-S1's threshold sweep.
      */
     public static final BigDecimal TAKE_PROFIT_PCT = new BigDecimal("5.0");
     public static final BigDecimal STOP_LOSS_PCT = new BigDecimal("3.0");
