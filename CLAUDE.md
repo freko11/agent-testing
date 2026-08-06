@@ -24,7 +24,11 @@ that story's entry below, live-verified end-to-end against the real
 Binance Futures Testnet. E8 (Signal Quality & Quant Rigor) is a backlog
 epic added after E7 shipped and is now **complete**: E8-F1-S1, E8-F2-S1,
 E8-F2-S2, E8-F3-S1, E8-F3-S2, E8-F4-S1, and E8-F5-S1 (E8's last story,
-closing out F8.5, its only feature) are all done.
+closing out F8.5, its only feature) are all done. E8-F1-S2 is a follow-up
+backlog story added to F8.1 after E8-F4-S1 flagged the BUY-side RSI
+recalibration as future work — same "found post-launch, added to an
+already-listed feature" pattern as E4-F3-S3 — and is also done, though it
+shipped no threshold change (see its entry below for why).
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -749,6 +753,25 @@ closing out F8.5, its only feature) are all done.
   `@TestPropertySource` and drives it through actual HTTP/session auth/JSON
   against H2 in Oracle-compatibility mode — see `docs/CHANGELOG.md`'s
   E8-F5-S1 entry for the full account. E8 is now complete.
+- E8-F1-S2: BUY-side RSI recalibration, following up on E8-F4-S1's flagged
+  finding. `RsiOversoldRecalibrationTest` swept `rsiOversold` candidates
+  24-32 (holding `rsiOverbought` fixed at the already-validated 75) against
+  a tuning window, then all three of E8-F4-S1's out-of-sample surfaces.
+  Result: no ship. Every candidate produces byte-identical BUY-side
+  outcomes — `rsiOversold` has no measurable effect on BUY-side
+  classification in this data, so there was never a BUY-side fix available
+  on this axis; E8-F1-S1's original BUY-side gain turns out to have been a
+  knock-on effect of the `rsiOverbought` move, not the oversold move. Worse,
+  `rsiOversold` *does* affect the SELL side (via RSI-bullish votes
+  suppressing would-be SELL calls into `CONFLICTING_SIGNALS`), and reverting
+  it to the pre-tuning 30 makes SELL-side after-cost expectancy worse on
+  BTCUSDT/SOLUSDT at every checkpoint (mixed on DOGEUSDT) versus the
+  current 25. So reverting would only cost the already-working SELL side
+  for zero BUY-side benefit. `RULE_TABLE_VERSION`/thresholds stay at v2,
+  25/75, unchanged — `SignalRuleEngine`'s class Javadoc documents this
+  closed finding, same treatment E8-F3-S2 gave its own mixed regime
+  evidence. The original E8-F4-S1 BUY-side mismatch remains open, flagged
+  as not fixable via `rsiOversold` alone.
 
 ## Build / lint / test
 

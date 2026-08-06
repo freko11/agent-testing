@@ -33,6 +33,26 @@ import java.math.BigDecimal;
  * BUY-side mismatch is a flagged finding for a future recalibration (e.g. asymmetric bounds),
  * not acted on yet. {@link #RULE_TABLE_VERSION} exists so revising these thresholds later is
  * an auditable, versioned change (feeds E6-F3-S2).
+ *
+ * <p><b>E8-F1-S2 investigated that flagged asymmetric-bounds fix and found it doesn't work.</b>
+ * {@code RsiOversoldRecalibrationTest} swept {@code rsiOversold} candidates 24 through 32 —
+ * holding {@code rsiOverbought} fixed at 75 — against a tuning window and then all three
+ * out-of-sample surfaces (BTCUSDT/DOGEUSDT held-out tails, untouched SOLUSDT). Two findings,
+ * together explaining why "revert rsiOversold to 30" is not the fix E8-F4-S1 hoped for: (1)
+ * every candidate in that range produces byte-identical BUY-side outcomes on every surface —
+ * {@code rsiOversold} has no measurable effect on BUY-side classification in this data at all,
+ * meaning the BUY-side improvement E8-F1-S1 originally attributed to the 30&rarr;25 oversold
+ * move was actually a knock-on effect of the 70&rarr;75 overbought move (a wider overbought
+ * band removes RSI-bearish dissent votes on some bullish-leaning days — that's what let more
+ * BUY calls through, not the oversold threshold); so there is no candidate in this range that
+ * improves the BUY side E8-F4-S1 flagged. (2) {@code rsiOversold} does measurably affect the
+ * SELL side (RSI-bullish votes can suppress a would-be SELL call into {@code
+ * CONFLICTING_SIGNALS}), and raising it back to 30 makes SELL-side after-cost expectancy worse
+ * on BTCUSDT and SOLUSDT at every checkpoint (mixed on DOGEUSDT) versus the current 25 — so
+ * reverting would only trade an already-working SELL side for zero BUY-side benefit. Net:
+ * nothing ships. RSI stays 25/75/v2; see docs/CHANGELOG.md's E8-F1-S2 entry for the full
+ * figures. The original E8-F4-S1 BUY-side mismatch remains open — not fixable via {@code
+ * rsiOversold} alone, per this finding.
  */
 public final class SignalRuleEngine {
 

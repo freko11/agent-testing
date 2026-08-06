@@ -217,6 +217,7 @@ started.*
 | ID | Story | Acceptance Criteria | Pts |
 |---|---|---|---|
 | E8-F1-S1 | As a user, I want the RSI/volatility/volume-trend thresholds in `SignalRuleEngine` re-tuned against `BacktestHarness`'s per-branch expectancy output (E2-F4-S2), instead of left as the original hand-picked estimates, so the rule table's gates are backed by evidence rather than engineering intuition. | A documented calibration pass (script or test) sweeps threshold candidates against the existing BTCUSDT/DOGEUSDT fixtures, reports expectancy per candidate, and any resulting threshold change is versioned via a `RULE_TABLE_VERSION` bump per `SignalRuleEngine`'s existing versioning convention. | 5 |
+| E8-F1-S2 | As a user, I want `rsiOversold` recalibrated independently of `rsiOverbought`, since E8-F4-S1 found E8-F1-S1's symmetric RSI 25/75 shift replicates out-of-sample on the SELL side but not the BUY side, and flagged asymmetric bounds as the likely fix. | `rsiOversold` candidates are swept against a tuning window only (never the out-of-sample surfaces), then the winning candidate(s) are checked against E8-F4-S1's three out-of-sample surfaces (BTCUSDT/DOGEUSDT held-out tails, untouched SOLUSDT) on both BUY and SELL sides before anything ships; any shipped change is versioned via a `RULE_TABLE_VERSION` bump, and a no-ship outcome is an equally valid, documented ending if the evidence doesn't support a change. Found post-launch during E8-F4-S1's validation. | 3 |
 
 **F8.2 Execution-realistic backtesting**
 | ID | Story | Acceptance Criteria | Pts |

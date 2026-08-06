@@ -5411,3 +5411,111 @@ aborting a second, healthy ticker's scoring. `LiveDriftBaselineTest` and
 
 Frontend: no changes, per confirmed scope. `graphify update .` run after
 implementation, per this repo's CLAUDE.md graphify rule.
+
+## E8-F1-S2 — BUY-side RSI recalibration (no ship)
+
+E8-F1-S2 follows up on E8-F4-S1's flagged finding: the RSI 25/75 shift
+(E8-F1-S1) replicates out-of-sample on the SELL side but not the BUY side,
+and E8-F4-S1 suggested "asymmetric RSI bounds, wider on the SELL side only"
+as the likely fix. This story investigates that fix directly. Design-gated
+via the `Plan` subagent before any code was written, per CLAUDE.md's
+mandatory workflow for rule-engine changes.
+
+**Design gate.** Two decisions the plan resolved before the sweep ran: (1)
+tune `rsiOversold` candidates only on the tuning window (BTCUSDT/DOGEUSDT's
+first 700 candles, the same `SPLIT_INDEX` `OutOfSampleValidationTest`
+established) — never the held-out tail, never SOLUSDT — then validate the
+grid against all three out-of-sample surfaces before anything ships, so
+this story doesn't repeat E8-F1-S1's own tune-on-full-fixture,
+test-on-the-same-fixture mistake; (2) the ship bar, confirmed with the user
+via `AskUserQuestion` before the sweep ran: a candidate only replaces
+production `RSI_OVERSOLD_THRESHOLD` if it's equal-or-better than the
+pre-tuning 30 baseline at every one of MIN/MID/MAX, on **all three**
+out-of-sample surfaces (the strict bar, not a majority-of-surfaces bar,
+matching `RegimeGatedRuleEngine`'s E8-F3-S2 precedent for treating anything
+less than uniform evidence as no-ship).
+
+**New `backtest.RsiOversoldRecalibrationTest`**, `src/test/java`-only, same
+precedent as every other E8 calibration test. Candidate grid: {24, 25, 26,
+27, 28, 29, 30, 32} — `rsiOverbought` fixed at 75 throughout (already
+OOS-validated by E8-F4-S1, not re-litigated), the two gate thresholds at
+`RuleThresholds.DEFAULT`. 25 and 30 carried as in-grid controls (the
+current and pre-tuning values respectively); 26-29 fill the gap; 32 is the
+one past-30 check, since 30 was never itself the product of a search — it
+was the original hand-picked pre-tuning value. Two `@Test` methods:
+`sweepRsiOversoldOnTuningWindowOnly()` (tuning window only) and
+`validateCandidatesOutOfSample()` (all candidates, replayed against all
+three OOS surfaces — not just whichever looked best on the tuning window,
+since that ranking alone is exactly what this story doesn't trust). Same
+structural-only assertions as every other E8 calibration test; the printed
+report is the evidence under review.
+
+**Finding 1 — `rsiOversold` has no measurable effect on the BUY side, at
+all, anywhere in the swept range.** Every one of the 8 candidates produces
+byte-identical `overallBuy()` figures (same `n`, same win rate, same
+expectancy to three decimal places) on the tuning window AND on all three
+out-of-sample surfaces. This was surprising enough to double-check before
+trusting it: a follow-up sanity sweep pushed to genuine extremes (`rsiOversold`
+= 10 and 45, well outside the planned grid) and found the BUY-side numbers
+still identical except an infinitesimal shift at the MIN checkpoint only at
+the 45 extreme (same `n`) — confirming the threshold wiring works and the
+flatness is a real property of this data, not a bug. Mechanism: BUY-side
+sensitivity to RSI thresholding in E8-F1-S1's original combined sweep came
+entirely through the `rsiOverbought` side, not `rsiOversold` — widening
+`rsiOverbought` removes RSI-bearish dissent votes on some bullish-leaning
+days (an RSI value in, say, 70-75 no longer counts as a bearish vote,
+letting an otherwise-2-of-3-bullish day through as `BULLISH_MAJORITY`
+instead of `CONFLICTING_SIGNALS`), which is what actually grew the BUY-side
+sample and improved its stats. `rsiOversold` was never the active
+ingredient in that original finding.
+
+**Finding 2 — `rsiOversold` *does* measurably affect the SELL side, and
+raising it back to 30 makes SELL-side after-cost expectancy worse.** The
+mirror-image mechanism: an RSI value below `rsiOversold` counts as a
+bullish dissent vote, which can suppress an otherwise-2-of-3-bearish day
+into `CONFLICTING_SIGNALS` instead of `BEARISH_MAJORITY`. Raising
+`rsiOversold` from 25 to 30 (holding `rsiOverbought` at 75) means more days
+get flagged bullish-dissent, shrinking the SELL sample and — on two of the
+three out-of-sample surfaces — making it worse, not just smaller:
+BTCUSDT held-out tail SELL after-cost expectancy declines monotonically
+from 25 to 32 (min +0.736%→+0.525%, mid +0.963%→+0.791%, max
++0.999%→+0.894%, n 67→57); SOLUSDT likewise declines at every checkpoint
+(min -0.225%→-0.329%, mid +0.039%→-0.064%, max +0.095%→-0.005% — the
+latter two flip from positive to negative). DOGEUSDT held-out tail is
+mixed: worse at MIN (+0.230%→-0.007%, flipping negative) but slightly
+better at MID/MAX (+1.042%→+1.090%, +1.206%→+1.287%).
+
+**Decision: no ship.** Per the confirmed strict ship bar, 30 fails against
+25 on the SELL side (2 of 3 surfaces uniformly worse, one mixed) while
+tying exactly on the BUY side. Every other grid candidate ties 25 on BUY
+and underperforms it by varying degrees on SELL (SELL-side `n` and
+expectancy decline monotonically as `rsiOversold` rises from 24 toward 32
+on every surface checked). There is no candidate in the swept range that
+improves on the shipped 25 without giving up SELL-side performance that
+was already working, and none that actually fixes the BUY-side mismatch
+E8-F4-S1 flagged — because, per Finding 1, nothing on this axis can.
+`RSI_OVERSOLD_THRESHOLD` stays 25, `RSI_OVERBOUGHT_THRESHOLD` stays 75,
+`RULE_TABLE_VERSION` stays v2. `SignalRuleEngine`'s class Javadoc gained a
+third paragraph recording this closed finding — same treatment E8-F3-S2
+gave its own mixed regime evidence: a real, investigated result, not a
+silent no-op. The original E8-F4-S1 BUY-side non-replication remains an
+open, unresolved finding — flagged as not fixable via `rsiOversold` alone,
+left for a future story to investigate other axes (e.g. MACD/MA-crossover
+thresholds, or accepting the BUY-side edge is simply weaker than the
+SELL-side one in this data).
+
+**No production changes shipped.** `SignalRuleEngineTest`,
+`OutOfSampleValidationTest`, `LiveDriftBaseline`, and `LiveDriftBaselineTest`
+were all touched during investigation (to test candidate values, and to
+regenerate `LiveDriftBaseline`'s pinned figures against a hypothetical v3
+default) but reverted back to their pre-story state once the no-ship
+decision was made, since nothing about `RuleThresholds.DEFAULT` actually
+changed. Confirmed via a final full `./mvnw verify`: 466 tests, 0
+failures/errors, jar packaged — the same count as before this story except
+`RsiOversoldRecalibrationTest`'s own 2 new tests.
+
+Backend, `src/test/java` for the new test file plus a `src/main/java`
+Javadoc-only edit to `SignalRuleEngine` — no `RULE_TABLE_VERSION`,
+`RSI_OVERSOLD_THRESHOLD`/`RSI_OVERBOUGHT_THRESHOLD`, `OrderService`, or
+`PlaceOrderRequest` changes. No frontend changes. `graphify update .` run
+after implementation, per this repo's CLAUDE.md graphify rule.
