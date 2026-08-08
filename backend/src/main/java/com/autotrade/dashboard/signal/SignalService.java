@@ -30,8 +30,14 @@ public class SignalService {
         IndicatorService.IndicatorComputation computation = indicatorService.computeForSignal(symbol, limit);
         IndicatorResponse indicators = computation.response();
 
+        // E8-F1-S4: resolve thresholds off the persisted, normalized ticker symbol (not the raw
+        // `symbol` parameter) so this is robust to caller casing, then delegate to the 6-arg
+        // evaluate overload — no SignalRuleEngine signature change needed.
+        String normalizedSymbol = computation.snapshot().getTicker().getSymbol();
+        SignalRuleEngine.RuleThresholds thresholds = PerSymbolRuleThresholds.forSymbol(normalizedSymbol);
+
         SignalRuleId matchedRule = SignalRuleEngine.evaluate(indicators.rsi(), indicators.macd(),
-                indicators.movingAverage(), indicators.volatility(), indicators.volumeTrend());
+                indicators.movingAverage(), indicators.volatility(), indicators.volumeTrend(), thresholds);
         HoldTerm holdTerm = HoldTermCalculator.calculate(matchedRule, indicators.volatility());
 
         SignalCallEntry entry = new SignalCallEntry(computation.snapshot().getTicker(), computation.snapshot(),

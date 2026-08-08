@@ -33,11 +33,17 @@ second follow-up added after E8-F1-S2 traced the BUY-side gain to
 `rsiOverbought` instead of `rsiOversold`, is also done and also shipped no
 threshold change — see its entry below for why, and for how it closes out
 the E8-F4-S1 BUY-side mismatch as a flagged, understood, not-fixable-via-
-either-RSI-bound-alone finding. E6-F3-S3, a third followup backlog story —
-this one added to E6's F6.3 (Audit log) rather than E8 — is also done: it
-builds the audit-trail viewer that E6-F3-S1/S2 repeatedly deferred, found
-during a general sweep for overdue flagged findings rather than tied to any
-specific prior story's own follow-up note.
+either-RSI-bound-alone finding, by flagging per-asset thresholds as the one
+untried mechanism. E6-F3-S3, a third followup backlog story — this one
+added to E6's F6.3 (Audit log) rather than E8 — is also done: it builds the
+audit-trail viewer that E6-F3-S1/S2 repeatedly deferred, found during a
+general sweep for overdue flagged findings rather than tied to any specific
+prior story's own follow-up note. E8-F1-S4, a fourth follow-up (back on
+F8.1), implements the per-asset-thresholds mechanism E8-F1-S3 flagged as
+untried — a per-symbol `rsiOverbought` override — and is also done; unlike
+S2/S3 it did ship a change (`RULE_TABLE_VERSION` v2→v3, one symbol-specific
+override), see its entry below for the per-symbol sweep and why only one of
+the three calibrated symbols confirmed.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -863,6 +869,56 @@ specific prior story's own follow-up note.
   would need a mechanism neither S2 nor S3 tested (e.g. per-asset
   thresholds, or accepting the fixture-dependence as inherent to RSI at a
   daily-candle horizon).
+- E8-F1-S4: per-symbol `rsiOverbought` calibration, implementing the one
+  mechanism E8-F1-S3 flagged as untried (per-asset thresholds). New
+  `signal.PerSymbolRuleThresholds` resolves `RuleThresholds` per normalized
+  ticker symbol (falling back to the global `RuleThresholds.DEFAULT` for
+  any symbol without its own evidence, including every stock ticker
+  unconditionally), wired into `SignalService.computeSignalWithProvenance`
+  right after `IndicatorService.computeForSignal` returns, off the
+  persisted ticker symbol — no `SignalRuleEngine`/`OrderService`/
+  `PlaceOrderRequest` signature changes, reusing the existing 6-arg
+  `evaluate` overload. New `backtest.PerSymbolRsiOverboughtCalibrationTest`
+  swept BTCUSDT/DOGEUSDT/SOLUSDT **independently** (unlike every earlier
+  E8-F1 test, which pooled BTCUSDT+DOGEUSDT and used SOLUSDT only as a
+  held-out check) — each symbol's own 68-76 grid tuned against its own
+  first 700 candles, then validated against that *same* symbol's own
+  held-out tail (candles 700-1000), never another symbol's data. Result:
+  BTCUSDT and DOGEUSDT's own tuning-window winners (both 76) failed
+  confirmation — not contradicted, but candidates 71-76 produce
+  byte-identical classification on both symbols' own held-out tails, so
+  there's no held-out evidence the gain generalizes; both ship no override.
+  SOLUSDT's own winner (70, the pre-tuning global value) is a genuine
+  confirmation — beats the current default (75) at every checkpoint on
+  SOLUSDT's own held-out tail, comparable n (67 vs. 69) — so SOLUSDT alone
+  ships `rsiOverbought = 70`. `RULE_TABLE_VERSION` bumps v2 → v3 for the
+  resolution mechanism itself, per the confirmed design-gate scope,
+  independent of the 1-of-3 override count. New `backtest/FixtureSplits.java`
+  test helper extracts the `BTCUSDT`/`DOGEUSDT`/`SPLIT_INDEX = 700` fields
+  three other calibration tests had each independently redeclared (a fourth
+  redeclaration would have made it quadruplicated), refactoring all three
+  to use it, zero behavior change. Knock-on fix caught by `./mvnw verify`:
+  `monitoring.LiveDriftBaseline.RULE_TABLE_VERSION` was still the literal
+  `"v2"`, which would have silently and permanently dropped the baseline
+  comparison for every new (v3) audit entry — fixed by moving the literal
+  to `"v3"` (label only; the underlying BUY/SELL figures are unaffected,
+  since they're derived only from BTCUSDT/DOGEUSDT, neither of which has an
+  override, confirmed by `LiveDriftBaselineTest` passing unmodified).
+  `LiveSignalDriftServiceTest`/`OrderCsvExporterTest` needed matching
+  literal updates, the same category of version-bump fixture fallout
+  E8-F1-S1's CLAUDE.md entry already documents. Docker wasn't available in
+  this session (same recurring blocker prior E8/E6 stories hit), so in
+  place of a live-browser run, two new `SignalServiceTest` cases exercise
+  the real (unmocked) `SignalService` → `PerSymbolRuleThresholds` →
+  `SignalRuleEngine.evaluate` path end to end: an RSI=72 boundary case that
+  is `NO_STRONG_SIGNAL` under the global default but `BEARISH_MAJORITY` for
+  ticker `SOLUSDT` specifically (its own 70 override), plus a control case
+  on a non-overridden ticker proving the difference is really the per-symbol
+  threshold. `./mvnw verify`: 483 tests, 0 failures. Fixture-exhaustion
+  caveat, confirmed with the user before implementation: SOLUSDT was the
+  last fixture genuinely untouched by any tuning; after this story none of
+  BTCUSDT/DOGEUSDT/SOLUSDT remains clean for a future recalibration story
+  to validate against.
 
 ## Build / lint / test
 
@@ -893,11 +949,18 @@ specific prior story's own follow-up note.
   classification)
   (pure static, no library — see `docs/CHANGELOG.md` E2-F2-S1 for why), plus
   `IndicatorService`/`IndicatorSnapshot` persistence.
-- `signal` — `SignalRuleEngine` (versioned rule table, safety gates + 2-of-3
-  directional vote → BUY/SELL/HOLD), `HoldTermCalculator` (versioned day-range
-  table), `SignalCallEntry` audit log. `WeightedVoteRuleEngine` (E8-F3-S1) is
-  an alternative, deliberately **unwired** weighted-vote scoring layer —
-  reuses `SignalRuleEngine.computeVotes`/`IndicatorVotes`, not called by
+- `signal` — `SignalRuleEngine` (versioned rule table, currently
+  `RULE_TABLE_VERSION` v3, safety gates + 2-of-3 directional vote →
+  BUY/SELL/HOLD), `HoldTermCalculator` (versioned day-range table),
+  `SignalCallEntry` audit log. `PerSymbolRuleThresholds` (E8-F1-S4) resolves
+  `RuleThresholds` per normalized ticker symbol — currently only SOLUSDT has
+  a non-default override (`rsiOverbought=70`), every other symbol falls back
+  to `RuleThresholds.DEFAULT` (25/75) — called from
+  `SignalService.computeSignalWithProvenance`, the one production (i.e. not
+  deliberately unwired) consumer of `RuleThresholds` besides the default.
+  `WeightedVoteRuleEngine` (E8-F3-S1) is an alternative, deliberately
+  **unwired** weighted-vote scoring layer — reuses
+  `SignalRuleEngine.computeVotes`/`IndicatorVotes`, not called by
   `SignalService`/`OrderService`. `IndicatorId` (RSI/MACD/MA_CROSSOVER) keys
   per-indicator data for both. `RegimeGatedRuleEngine` (E8-F3-S2) is another
   deliberately **unwired** class — a pure `SignalRuleId x Regime ->

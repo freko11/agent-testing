@@ -73,10 +73,25 @@ import java.math.BigDecimal;
  * closed as a flagged finding: neither RSI bound, adjusted alone, fixes it — a resolution would
  * need a mechanism this pair of stories didn't test (e.g. per-asset thresholds, or accepting the
  * fixture-dependence as inherent to this indicator at a daily-candle horizon).
+ *
+ * <p><b>E8-F1-S4 pursued that per-asset-thresholds mechanism.</b> {@link PerSymbolRuleThresholds}
+ * now resolves {@code rsiOverbought} per normalized ticker symbol, falling back to this class's
+ * global {@link RuleThresholds#DEFAULT} (still 25/75) for every symbol without its own evidence.
+ * {@code PerSymbolRsiOverboughtCalibrationTest} swept BTCUSDT/DOGEUSDT/SOLUSDT independently — each
+ * against its own chronological 70% tuning window, each candidate then checked against that same
+ * symbol's own 30% held-out tail (never another symbol's data, unlike E8-F4-S1's cross-symbol
+ * check). Result: only SOLUSDT ships an override (70). BTCUSDT and DOGEUSDT's own tuning-window
+ * winners (both 76) turned out to be indistinguishable from the current default (75) on those two
+ * symbols' own held-out tails — candidates 71-76 produce byte-identical classification there, so
+ * there was no held-out data capable of confirming or refuting the tuning-window gain, and an
+ * unconfirmed candidate does not ship. {@link #RULE_TABLE_VERSION} bumps to v3 for the resolution
+ * mechanism itself, per this story's confirmed scope, regardless of how many symbols ended up with
+ * a non-default override. See {@link PerSymbolRuleThresholds}'s own class Javadoc and
+ * docs/CHANGELOG.md's E8-F1-S4 entry for the full per-symbol sweep and figures.
  */
 public final class SignalRuleEngine {
 
-    public static final String RULE_TABLE_VERSION = "v2";
+    public static final String RULE_TABLE_VERSION = "v3";
 
     public static final BigDecimal RSI_OVERSOLD_THRESHOLD = new BigDecimal("25");
     public static final BigDecimal RSI_OVERBOUGHT_THRESHOLD = new BigDecimal("75");

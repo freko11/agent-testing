@@ -5784,3 +5784,195 @@ No `SignalRuleEngine`/`RULE_TABLE_VERSION`/`OrderService.submitOrder`/
 `OrderAuditEntry`/`PlaceOrderRequest` changes — purely additive read path.
 `graphify update .` run after implementation, per this repo's CLAUDE.md
 graphify rule.
+
+## E8-F1-S4 — per-symbol `rsiOverbought` calibration
+
+**Why this story exists.** E8-F1-S3 closed the E8-F4-S1 BUY-side mismatch as
+"understood but not fixable via either RSI bound adjusted alone," and
+flagged the one mechanism it never tried: per-asset thresholds. Its own
+evidence pointed straight at that gap — BTCUSDT's BUY-side optimum improves
+toward 68, DOGEUSDT's toward 75/76, SOLUSDT's sits near the pre-tuning 70,
+and no single value in 68-76 beat the pre-tuning baseline on all three at
+once. This story implements and evidence-gates that per-symbol mechanism.
+
+**Design gate (confirmed with the user before implementation).** Four
+decisions locked in up front, none re-litigated during implementation:
+(1) sweep `rsiOverbought` only, per symbol — `rsiOversold` stays fixed at
+the global 25 for every symbol, per E8-F1-S2's finding it has zero
+measurable BUY-side effect; (2) the audit trail stays code-only for the
+applied per-symbol value, same treatment every other E8 threshold constant
+gets (code + CHANGELOG, no new column); (3) `RULE_TABLE_VERSION` bumps
+v2→v3 as soon as the resolution *mechanism* ships, regardless of how many
+symbols actually end up with a non-default override; (4) SOLUSDT — the last
+fixture that was still fully "untouched" by any tuning — gets used as a
+tuning symbol here too, since after this story no fixture among
+BTCUSDT/DOGEUSDT/SOLUSDT remains clean for a future recalibration story to
+validate against. Documented as a real constraint, not treated as a
+blocker.
+
+**New `signal.PerSymbolRuleThresholds`.** Keyed by normalized ticker symbol
+(trim+uppercase — the same form `Ticker.getSymbol()` already persists, per
+`TickerService.normalize`), not by `AssetType`: collapsing to asset type
+would erase exactly the distinction the evidence found, since all three
+calibrated symbols are crypto and still disagree with each other on the
+right value. `forSymbol(String)` falls back to `RuleThresholds.DEFAULT`
+(25/75) for any symbol not explicitly in its map — every stock ticker
+unconditionally (zero stock evidence exists in this backlog), and any
+crypto symbol outside the three calibrated fixtures. Compiled Java
+constants, not `application.properties` config, matching every other E8
+threshold's treatment as an evidence-derived, versioned value rather than
+an ops-tunable runtime knob.
+
+**Wired into `SignalService.computeSignalWithProvenance`**: after
+`indicatorService.computeForSignal(...)` returns, the lookup key is derived
+from `computation.snapshot().getTicker().getSymbol()` — the persisted,
+already-normalized form, not the raw method parameter, so this is robust to
+caller casing — resolved via `PerSymbolRuleThresholds.forSymbol(...)` and
+passed into the existing 6-arg `SignalRuleEngine.evaluate(..., RuleThresholds)`
+overload (already existed for `WeightedVoteRuleEngine`/`BacktestHarness`, no
+signature change needed). `OrderService.submitOrder` needed no change,
+since it already calls `computeSignalWithProvenance`.
+`WeightedVoteRuleEngine`/`RegimeGatedRuleEngine` stay untouched and unwired,
+out of scope per the design gate.
+
+**New `backend/src/test/java/.../backtest/FixtureSplits.java`.** Before this
+story, `OutOfSampleValidationTest`, `RsiOversoldRecalibrationTest`, and
+`RsiOverboughtRecalibrationTest` each independently redeclared the same
+`BTCUSDT`/`DOGEUSDT`/`SPLIT_INDEX = 700`/tuning/held-out fields. A fourth
+test needing the identical slicing would have made it quadruplicated rather
+than merely triplicated, so this story extracted the shared fields into one
+package-private helper (plus new `SOLUSDT_TUNING`/`SOLUSDT_HELD_OUT` fields
+— the first time any test tunes against SOLUSDT's own first 700 candles
+rather than only using it whole as an untouched validation surface) and
+refactored all three existing test files to reference it. Pure mechanical
+extraction, zero behavior change — confirmed by rerunning all three
+existing tests unchanged after the refactor, all still green with identical
+printed figures.
+
+**New `backtest.PerSymbolRsiOverboughtCalibrationTest`.** Unlike every
+earlier E8-F1 calibration test (which pooled BTCUSDT+DOGEUSDT into one
+tuning decision and used SOLUSDT only as a held-out check), this one runs
+the tune-then-validate cycle **independently per symbol**:
+- `sweepEachSymbolOnItsOwnTuningWindow()` sweeps the same 68-76 grid
+  `RsiOverboughtRecalibrationTest` used, against each of
+  BTCUSDT/DOGEUSDT/SOLUSDT's own first 700 candles only — never that
+  symbol's own held-out tail, never another symbol's data.
+- `validateEachSymbolOnItsOwnHeldOutTail()` replays every candidate for a
+  symbol against that **same** symbol's own held-out tail (candles
+  700-1000) — never a different symbol's tail.
+- `sellSideUnaffectedByOverboughtCandidates()` is a new structural
+  assertion (not new evidence): asserts `overallSell()` is byte-identical
+  to the `RuleThresholds.DEFAULT` run for every candidate, symbol, and
+  window, confirming E8-F1-S3's "rsiOverbought only ever moves the BUY
+  side" finding held under this story's per-symbol methodology too. It
+  passed on the first run.
+
+**Actual computed results** (real sweep against the checked-in fixtures,
+`./mvnw test -Dtest=PerSymbolRsiOverboughtCalibrationTest`):
+
+*Tuning-window winners* (candidate whose BUY-side `expectancyPctAfterCosts()`
+beats the current default 75 at every one of MIN/MID/MAX, on that symbol's
+own tuning window, with comparable-or-larger scored `n`):
+- **BTCUSDT: 76.** min/mid/max after-cost expectancy 75→76: +0.075%→+0.101%,
+  +0.165%→+0.194%, +0.200%→+0.246% (n=175→181). 76 dominates the entire
+  68-76 grid at all three checkpoints, not just vs. 75.
+- **DOGEUSDT: 76.** 75→76: -0.024%→+0.041%, -0.158%→-0.058%,
+  -0.170%→-0.070% (n=132→138). Same dominance pattern as BTCUSDT.
+- **SOLUSDT: 70.** Here the current default (75) is actually one of the
+  *worst* points in the grid on SOLUSDT's own tuning window; 70 dominates
+  at all three checkpoints (75→70: -0.046%→+0.061%, +0.022%→+0.243%,
+  -0.043%→+0.181%, n=188→159).
+
+*Held-out-tail confirmation* (same candidate, that same symbol's own
+candles 700-1000, vs. the current default 75 on the same slice):
+- **BTCUSDT — no confirmation.** Candidates 71 through 76 produce
+  byte-identical `overallBuy()` stats on BTCUSDT's held-out tail (min/mid/max
+  -0.225%/-0.114%/-0.227%, n=80/78/78, all six candidates). No held-out
+  candle's RSI falls in a range that distinguishes those threshold values,
+  so the tuning-window gain is not confirmed — not because held-out data
+  contradicted it, but because the held-out data is entirely insensitive to
+  the move. No override ships.
+- **DOGEUSDT — no confirmation, same shape.** Candidates 75 and 76 are also
+  byte-identical on DOGEUSDT's held-out tail (+0.205%/+0.945%/+1.226%,
+  n=47, both candidates) for the same reason. No override ships.
+- **SOLUSDT — confirmed.** 70 beats 75 at every checkpoint on SOLUSDT's own
+  held-out tail: min -0.365% vs. -0.447%, mid -0.408% vs. -0.489%, max
+  -0.442% vs. -0.522%, n=67 vs. 69 (comparable, not a smaller/noisier
+  subset). A genuine, non-degenerate confirmation — real, different
+  classification counts and consistently better expectancy at every
+  checkpoint, not a tie.
+
+**Decision: only SOLUSDT ships an override — `rsiOverbought = 70`** (its
+own `rsiOversold` stays the global 25, unchanged). BTCUSDT and DOGEUSDT ship
+no override and fall back to `RuleThresholds.DEFAULT` (25/75) — a
+legitimate per-symbol no-ship for both, same treatment E8-F1-S2/S3 gave
+their own global no-ship outcomes. `RULE_TABLE_VERSION` bumps v2→v3 per the
+design gate's confirmed scope, independent of the 1-of-3 override count.
+`SignalRuleEngine`'s class Javadoc gained a fifth paragraph recording this;
+`PerSymbolRuleThresholds`'s own class Javadoc carries the full per-symbol
+rationale.
+
+**Knock-on fix: `monitoring.LiveDriftBaseline`.** `./mvnw verify` caught two
+real consequences of the version bump, the same way E8-F1-S1's own RSI
+25/75 shift previously broke hardcoded-literal test fixtures elsewhere in
+the suite:
+- `LiveDriftBaselineTest` needed no changes and stayed green — its BUY/SELL
+  expectancy constants are computed from `BacktestHarness.run` against only
+  the BTCUSDT/DOGEUSDT fixtures (the no-thresholds overload, i.e.
+  `RuleThresholds.DEFAULT`), and neither symbol has an override under v3,
+  so those figures are genuinely still correct, byte-for-byte.
+- But `LiveDriftBaseline.RULE_TABLE_VERSION` was still the literal `"v2"`,
+  and `LiveSignalDriftService.buildVersionDrift` only attaches a baseline
+  comparison when an audit entry's own `ruleTableVersion` matches that
+  literal exactly. Left unfixed, every new (v3) audit entry would silently
+  and permanently lose its baseline comparison — a real functional
+  regression in E8-F5-S1's signal-drift monitoring, not a cosmetic test
+  failure. Fixed by moving the literal to `"v3"` — a version-label update
+  only, no numeric change, since the underlying figures are unaffected (as
+  `LiveDriftBaselineTest` passing unmodified confirms). `LiveSignalDriftServiceTest`
+  (whose fixture always derives its audit entry's version from the live
+  `SignalRuleEngine.RULE_TABLE_VERSION`) and `OrderCsvExporterTest`'s one
+  hardcoded `,v2,` CSV-row literal both needed the matching update to
+  `"v3"`/`,v3,` — the same category of fixture fix E8-F1-S1's CLAUDE.md
+  entry already documents as expected fallout from a version bump.
+
+**New wiring-proof test in `SignalServiceTest`.** Docker wasn't available
+in this session (same recurring blocker prior E8/E6 stories hit — no daemon
+running, so the `local` profile's real-Oracle requirement can't be
+satisfied and the `run` skill's live-browser path isn't possible). Unlike
+E8-F1-S2/S3 (pure `src/test/java` diagnostic tools, zero production
+change), this story *does* change production signal computation for
+SOLUSDT, so a diagnostic-only test wasn't sufficient evidence the wiring
+actually works end-to-end. Added two new `SignalServiceTest` cases that
+exercise the real (unmocked) `SignalService` → `PerSymbolRuleThresholds` →
+`SignalRuleEngine.evaluate` call path, only mocking `IndicatorService`:
+RSI=72 with one other bearish vote (MACD) is exactly the boundary this
+story's override moves — under the global default (`rsiOverbought=75`) 72
+isn't bearish, so only one indicator dissents and the call is
+`NO_STRONG_SIGNAL`; for ticker `SOLUSDT` specifically, the same RSI=72
+crosses the symbol's own 70 override into bearish territory, becomes a
+second dissenting vote, and the call becomes `BEARISH_MAJORITY`. A control
+case (ticker `AAPL`, identical indicator inputs) confirms it stays
+`NO_STRONG_SIGNAL` — proving the behavior difference is really driven by
+the per-symbol threshold and not some other accidental difference between
+the two scenarios. This is the closest available substitute to a live
+run, per the same precedent E8-F5-S1/E6-F3-S3 established for this
+blocker, adapted here to prove production wiring specifically rather than
+session/HTTP plumbing.
+
+**`./mvnw verify`: 483 tests (up from E8-F1-S3's 468 — `FixtureSplits.java`
+is non-test-counted, `PerSymbolRsiOverboughtCalibrationTest`'s 3 new tests,
+`SignalServiceTest`'s 2 new tests, plus tests gained by other E8 stories
+landed between S3 and S4 in this backlog's actual build order), 0
+failures/errors, `BUILD SUCCESS`.**
+
+Backend only: `src/main/java` for `PerSymbolRuleThresholds` (new),
+`SignalService` (the one described wiring point), `SignalRuleEngine`
+(`RULE_TABLE_VERSION` bump + Javadoc), and `LiveDriftBaseline` (version
+label only, no numeric change); `src/test/java` for `FixtureSplits` (new),
+`PerSymbolRsiOverboughtCalibrationTest` (new), the three refactored
+existing calibration tests, `SignalServiceTest`'s two new cases, and the
+two stale-literal fixture fixes. No `WeightedVoteRuleEngine`/
+`RegimeGatedRuleEngine`/`OrderService`/`PlaceOrderRequest` changes, no
+schema migration, no frontend changes. `graphify update .` run after
+implementation, per this repo's CLAUDE.md graphify rule.

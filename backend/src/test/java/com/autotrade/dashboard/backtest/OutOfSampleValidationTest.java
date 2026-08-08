@@ -70,16 +70,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class OutOfSampleValidationTest {
 
-    private static final List<Candle> BTCUSDT = BacktestCandleCsvLoader.load("backtest/btcusdt-daily-history.csv");
-    private static final List<Candle> DOGEUSDT = BacktestCandleCsvLoader.load("backtest/dogeusdt-daily-history.csv");
-    private static final List<Candle> SOLUSDT = BacktestCandleCsvLoader.load("backtest/solusdt-daily-history.csv");
+    private static final List<Candle> SOLUSDT = FixtureSplits.SOLUSDT;
 
     /** ~70% of each 1000-candle fixture (Nov 2023 - Jul 2026) is the original tuning window; the
-     * remaining ~30% is held out here for the first time by any E8 calibration. */
-    private static final int SPLIT_INDEX = 700;
+     * remaining ~30% is held out here for the first time by any E8 calibration. Now shared via
+     * {@link FixtureSplits}, see that class's Javadoc. */
+    private static final int SPLIT_INDEX = FixtureSplits.SPLIT_INDEX;
 
-    private static final List<Candle> BTCUSDT_HELD_OUT = BTCUSDT.subList(SPLIT_INDEX, BTCUSDT.size());
-    private static final List<Candle> DOGEUSDT_HELD_OUT = DOGEUSDT.subList(SPLIT_INDEX, DOGEUSDT.size());
+    private static final List<Candle> BTCUSDT_HELD_OUT = FixtureSplits.BTCUSDT_HELD_OUT;
+    private static final List<Candle> DOGEUSDT_HELD_OUT = FixtureSplits.DOGEUSDT_HELD_OUT;
 
     private static final RuleThresholds CURRENT_V2 = RuleThresholds.DEFAULT; // 25/75, shipped by E8-F1-S1
     private static final RuleThresholds PRE_TUNING_V1 = new RuleThresholds(

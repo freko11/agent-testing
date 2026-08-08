@@ -133,4 +133,65 @@ class SignalServiceTest {
 
         verify(signalCallEntryRepository, never()).save(any());
     }
+
+    /**
+     * E8-F1-S4: proves {@code PerSymbolRuleThresholds} is actually consulted through the real
+     * production call path — {@link SignalService} is not mocked here, only {@code
+     * IndicatorService} is, so this exercises the real {@code PerSymbolRuleThresholds.forSymbol}
+     * lookup and the real 6-arg {@code SignalRuleEngine.evaluate} overload, not a mocked stand-in.
+     * RSI=72 with one other bearish vote (MACD) is the exact boundary this scenario is built
+     * around: under the global default (rsiOverbought=75) 72 is not bearish, so only one indicator
+     * dissents and the call is {@code NO_STRONG_SIGNAL} ({@link #nonOverriddenSymbol_sameRsi72And
+     * OtherwiseIdenticalIndicators_staysNoStrongSignal} proves exactly that for a symbol with no
+     * override); under SOLUSDT's own override (rsiOverbought=70) the same RSI=72 crosses into
+     * bearish territory, becomes a second dissenting vote, and the call becomes {@code
+     * BEARISH_MAJORITY} — a real, observable behavior difference driven only by the ticker symbol.
+     */
+    @Test
+    void solusdtOverride_rsi72BearishOnlyUnderPerSymbolOverride_producesBearishMajority() {
+        Ticker ticker = new Ticker("SOLUSDT", AssetType.CRYPTO, null);
+        IndicatorSnapshot snapshot = new IndicatorSnapshot(ticker, Instant.parse("2026-02-09T00:00:00Z"),
+                new BigDecimal("100.00"), Broker.BINANCE);
+
+        MacdResult macd = new MacdResult(new BigDecimal("1.0"), new BigDecimal("2.0"), new BigDecimal("-1.0"));
+        MovingAverageResult ma = new MovingAverageResult(10, new BigDecimal("110.0"), 30,
+                new BigDecimal("110.0"), MovingAverageRelation.EQUAL);
+        IndicatorResponse response = new IndicatorResponse(TickerSummary.from(ticker), Broker.BINANCE,
+                Instant.parse("2026-02-09T00:00:00Z"), new BigDecimal("100.00"), new BigDecimal("72"), macd, ma,
+                new BigDecimal("2.0"), new BigDecimal("1000000.0000"), new BigDecimal("1.0000"));
+
+        when(indicatorService.computeForSignal("SOLUSDT", 200))
+                .thenReturn(new IndicatorService.IndicatorComputation(response, snapshot));
+
+        SignalResponse signalResponse = service.computeSignal("SOLUSDT", 200);
+
+        assertEquals(SignalCall.SELL, signalResponse.call());
+        assertEquals(SignalRuleId.BEARISH_MAJORITY.name(), signalResponse.matchedRule());
+    }
+
+    /** Control for {@link #solusdtOverride_rsi72BearishOnlyUnderPerSymbolOverride_producesBearishMajority}
+     * — same RSI=72, same MACD/MA/volatility/volume-trend inputs, a symbol with no
+     * {@code PerSymbolRuleThresholds} override. Confirms the difference above is really driven by
+     * the per-symbol threshold, not some other accidental difference between the two scenarios. */
+    @Test
+    void nonOverriddenSymbol_sameRsi72AndOtherwiseIdenticalIndicators_staysNoStrongSignal() {
+        Ticker ticker = new Ticker("AAPL", AssetType.STOCK, "NASDAQ");
+        IndicatorSnapshot snapshot = new IndicatorSnapshot(ticker, Instant.parse("2026-02-09T00:00:00Z"),
+                new BigDecimal("100.00"), Broker.ALPACA);
+
+        MacdResult macd = new MacdResult(new BigDecimal("1.0"), new BigDecimal("2.0"), new BigDecimal("-1.0"));
+        MovingAverageResult ma = new MovingAverageResult(10, new BigDecimal("110.0"), 30,
+                new BigDecimal("110.0"), MovingAverageRelation.EQUAL);
+        IndicatorResponse response = new IndicatorResponse(TickerSummary.from(ticker), Broker.ALPACA,
+                Instant.parse("2026-02-09T00:00:00Z"), new BigDecimal("100.00"), new BigDecimal("72"), macd, ma,
+                new BigDecimal("2.0"), new BigDecimal("1000000.0000"), new BigDecimal("1.0000"));
+
+        when(indicatorService.computeForSignal("AAPL", 200))
+                .thenReturn(new IndicatorService.IndicatorComputation(response, snapshot));
+
+        SignalResponse signalResponse = service.computeSignal("AAPL", 200);
+
+        assertEquals(SignalCall.HOLD, signalResponse.call());
+        assertEquals(SignalRuleId.NO_STRONG_SIGNAL.name(), signalResponse.matchedRule());
+    }
 }

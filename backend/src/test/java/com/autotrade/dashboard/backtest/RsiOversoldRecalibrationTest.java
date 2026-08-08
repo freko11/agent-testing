@@ -52,17 +52,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class RsiOversoldRecalibrationTest {
 
-    private static final List<Candle> BTCUSDT = BacktestCandleCsvLoader.load("backtest/btcusdt-daily-history.csv");
-    private static final List<Candle> DOGEUSDT = BacktestCandleCsvLoader.load("backtest/dogeusdt-daily-history.csv");
-    private static final List<Candle> SOLUSDT = BacktestCandleCsvLoader.load("backtest/solusdt-daily-history.csv");
+    private static final List<Candle> SOLUSDT = FixtureSplits.SOLUSDT;
 
-    /** Matches {@code OutOfSampleValidationTest}'s own tuning/held-out split exactly. */
-    private static final int SPLIT_INDEX = 700;
+    /** Matches {@code OutOfSampleValidationTest}'s own tuning/held-out split exactly (now shared
+     * via {@link FixtureSplits}, see that class's Javadoc). */
+    private static final int SPLIT_INDEX = FixtureSplits.SPLIT_INDEX;
 
-    private static final List<Candle> BTCUSDT_TUNING = BTCUSDT.subList(0, SPLIT_INDEX);
-    private static final List<Candle> DOGEUSDT_TUNING = DOGEUSDT.subList(0, SPLIT_INDEX);
-    private static final List<Candle> BTCUSDT_HELD_OUT = BTCUSDT.subList(SPLIT_INDEX, BTCUSDT.size());
-    private static final List<Candle> DOGEUSDT_HELD_OUT = DOGEUSDT.subList(SPLIT_INDEX, DOGEUSDT.size());
+    private static final List<Candle> BTCUSDT_TUNING = FixtureSplits.BTCUSDT_TUNING;
+    private static final List<Candle> DOGEUSDT_TUNING = FixtureSplits.DOGEUSDT_TUNING;
+    private static final List<Candle> BTCUSDT_HELD_OUT = FixtureSplits.BTCUSDT_HELD_OUT;
+    private static final List<Candle> DOGEUSDT_HELD_OUT = FixtureSplits.DOGEUSDT_HELD_OUT;
 
     private static final RuleThresholds DEFAULT = RuleThresholds.DEFAULT;
 

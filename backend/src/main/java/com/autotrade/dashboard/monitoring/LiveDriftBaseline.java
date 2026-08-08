@@ -3,7 +3,7 @@ package com.autotrade.dashboard.monitoring;
 import com.autotrade.dashboard.backtest.Checkpoint;
 
 /**
- * The current {@code SignalRuleEngine.RULE_TABLE_VERSION} ("v2")'s already-computed BUY/SELL
+ * The current {@code SignalRuleEngine.RULE_TABLE_VERSION} ("v3")'s already-computed BUY/SELL
  * {@code CheckpointStats.expectancyPctAfterCosts()} at MIN/MID/MAX — the reference point {@link
  * LiveSignalDriftService} compares live {@code OrderAuditEntry} performance against to surface
  * expectancy drift (E8-F5-S1's AC).
@@ -13,8 +13,8 @@ import com.autotrade.dashboard.backtest.Checkpoint;
  * walk-forward scan and transaction-cost mechanics, with only a couple of per-rule spot figures
  * as illustration, not a full combined-across-fixtures BUY/SELL table) — so these were derived
  * directly, per this story's confirmed fallback: {@code BacktestHarness.run} against the two
- * checked-in BTCUSDT/DOGEUSDT fixtures (the same fixtures, same v2-thresholds {@code
- * RuleThresholds.DEFAULT}, every prior E8 calibration test uses), with {@code overallBuy()}/
+ * checked-in BTCUSDT/DOGEUSDT fixtures (the same fixtures, same {@code RuleThresholds.DEFAULT}
+ * thresholds, every prior E8 calibration test uses), with {@code overallBuy()}/
  * {@code overallSell()} combined call-count-weighted across both fixtures — the exact same
  * combination formula (win/loss-count-weighted average of avg win/loss size) {@code
  * IndicatorExpectancyCalibrationTest} already established for {@code
@@ -23,18 +23,28 @@ import com.autotrade.dashboard.backtest.Checkpoint;
  * pins these values down within a documented tolerance, the same "computed once, pinned as a
  * constant, guarded by a re-deriving test" pattern.
  *
+ * <p><b>E8-F1-S4's v2&rarr;v3 bump ({@code PerSymbolRuleThresholds}) required only a version-label
+ * update here, not a re-derivation.</b> That story's only shipped override is SOLUSDT-specific;
+ * BTCUSDT/DOGEUSDT — the only two fixtures this baseline is computed from — still resolve to
+ * {@code RuleThresholds.DEFAULT} under v3 exactly as they did under v2, so {@code
+ * BacktestHarness.run}'s output for them, and therefore every constant below, is byte-identical.
+ * {@link LiveDriftBaselineTest} needed no changes and still passes unmodified, confirming this.
+ * Only {@link #RULE_TABLE_VERSION} itself moved, so newly-produced (v3) audit entries keep
+ * matching this baseline instead of silently losing their comparison.
+ *
  * <p>Scoped to only the CURRENT rule table version, per this story's confirmed scope — no
  * baseline exists (or is attempted) for v1 or any future version. If {@code RULE_TABLE_VERSION}
- * is ever bumped again, these constants become stale for newly-produced audit entries (an old
- * baseline compared against new-version live data) until a future story re-derives them; {@link
- * LiveSignalDriftService} does not attempt to detect or warn about that staleness itself.
+ * is ever bumped again by a change that actually alters BTCUSDT/DOGEUSDT's own behavior (unlike
+ * E8-F1-S4's SOLUSDT-only change), these constants become stale for newly-produced audit entries
+ * until a future story re-derives them; {@link LiveSignalDriftService} does not attempt to detect
+ * or warn about that staleness itself.
  */
 public final class LiveDriftBaseline {
 
     /** The rule table version these baseline figures were computed against — {@code
      * LiveSignalDriftService} only compares audit entries whose own {@code ruleTableVersion}
      * matches this, never a stale cross-version comparison. */
-    public static final String RULE_TABLE_VERSION = "v2";
+    public static final String RULE_TABLE_VERSION = "v3";
 
     public static final double BUY_MIN_EXPECTANCY_PCT_AFTER_COSTS = -0.053166;
     public static final double BUY_MID_EXPECTANCY_PCT_AFTER_COSTS = 0.027064;
