@@ -195,6 +195,7 @@ acceptance criteria so "done" isn't a judgment call.
 |---|---|---|---|
 | E6-F3-S1 | As a user, I want every order and the signal that triggered it logged immutably so I can review my decision trail later. | Append-only Oracle audit table: ticker, signal snapshot, order params, timestamp, result. | 3 |
 | E6-F3-S2 | As a user, I want the audit log to record which version of the Buy/Sell/Hold rule table produced a signal so a later rule change doesn't retroactively obscure why a past order fired. | Audit log entries record the rule-table version alongside the signal snapshot. | 3 |
+| E6-F3-S3 | As a user, I want a dedicated audit-trail viewer in the dashboard so I can review my decision trail (E6-F3-S1/S2) without exporting CSVs or querying the database directly. | A new UI view lists `OrderAuditEntry` rows (ticker, signal call/rule-table version, order outcome, timestamp), backed by a new paginated read endpoint; reachable from the dashboard's existing tab/nav structure. Backlog story added after E6-F3-S2 shipped the `rule_table_version` column and repeatedly deferred building the viewer itself — found during a general "any overdue findings?" review. | 5 |
 
 ### E7 — Observability & Hardening
 *Threaded through the whole build, not a phase at the end.*
