@@ -69,12 +69,14 @@ either-RSI-bound-alone finding.
   always positive when win &gt; 0, avg loss size always negative when loss &gt;
   0 — a sign guarantee of the deadband classification itself, not a value
   under review) rather than asserting on the actual numbers. Confirmed the
-  story's premise on the real fixture data: DOGEUSDT's BEARISH_MAJORITY
+  story's premise on the real fixture data: BTCUSDT's BEARISH_MAJORITY
   branch has negative expectancy at the min/mid checkpoints (-0.09%/-0.31%)
-  despite a near-coin-flip win rate (42.8%/40.7%), while every BTCUSDT
+  despite a near-coin-flip win rate (42.8%/40.7%), while every DOGEUSDT
   branch is expectancy-positive at every checkpoint — exactly the "coin-flip
   win rate can still be unprofitable" gap this story set out to measure.
-  Findings feed a future rule-table decision, not acted on here.
+  Findings feed a future rule-table decision, not acted on here. (Ticker
+  labels here and in the original E2-F4-S2 CHANGELOG entry were swapped;
+  corrected per the E8-F1-S1 CHANGELOG entry's verified fix.)
 
 ### E3 — Dashboard/Frontend
 - Frontend visual pass: design tokens (`index.css` `:root` custom

@@ -4131,12 +4131,12 @@ bug this class of test exists to catch.
 -Dtest=BacktestHarnessTest`, printed report, not asserted — per this story's own
 scope, the numbers are evidence to review, not a target to enforce):
 
-- BTCUSDT: both `BULLISH_MAJORITY` and `BEARISH_MAJORITY` are expectancy-positive
+- DOGEUSDT: both `BULLISH_MAJORITY` and `BEARISH_MAJORITY` are expectancy-positive
   at all three checkpoints (e.g. BULLISH_MAJORITY: +0.59%/+2.01%/+3.51% at
   min/mid/max; BEARISH_MAJORITY: +0.39%/+0.98%/+0.88%) — win rates in the
   48-58% range, but wins consistently outrun losses in size, so the branches
   are worth trusting on this evidence.
-- DOGEUSDT: `BULLISH_MAJORITY` is expectancy-positive throughout (win rate
+- BTCUSDT: `BULLISH_MAJORITY` is expectancy-positive throughout (win rate
   46.3-49.6%, expectancy +0.03%/+0.30%/+0.22%), but `BEARISH_MAJORITY` is
   expectancy-**negative** at the min and mid checkpoints (-0.087%, -0.305%)
   despite a win rate (42.8%, 40.7%) that looks merely mediocre rather than
@@ -4292,8 +4292,10 @@ DOGEUSDT's, and vice versa; confirmed by rerunning `BacktestHarnessTest` and by
 sanity-checking the fixture CSVs' price magnitudes — BTC candles are ~$35k,
 DOGE candles are ~$0.07, filenames match their contents correctly). The
 underlying test code and fixture data were never wrong, only that entry's written
-description. Left as-is rather than edited, to keep this story's diff scoped to
-its own AC — worth a correction pass if anyone revisits that entry.
+description. Left as-is at the time, to keep this story's diff scoped to its own
+AC — corrected later (2026-08-08, prompted by a general "any overdue findings?"
+sweep) in both the E2-F4-S2 entry above and CLAUDE.md's matching E2-F4-S2 Status
+line, which had copied the same swap.
 
 ## E8-F2-S1 — TP/SL-aware backtest scoring
 
