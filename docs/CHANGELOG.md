@@ -5519,3 +5519,100 @@ Javadoc-only edit to `SignalRuleEngine` — no `RULE_TABLE_VERSION`,
 `RSI_OVERSOLD_THRESHOLD`/`RSI_OVERBOUGHT_THRESHOLD`, `OrderService`, or
 `PlaceOrderRequest` changes. No frontend changes. `graphify update .` run
 after implementation, per this repo's CLAUDE.md graphify rule.
+
+## E8-F1-S3 — `rsiOverbought` recalibration (no ship)
+
+E8-F1-S3 follows up on E8-F1-S2's own finding: `rsiOversold` has no
+measurable effect on BUY-side classification, and E8-F1-S1's original
+BUY-side gain was actually a knock-on effect of the `rsiOverbought` move
+(a wider overbought band removes RSI-bearish dissent votes on some
+bullish-leaning days). That variable — the actual lever behind E8-F4-S1's
+still-open BUY-side out-of-sample mismatch — had never been isolated and
+tested on its own. This story closes that gap, mirroring E8-F1-S2's
+tune-then-validate structure exactly (same `SPLIT_INDEX = 700` tuning/
+held-out boundary, same three out-of-sample surfaces, same strict
+all-surfaces ship bar).
+
+**New `backtest.RsiOverboughtRecalibrationTest`**, `src/test/java`-only.
+Candidate grid: {68, 70, 71, 72, 73, 74, 75, 76} — `rsiOversold` fixed at
+25 throughout (the current, already-shipped value; E8-F1-S2 already showed
+it has zero BUY-side effect, not re-litigated here), the two gate
+thresholds at `RuleThresholds.DEFAULT`. 70 and 75 carried as in-grid
+controls (pre-tuning and current values respectively); 71-74 fill the gap
+between them; 68 is the one below-pre-tuning check, 76 the one
+above-current check — mirrored from `RsiOversoldRecalibrationTest`'s own
+grid shape, reflected because overbought moved 70&rarr;75 (up) where
+oversold moved 30&rarr;25 (down). Two `@Test` methods:
+`sweepRsiOverboughtOnTuningWindowOnly()` and
+`validateCandidatesOutOfSample()`, identical shape to E8-F1-S2's. Same
+structural-only assertions as every other E8 calibration test.
+
+**Finding 1 — unlike `rsiOversold`, `rsiOverbought` does measurably affect
+the BUY side, and has zero effect on the SELL side.** On the tuning window,
+COMBINED BUY after-cost expectancy rises essentially monotonically as
+`rsiOverbought` increases from 68 to 76 (e.g. max checkpoint: 68% n/a→71
++0.106% (aft) n=271, 73 +0.142% n=286, 75 (current) +0.241% n=307, 76
++0.310% n=319) — confirming E8-F1-S2's hypothesis that this axis, not
+`rsiOversold`, drove E8-F1-S1's original combined finding. The mirror-image
+check also held: SELL-side (`overallSell()`) figures are byte-identical
+across the *entire* candidate range 68-76, on every fixture, both tuning
+and out-of-sample — exactly 5 distinct SELL-side result lines total across
+all 8 candidates x 3 fixtures. Each RSI bound only ever moves the vote
+count on its own opposing side's dissent (`rsiOverbought` gates
+RSI-bearish votes that suppress BUY calls; `rsiOversold` gates RSI-bullish
+votes that suppress SELL calls) and never touches the other rule branch —
+a clean, symmetric confirmation of E8-F1-S2's own mechanism finding.
+
+**Finding 2 — the BUY-side effect is asset-dependent in a way that blocks
+any single fix.** Checked against the actual pre-tuning 30/70 baseline's
+real out-of-sample BUY-side raw expectancy (pulled directly from
+`OutOfSampleValidationTest`'s own printed figures — BTCUSDT held-out tail
+min/mid/max -0.209%/-0.077%/-0.191% n=79/77/77; DOGEUSDT held-out tail
++0.212%/+0.776%/+1.098% n=41; SOLUSDT untouched +0.135%/+0.250%/+0.196%
+n=226), no candidate in the swept range clears all three simultaneously:
+- **BTCUSDT held-out tail** improves as `rsiOverbought` is *lowered* toward
+  68 (68: -0.168%/-0.044%/-0.116% n=77/75/75, beating the pre-tuning
+  baseline at every checkpoint) and is flat-and-worse than baseline from 71
+  through 76 (identical -0.225%/-0.114%/-0.227% n=80/78/78 at every value
+  in that sub-range, including the current 75).
+- **DOGEUSDT held-out tail** improves as `rsiOverbought` is *raised* toward
+  75/76 (68: +0.012%/+0.576%/+0.898% n=41, well below the pre-tuning
+  baseline; 75/76: +0.205%/+0.945%/+1.226% n=47, above it) — the opposite
+  direction from BTCUSDT.
+- **SOLUSDT untouched fixture** is best near the pre-tuning value itself
+  (70: -0.065%/+0.050%/-0.004% n=226) and degrades at *both* swept extremes
+  (68: -0.132%/-0.022%/-0.080% n=211; 76: -0.170%/-0.113%/-0.168% n=262) —
+  every candidate in the grid underperforms the true 30/70 baseline
+  (+0.135%/+0.250%/+0.196%) on this fixture, including 70 itself, since the
+  30/70 baseline's `rsiOversold=30` (not this sweep's fixed 25) also
+  contributes on SOLUSDT specifically, an interaction E8-F1-S2's own
+  single-axis framing (fixed at `rsiOverbought=75`) never had the chance to
+  surface.
+
+No single value between 68 and 76 satisfies "equal-or-better than the true
+pre-tuning baseline on all three out-of-sample surfaces" — BTCUSDT wants
+low, DOGEUSDT wants high, SOLUSDT wants a value neither extreme reaches. A
+genuine three-way conflict between assets, not an overfit reading of one
+noisy fixture.
+
+**Decision: no ship.** Per the confirmed strict ship bar (same one E8-F1-S2
+used), nothing clears it. `RSI_OVERSOLD_THRESHOLD` stays 25,
+`RSI_OVERBOUGHT_THRESHOLD` stays 75, `RULE_TABLE_VERSION` stays v2.
+`SignalRuleEngine`'s class Javadoc gained a fourth paragraph recording this
+closed finding. **This closes out the E8-F4-S1 BUY-side mismatch** as a
+fully investigated, understood-but-unresolved finding: neither RSI bound,
+adjusted independently of the other, fixes it. A genuine fix would need a
+mechanism neither S2 nor S3 tested — e.g. per-asset thresholds (which this
+rule table has no config surface for today) or simply accepting that RSI's
+BUY-side edge is asset-dependent at a daily-candle horizon and not worth
+chasing further via this axis.
+
+**No production changes shipped.** `./mvnw verify`: 468 tests (up from
+E8-F1-S2's 466 — `RsiOverboughtRecalibrationTest`'s own 2 new tests), 0
+failures/errors, jar packaged.
+
+Backend, `src/test/java` for the new test file plus a `src/main/java`
+Javadoc-only edit to `SignalRuleEngine` — no `RULE_TABLE_VERSION`,
+`RSI_OVERSOLD_THRESHOLD`/`RSI_OVERBOUGHT_THRESHOLD`, `OrderService`, or
+`PlaceOrderRequest` changes. No frontend changes. `graphify update .` run
+after implementation, per this repo's CLAUDE.md graphify rule.

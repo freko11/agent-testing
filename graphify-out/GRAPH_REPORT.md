@@ -1,37 +1,37 @@
-# Graph Report - agent testing  (2026-08-06)
+# Graph Report - agent testing  (2026-08-08)
 
 ## Corpus Check
-- 330 files · ~149,278 words
+- 331 files · ~152,011 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2762 nodes · 7586 edges · 150 communities (126 shown, 24 thin omitted)
-- Extraction: 86% EXTRACTED · 14% INFERRED · 0% AMBIGUOUS · INFERRED: 1049 edges (avg confidence: 0.8)
+- 2776 nodes · 7639 edges · 140 communities (117 shown, 23 thin omitted)
+- Extraction: 86% EXTRACTED · 14% INFERRED · 0% AMBIGUOUS · INFERRED: 1052 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `774a9834`
+- Built from commit: `228659e5`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
-- BrokerOrderRequest
+- MockBrokerAdapter
 - BinanceFuturesTradingAdapter
 - AlpacaTradingAdapter
 - Order
-- TradingModeResponse
+- .switchTo
 - BrokerAdapterContractTest
 - AlpacaMarketDataClient
 - .calculate
 - SignalCallEntry
-- LiveSignalDriftServiceTest.java
+- AssetType
 - IndicatorSnapshot
 - devDependencies
-- Regime
+- .applyGate
 - BrokerCredential
 - .calculate
 - TradingModeServiceTest
-- MarketDataExceptionHandler.java
+- MarketDataExceptionHandler
 - RiskLimitService
 - .calculate
 - BinanceMarketDataClient
@@ -39,7 +39,7 @@
 - SignalRuleId
 - TradingModeEvent
 - SecurityConfig.java
-- BrokerCredentialService
+- .run
 - .resolveOrRegister
 - order/api.ts
 - PriceChart.tsx
@@ -50,10 +50,10 @@
 - IndicatorService
 - .evaluate
 - RiskConsentEvent
-- .getChartData
+- IndicatorControllerTest
 - IndicatorController
 - .submitOrder
-- JpaRepository
+- KillSwitchService
 - compilerOptions
 - OrderServiceTest.java
 - .export
@@ -63,13 +63,13 @@
 - security-review skill
 - apiFetch
 - MarketDataControllerTest
-- Ticker
+- WatchlistEntry
 - Checkpoint
 - general-purpose agent (implementation)
 - CredentialEncryptionService
 - Candle
 - .findFirstCrossing
-- RetryingBrokerAdapter
+- .evaluate
 - adapter-contract-check skill
 - WatchlistController
 - TradingModeController
@@ -77,7 +77,7 @@
 - BinanceFuturesAdapterConfig.java
 - LiveSignalDriftService.java
 - RiskExceptionHandler.java
-- OrderExceptionHandler
+- ApiErrorResponse
 - NotificationType
 - BrokerOrderResult
 - WatchlistControllerTest
@@ -86,26 +86,26 @@
 - CoreDataModelIntegrationTest.java
 - OrderAuditEntry
 - .run
-- .calculate
-- watchlist/api.ts
+- .getPriceHistory
+- marketdata/api.ts
 - NotificationController
 - OrderControllerTest
-- ApiErrorResponse
+- TradingModeResponse
 - NotificationControllerTest
 - SignalDriftControllerIntegrationTest
 - TickerMetrics.tsx
-- ExitReason
-- PriceHistoryResult
+- RsiOversoldRecalibrationTest
+- LiveSignalDriftServiceTest
 - mvnw
 - Changelog
 - OrderStatus
 - AuthController.java
 - NotificationExceptionHandler.java
-- .getAccountStatus
+- OrderController
 - TradingModeExceptionHandler.java
 - plugins
-- .runAndVerify
-- MarketDataUnavailableException
+- InvalidTradeRequestException
+- .handleUnavailable
 - signal-rule-review skill
 - dataviz skill
 - NotificationRepository
@@ -121,7 +121,7 @@
 - E7 — Observability & Hardening
 - CheckpointStats
 - MarketHoursServiceTest
-- LiveDriftBaselineTest.java
+- OrderNotFoundException
 - BacktestReport
 - TickerControllerTest
 - tsconfig.json
@@ -133,45 +133,35 @@
 - killswitch/api.ts
 - SignalDriftController
 - MarketDataController
-- .getPriceHistory
-- TickerServiceTest
+- .findRegistered
+- .getId
 - TradingModeBanner.tsx
-- .placeOrder
+- OrderRefreshUnavailableException
 - TickerService
-- AssetType
+- Ticker
 - Notification system + WatchlistSignalPoller
-- SignalService
-- PaperTradeThresholdNotMetException
+- WatchlistSignalPollerTest
+- .switchTo_live_belowThreshold_throwsPaperTradeThresholdNotMetException_noHistoryPersisted
 - BacktestConfig
 - .calculate
-- ThresholdCalibrationTest
+- RuleThresholds
 - Backing up and restoring the Oracle instance (E7-F3-S1)
 - OrderQueryController
 - RegimeCalibrationTest
-- OutOfSampleValidationTest
+- IndicatorId
 - db-backup.sh
 - db-restore.sh
-- BrokerCredentialServiceFindTest.java
-- .classify
-- AlpacaTradingAdapterContractTest
-- BinanceFuturesTradingAdapterContractTest
-- Broker
-- RetryingAlpacaTradingAdapterContractTest
-- RetryingBinanceFuturesTradingAdapterContractTest
-- MockBrokerAdapterContractTest
-- RetryingMockBrokerAdapterContractTest
-- InvalidPriceHistoryRequestException
-- NoPriceDataException
+- .handleRateLimited
 - SignalNotActionableException
 
 ## God Nodes (most connected - your core abstractions)
 1. `TradingMode` - 124 edges
 2. `Broker` - 105 edges
 3. `Ticker` - 100 edges
-4. `Candle` - 94 edges
+4. `Candle` - 97 edges
 5. `Order` - 93 edges
 6. `AssetType` - 84 edges
-7. `Changelog` - 66 edges
+7. `Changelog` - 67 edges
 8. `IndicatorSnapshot` - 61 edges
 9. `BinanceFuturesTradingAdapter` - 58 edges
 10. `BrokerCredential` - 57 edges
@@ -196,27 +186,31 @@
 - **Solo-build role mapping: Plan/Explore/general-purpose agents plus run/simplify skills** — claude_agents_plan_plan, claude_agents_explore_explore, claude_agents_general_purpose_general_purpose, claude_skills_run_skill_run, claude_skills_simplify_skill_simplify [EXTRACTED 1.00]
 - **BrokerAdapter contract group: interface, retry decorator, verification checklist, and its origin stories** — concept_broker_adapter_interface, concept_retrying_broker_adapter, claude_skills_adapter_contract_check_skill_adapter_contract_check, docs_agile_plan_e4_f1_s1, docs_agile_plan_e4_f1_s2, docs_agile_plan_e4_f1_s3 [INFERRED 0.85]
 
-## Communities (150 total, 24 thin omitted)
+## Communities (140 total, 23 thin omitted)
 
-### Community 0 - "BrokerOrderRequest"
-Cohesion: 0.15
-Nodes (8): AssetBalance, BrokerOrderRequest, Override, MockBrokerAdapter, MockOrderState, PositionState, Test, MockBrokerAdapterTest
+### Community 0 - "MockBrokerAdapter"
+Cohesion: 0.06
+Nodes (21): AssetBalance, BrokerAdapterRetryPolicy, BrokerAdapterUnavailableException, Logger, Override, RetryingBrokerAdapter, BrokerAdapterRouterTest, Test (+13 more)
 
 ### Community 1 - "BinanceFuturesTradingAdapter"
 Cohesion: 0.06
-Nodes (23): Credentials, BinanceAccountAsset, BinanceAccountResponse, BinanceAlgoOrderResponse, BinanceErrorResponse, BinanceFuturesTradingAdapter, BinanceOrderResponse, BinancePositionResponse (+15 more)
+Nodes (24): Credentials, BinanceAccountAsset, BinanceAccountResponse, BinanceAlgoOrderResponse, BinanceErrorResponse, BinanceFuturesTradingAdapter, BinanceOrderResponse, BinancePositionResponse (+16 more)
 
 ### Community 2 - "AlpacaTradingAdapter"
 Cohesion: 0.08
 Nodes (23): AlpacaAccountResponse, AlpacaBracketLeg, AlpacaErrorResponse, AlpacaOrderRequestBody, AlpacaOrderResponse, AlpacaPositionResponse, AlpacaStopLeg, AlpacaTradingAdapter (+15 more)
 
 ### Community 3 - "Order"
-Cohesion: 0.06
+Cohesion: 0.07
 Nodes (7): Entity, Override, PrePersist, PreUpdate, Table, Order, Test
 
-### Community 4 - "TradingModeResponse"
-Cohesion: 0.26
-Nodes (6): TradingModeResponse, AutoConfigureMockMvc, MockMvc, Test, WebMvcTest, TradingModeControllerTest
+### Community 4 - ".switchTo"
+Cohesion: 0.29
+Nodes (5): AutoConfigureMockMvc, MockMvc, Test, WebMvcTest, TradingModeControllerTest
+
+### Community 5 - "BrokerAdapterContractTest"
+Cohesion: 0.14
+Nodes (9): BrokerAdapterContractTest, Test, Override, MockBrokerAdapterContractTest, ExtendWith, Override, RetryingBinanceFuturesTradingAdapterContractTest, Override (+1 more)
 
 ### Community 6 - "AlpacaMarketDataClient"
 Cohesion: 0.09
@@ -227,12 +221,12 @@ Cohesion: 0.09
 Nodes (17): HoldTermRule, MODERATE_HIGH, MODERATE_LOW, MODERATE_MEDIUM, STRONG_HIGH, STRONG_LOW, STRONG_MEDIUM, match() (+9 more)
 
 ### Community 8 - "SignalCallEntry"
-Cohesion: 0.09
-Nodes (13): Logger, Service, NotificationService, Entity, Override, PrePersist, Table, SignalCallEntry (+5 more)
+Cohesion: 0.10
+Nodes (10): IndicatorComputation, Entity, Override, PrePersist, Table, SignalCallEntry, BeforeEach, ExtendWith (+2 more)
 
-### Community 9 - "LiveSignalDriftServiceTest.java"
-Cohesion: 0.23
-Nodes (7): EntryOrderType, LIMIT, MARKET, OrderSide, BUY, SELL, HttpMethod
+### Community 9 - "AssetType"
+Cohesion: 0.21
+Nodes (10): EntryOrderType, LIMIT, MARKET, OrderSide, BUY, SELL, AssetType, CRYPTO (+2 more)
 
 ### Community 10 - "IndicatorSnapshot"
 Cohesion: 0.08
@@ -242,25 +236,25 @@ Nodes (5): IndicatorSnapshot, Entity, Override, PrePersist, Table
 Cohesion: 0.05
 Nodes (36): dependencies, lightweight-charts, react, react-dom, react-router-dom, devDependencies, oxlint, @types/node (+28 more)
 
-### Community 12 - "Regime"
-Cohesion: 0.30
-Nodes (3): RegimeGatedRuleEngine, Test, RegimeGatedRuleEngineTest
+### Community 12 - ".applyGate"
+Cohesion: 0.18
+Nodes (5): RegimeGatedRuleEngine, Test, RegimeClassifierTest, Test, RegimeGatedRuleEngineTest
 
 ### Community 13 - "BrokerCredential"
-Cohesion: 0.11
-Nodes (7): BrokerCredential, Entity, Override, PrePersist, PreUpdate, Table, Test
+Cohesion: 0.07
+Nodes (19): BrokerCredential, Entity, Override, PrePersist, PreUpdate, Table, BrokerCredentialRepository, BrokerCredentialService (+11 more)
 
 ### Community 14 - ".calculate"
 Cohesion: 0.24
 Nodes (5): AdxCalculator, MathContext, AdxCalculatorTest, Candle, Test
 
 ### Community 15 - "TradingModeServiceTest"
-Cohesion: 0.23
+Cohesion: 0.22
 Nodes (5): SpringBootTest, Test, TestPropertySource, Transactional, TradingModeServiceTest
 
-### Community 16 - "MarketDataExceptionHandler.java"
-Cohesion: 0.15
-Nodes (6): InsufficientPriceHistoryException, InvalidIndicatorRequestException, Logger, RestControllerAdvice, TickerAssetTypeConflictException, MethodArgumentNotValidException
+### Community 16 - "MarketDataExceptionHandler"
+Cohesion: 0.13
+Nodes (11): InsufficientPriceHistoryException, InvalidIndicatorRequestException, InvalidPriceHistoryRequestException, ExceptionHandler, Logger, ResponseEntity, RestControllerAdvice, MarketDataExceptionHandler (+3 more)
 
 ### Community 17 - "RiskLimitService"
 Cohesion: 0.19
@@ -275,12 +269,12 @@ Cohesion: 0.11
 Nodes (12): BinanceMarketDataClient, Candle, Component, Override, RestClient, TooManyRequests, Logger, RetryHelper (+4 more)
 
 ### Community 20 - "TradeForm.tsx"
-Cohesion: 0.10
-Nodes (24): TickerSummary, Broker, HoldTerm, IndicatorResponse, MacdResult, MovingAverageRelation, MovingAverageResult, SignalCall (+16 more)
+Cohesion: 0.11
+Nodes (23): TickerSummary, Broker, HoldTerm, IndicatorResponse, MacdResult, MovingAverageRelation, MovingAverageResult, SignalCall (+15 more)
 
 ### Community 21 - "SignalRuleId"
 Cohesion: 0.08
-Nodes (27): HoldTerm, HoldTermCalculator, IndicatorId, MA_CROSSOVER, MACD, RSI, Regime, RANGING (+19 more)
+Nodes (23): HoldTerm, HoldTermCalculator, Regime, RANGING, TRENDING, RegimeClassifier, SignalCall, BUY (+15 more)
 
 ### Community 22 - "TradingModeEvent"
 Cohesion: 0.20
@@ -290,25 +284,25 @@ Nodes (5): Entity, Override, PrePersist, Table, TradingModeEvent
 Cohesion: 0.11
 Nodes (22): CsrfCookieWriteFilter, Bean, Configuration, Logger, Override, PasswordEncoder, SecurityConfig, SpaCsrfTokenRequestHandler (+14 more)
 
-### Community 24 - "BrokerCredentialService"
-Cohesion: 0.10
-Nodes (21): ApplicationRunner, AlpacaTradingCredentialBootstrap, ApplicationArguments, Component, Logger, Override, BinanceTradingCredentialBootstrap, ApplicationArguments (+13 more)
+### Community 24 - ".run"
+Cohesion: 0.11
+Nodes (17): ApplicationRunner, AlpacaTradingCredentialBootstrap, ApplicationArguments, Component, Logger, Override, BinanceTradingCredentialBootstrap, ApplicationArguments (+9 more)
 
 ### Community 25 - ".resolveOrRegister"
-Cohesion: 0.29
-Nodes (5): WatchlistEntry, SpringBootTest, Test, Transactional, WatchlistServiceTest
+Cohesion: 0.25
+Nodes (6): Transactional, WatchlistEntry, SpringBootTest, Test, Transactional, WatchlistServiceTest
 
 ### Community 26 - "order/api.ts"
 Cohesion: 0.14
-Nodes (18): RFC-6266, MarketDataError, EntryOrderType, exportOrdersCsv(), fetchOrders(), filenameFromContentDisposition(), OrderSummary, refreshOrder() (+10 more)
+Nodes (18): RFC-6266, readCookie(), EntryOrderType, exportOrdersCsv(), fetchOrders(), filenameFromContentDisposition(), OrderSummary, refreshOrder() (+10 more)
 
 ### Community 27 - "PriceChart.tsx"
 Cohesion: 0.18
 Nodes (18): Broker, ChartDataResponse, ChartIndicatorPoint, CandlestickPoint, LinePoint, toBusinessDay(), toCandlestickSeries(), toMaLongSeries() (+10 more)
 
 ### Community 28 - "FakeBinanceFuturesTradingServer"
-Cohesion: 0.09
-Nodes (23): DecryptedCredential, Override, BeforeEach, BeforeEach, FakeAlpacaTradingServer, FakeOrder, ClientHttpRequest, ClientHttpResponse (+15 more)
+Cohesion: 0.07
+Nodes (29): DecryptedCredential, Override, AlpacaTradingAdapterContractTest, BeforeEach, ExtendWith, Override, BinanceFuturesTradingAdapterContractTest, BeforeEach (+21 more)
 
 ### Community 29 - "DashboardPage.tsx"
 Cohesion: 0.12
@@ -319,59 +313,59 @@ Cohesion: 0.08
 Nodes (23): compilerOptions, allowArbitraryExtensions, allowImportingTsExtensions, erasableSyntaxOnly, jsx, lib, module, moduleDetection (+15 more)
 
 ### Community 31 - "Notification"
-Cohesion: 0.15
+Cohesion: 0.14
 Nodes (5): Entity, Override, PrePersist, Table, Notification
 
 ### Community 32 - "IndicatorService"
-Cohesion: 0.16
-Nodes (9): BigDecimalIndicators, IndicatorComputation, IndicatorService, Service, IndicatorSnapshotRepository, GetMapping, RequestMapping, RestController (+1 more)
+Cohesion: 0.17
+Nodes (8): BigDecimalIndicators, IndicatorService, Service, IndicatorSnapshotRepository, GetMapping, RequestMapping, RestController, SignalController
 
 ### Community 33 - ".evaluate"
-Cohesion: 0.09
-Nodes (9): IndicatorVotes, IndicatorWeights, WeightedVoteRuleEngine, MacdResult, Test, SignalRuleEngineTest, MacdResult, Test (+1 more)
+Cohesion: 0.18
+Nodes (4): IndicatorVotes, MacdResult, Test, SignalRuleEngineTest
 
 ### Community 34 - "RiskConsentEvent"
 Cohesion: 0.24
 Nodes (5): Entity, Override, PrePersist, Table, RiskConsentEvent
 
-### Community 35 - ".getChartData"
-Cohesion: 0.10
-Nodes (12): ChartDataResponse, ChartIndicatorPoint, ChartDataResponse, IndicatorControllerTest, AutoConfigureMockMvc, MockMvc, Test, WebMvcTest (+4 more)
+### Community 35 - "IndicatorControllerTest"
+Cohesion: 0.16
+Nodes (7): ChartDataResponse, ChartIndicatorPoint, IndicatorControllerTest, AutoConfigureMockMvc, MockMvc, Test, WebMvcTest
 
 ### Community 36 - "IndicatorController"
-Cohesion: 0.43
+Cohesion: 0.39
 Nodes (4): IndicatorController, GetMapping, RequestMapping, RestController
 
 ### Community 37 - ".submitOrder"
-Cohesion: 0.28
-Nodes (5): PlaceOrderRequest, SignalComputation, ExtendWith, Test, OrderServiceTest
+Cohesion: 0.31
+Nodes (4): PlaceOrderRequest, SignalComputation, Test, OrderServiceTest
 
-### Community 38 - "JpaRepository"
-Cohesion: 0.05
-Nodes (32): EngageKillSwitchResponse, GetMapping, PostMapping, RequestMapping, RestController, KillSwitchController, Entity, Override (+24 more)
+### Community 38 - "KillSwitchService"
+Cohesion: 0.06
+Nodes (31): EngageKillSwitchResponse, GetMapping, PostMapping, RequestMapping, RestController, KillSwitchController, Entity, Override (+23 more)
 
 ### Community 39 - "compilerOptions"
 Cohesion: 0.10
 Nodes (19): compilerOptions, allowImportingTsExtensions, erasableSyntaxOnly, lib, module, moduleDetection, noEmit, noFallthroughCasesInSwitch (+11 more)
 
 ### Community 40 - "OrderServiceTest.java"
-Cohesion: 0.12
-Nodes (19): BrokerAdapterAmbiguousOrderException, IndicatorResponse, MacdResult, MovingAverageRelation, EQUAL, SHORT_ABOVE_LONG, SHORT_BELOW_LONG, MovingAverageResult (+11 more)
+Cohesion: 0.11
+Nodes (20): IndicatorResponse, MacdResult, MovingAverageRelation, EQUAL, SHORT_ABOVE_LONG, SHORT_BELOW_LONG, MovingAverageResult, MarketClosedException (+12 more)
 
 ### Community 41 - ".export"
 Cohesion: 0.23
 Nodes (3): OrderCsvExporter, Test, OrderCsvExporterTest
 
 ### Community 42 - "OrderService"
-Cohesion: 0.10
-Nodes (15): BrokerAdapter, BrokerAdapterRouter, Service, PostMapping, RequestMapping, ResponseEntity, RestController, OrderController (+7 more)
+Cohesion: 0.11
+Nodes (15): BrokerAdapter, BrokerAdapterAmbiguousOrderException, BrokerAdapterException, BrokerAdapterRateLimitedException, BrokerAdapterRouter, Service, Logger, Service (+7 more)
 
 ### Community 43 - "run skill (project override)"
 Cohesion: 0.14
 Nodes (19): run skill (project override), MarketHoursService (hardcoded NYSE/NASDAQ calendar), oracle-xe Docker Compose service, F1.1 Local dev environment, E1-F1-S1 Docker Compose file for Oracle XE, E1-F1-S2 Spring Boot backend skeleton, E1-F1-S3 React app skeleton with routing, E1-F1-S4 CI pipeline builds/tests both apps (+11 more)
 
 ### Community 44 - "NotificationServiceTest"
-Cohesion: 0.25
+Cohesion: 0.26
 Nodes (4): BeforeEach, ExtendWith, Test, NotificationServiceTest
 
 ### Community 45 - "security-review skill"
@@ -379,40 +373,40 @@ Cohesion: 0.19
 Nodes (18): guardrail-check skill, security-review skill, simplify skill, F1.3 Secrets & config management, E1-F3-S1 Broker API keys encrypted at rest, E1-F3-S2 Dashboard requires login, F4.2 Alpaca adapter (stocks), F6.1 Paper/live mode toggle (+10 more)
 
 ### Community 46 - "apiFetch"
-Cohesion: 0.20
-Nodes (18): apiFetch(), readCookie(), fetchChartData(), AssetType, fetchPriceHistory(), MarketDataErrorCode, parseMarketDataError(), PriceHistoryResponse (+10 more)
+Cohesion: 0.25
+Nodes (15): apiFetch(), fetchChartData(), fetchPriceHistory(), parseMarketDataError(), registerTicker(), fetchNotifications(), fetchUnreadCount(), markAllNotificationsRead() (+7 more)
 
 ### Community 47 - "MarketDataControllerTest"
-Cohesion: 0.30
+Cohesion: 0.27
 Nodes (5): AutoConfigureMockMvc, MockMvc, Test, WebMvcTest, MarketDataControllerTest
 
-### Community 48 - "Ticker"
-Cohesion: 0.09
-Nodes (10): Override, PrePersist, Ticker, Entity, Override, PrePersist, Table, WatchlistEntry (+2 more)
+### Community 48 - "WatchlistEntry"
+Cohesion: 0.13
+Nodes (7): Entity, Override, PrePersist, Table, WatchlistEntry, Query, WatchlistEntryRepository
 
 ### Community 49 - "Checkpoint"
-Cohesion: 0.11
-Nodes (9): Checkpoint, MAX, MID, MIN, DirectionalAccumulator, CheckpointDrift, DirectionalDrift, LiveDriftBaseline (+1 more)
+Cohesion: 0.10
+Nodes (12): Checkpoint, MAX, MID, MIN, CheckpointDrift, DirectionalDrift, LiveDriftBaseline, RuleTableVersionDrift (+4 more)
 
 ### Community 50 - "general-purpose agent (implementation)"
 Cohesion: 0.24
 Nodes (16): Explore agent (research), general-purpose agent (implementation), Plan agent (design gate), Mandatory per-story workflow (update CLAUDE.md, commit, push), CLAUDE.md project status & architecture log, E1 — Platform Foundation, F1.2 Core data model, F1.4 Testing strategy (+8 more)
 
 ### Community 51 - "CredentialEncryptionService"
-Cohesion: 0.18
+Cohesion: 0.19
 Nodes (6): CredentialEncryptionService, Component, Logger, CredentialEncryptionServiceTest, Test, SecretKeySpec
 
 ### Community 52 - "Candle"
-Cohesion: 0.12
-Nodes (9): MathContext, VolatilityCalculator, Candle, E2ECandleFixtures, Candle, IndicatorTestFixtures, Candle, Test (+1 more)
+Cohesion: 0.09
+Nodes (12): MathContext, VolatilityCalculator, VolumeTrendCalculator, Candle, E2ECandleFixtures, Candle, IndicatorTestFixtures, Candle (+4 more)
 
 ### Community 53 - ".findFirstCrossing"
 Cohesion: 0.47
 Nodes (3): BacktestHarnessTpSlTest, Candle, Test
 
-### Community 54 - "RetryingBrokerAdapter"
-Cohesion: 0.20
-Nodes (4): BrokerAdapterRetryPolicy, Logger, Override, RetryingBrokerAdapter
+### Community 54 - ".evaluate"
+Cohesion: 0.18
+Nodes (5): IndicatorWeights, WeightedVoteRuleEngine, MacdResult, Test, WeightedVoteRuleEngineTest
 
 ### Community 55 - "adapter-contract-check skill"
 Cohesion: 0.18
@@ -423,8 +417,8 @@ Cohesion: 0.25
 Nodes (8): GetMapping, PostMapping, RequestMapping, ResponseEntity, RestController, WatchlistController, WatchlistEntryResponse, DeleteMapping
 
 ### Community 57 - "TradingModeController"
-Cohesion: 0.31
-Nodes (5): GetMapping, PostMapping, RequestMapping, RestController, TradingModeController
+Cohesion: 0.25
+Nodes (6): TradingModeChangeRequest, GetMapping, PostMapping, RequestMapping, RestController, TradingModeController
 
 ### Community 58 - "BrokerAdapterConfig.java"
 Cohesion: 0.27
@@ -435,24 +429,20 @@ Cohesion: 0.27
 Nodes (8): BinanceFuturesAdapterConfig, Bean, Configuration, EnableConfigurationProperties, RestClient, SimpleClientHttpRequestFactory, BinanceFuturesTradingProperties, ConfigurationProperties
 
 ### Community 60 - "LiveSignalDriftService.java"
-Cohesion: 0.19
-Nodes (9): DirectionalScoreResult, Component, ConditionalOnProperty, Logger, Scheduled, LiveSignalDriftService, Query, OrderAuditEntryRepository (+1 more)
+Cohesion: 0.20
+Nodes (10): Service, MarketDataService, Component, ConditionalOnProperty, Logger, Scheduled, LiveSignalDriftService, Query (+2 more)
 
 ### Community 61 - "RiskExceptionHandler.java"
 Cohesion: 0.46
 Nodes (5): ExceptionHandler, Logger, ResponseEntity, RestControllerAdvice, RiskExceptionHandler
 
-### Community 62 - "OrderExceptionHandler"
-Cohesion: 0.16
-Nodes (8): InvalidTradeRequestException, ExceptionHandler, Logger, ResponseEntity, RestControllerAdvice, OrderExceptionHandler, OrderNotFoundException, OrderRefreshUnavailableException
+### Community 62 - "ApiErrorResponse"
+Cohesion: 0.34
+Nodes (7): ApiErrorResponse, JsonInclude, ExceptionHandler, Logger, ResponseEntity, RestControllerAdvice, OrderExceptionHandler
 
 ### Community 63 - "NotificationType"
 Cohesion: 0.17
 Nodes (11): JsonInclude, NotificationResponse, NotificationType, ORDER_CANCELLED, ORDER_FAILED, ORDER_FILLED, ORDER_PARTIALLY_FILLED, ORDER_PARTIALLY_PROTECTED (+3 more)
-
-### Community 64 - "BrokerOrderResult"
-Cohesion: 0.23
-Nodes (4): BrokerOrderResult, KillSwitchCancelSummary, BrokerAdapterRouterTest, Test
 
 ### Community 65 - "WatchlistControllerTest"
 Cohesion: 0.25
@@ -463,40 +453,36 @@ Cohesion: 0.83
 Nodes (3): Configuration, EnableConfigurationProperties, RiskLimitConfig
 
 ### Community 67 - "TradingMode"
-Cohesion: 0.21
-Nodes (8): BrokerAccountStatus, TradingMode, LIVE, PAPER, BrokerCredentialNotConfiguredException, JsonInclude, OrderResponse, TradingModeChangeRequest
+Cohesion: 0.11
+Nodes (12): Broker, ALPACA, BINANCE, BrokerAccountStatus, BrokerAdapterTransientException, BrokerPosition, TradingMode, LIVE (+4 more)
 
 ### Community 68 - "CoreDataModelIntegrationTest.java"
-Cohesion: 0.15
-Nodes (10): Autowired, BrokerCredentialRepository, BrokerCredentialServiceRotationTest, SpringBootTest, Transactional, CoreDataModelIntegrationTest, SpringBootTest, Test (+2 more)
+Cohesion: 0.31
+Nodes (5): CoreDataModelIntegrationTest, SpringBootTest, Test, Transactional, EntityManager
 
 ### Community 69 - "OrderAuditEntry"
-Cohesion: 0.17
+Cohesion: 0.14
 Nodes (5): Entity, Override, PrePersist, Table, OrderAuditEntry
 
 ### Community 70 - ".run"
-Cohesion: 0.15
-Nodes (9): CrossingEvent, WalkForwardScorer, BacktestHarness, HoldGateAccumulator, RuleEvaluator, HoldGateOutcome, LARGE_MOVE, STABLE (+1 more)
+Cohesion: 0.07
+Nodes (20): DirectionalAccumulator, DirectionalOutcome, LOSS, WASH, WIN, DirectionalScoreResult, ExitReason, HORIZON_EXPIRED (+12 more)
 
-### Community 71 - ".calculate"
-Cohesion: 0.30
-Nodes (3): VolumeTrendCalculator, Test, VolumeTrendCalculatorTest
+### Community 71 - ".getPriceHistory"
+Cohesion: 0.25
+Nodes (6): ChartDataResponse, PriceHistoryResult, IndicatorServiceTest, BeforeEach, ExtendWith, Test
 
-### Community 72 - "watchlist/api.ts"
-Cohesion: 0.46
-Nodes (6): fetchWatchlist(), removeFromWatchlist(), WatchlistEntry, describeError(), Watchlist(), WatchlistProps
+### Community 72 - "marketdata/api.ts"
+Cohesion: 0.23
+Nodes (10): AssetType, MarketDataError, MarketDataErrorCode, PriceHistoryResponse, fetchWatchlist(), removeFromWatchlist(), WatchlistEntry, describeError() (+2 more)
 
 ### Community 73 - "NotificationController"
-Cohesion: 0.26
+Cohesion: 0.29
 Nodes (6): GetMapping, PostMapping, RequestMapping, ResponseEntity, RestController, NotificationController
 
 ### Community 74 - "OrderControllerTest"
 Cohesion: 0.15
 Nodes (10): JsonInclude, TradeOrderResponse, KillSwitchEngagedException, RiskLimitExceededException, AutoConfigureMockMvc, MockMvc, ObjectMapper, Test (+2 more)
-
-### Community 75 - "ApiErrorResponse"
-Cohesion: 0.41
-Nodes (5): ApiErrorResponse, JsonInclude, ExceptionHandler, ResponseEntity, MarketDataExceptionHandler
 
 ### Community 76 - "NotificationControllerTest"
 Cohesion: 0.26
@@ -510,13 +496,9 @@ Nodes (14): AutoConfigureMockMvc, Cookie, MockMvc, SpringBootTest, Test, TestPro
 Cohesion: 0.18
 Nodes (10): AddToWatchlistButton(), ERROR_MESSAGES, formatOrDash(), relationLabel(), SIGNAL_GLYPH, StatTileProps, StatTileTone, TickerMetricsProps (+2 more)
 
-### Community 79 - "ExitReason"
-Cohesion: 0.16
-Nodes (9): DirectionalOutcome, LOSS, WASH, WIN, ExitReason, HORIZON_EXPIRED, SL_HIT, TP_HIT (+1 more)
-
-### Community 80 - "PriceHistoryResult"
-Cohesion: 0.42
-Nodes (5): PriceHistoryResult, Candle, ExtendWith, Test, LiveSignalDriftServiceTest
+### Community 80 - "LiveSignalDriftServiceTest"
+Cohesion: 0.44
+Nodes (4): Candle, ExtendWith, Test, LiveSignalDriftServiceTest
 
 ### Community 81 - "mvnw"
 Cohesion: 0.33
@@ -524,7 +506,7 @@ Nodes (6): mvnw script, clean(), die(), exec_maven(), set_java_home(), verbose()
 
 ### Community 82 - "Changelog"
 Cohesion: 0.03
-Nodes (66): Changelog, Dark-first premium visual pass, E1-F1-S1 — local Oracle XE via Docker Compose, E1-F1-S2 — Spring Boot backend skeleton, E1-F1-S3 — React app skeleton, E1-F1-S4 — CI pipeline, E1-F1-S5 — env/config profiles, E1-F2 — core data model (+58 more)
+Nodes (67): Changelog, Dark-first premium visual pass, E1-F1-S1 — local Oracle XE via Docker Compose, E1-F1-S2 — Spring Boot backend skeleton, E1-F1-S3 — React app skeleton, E1-F1-S4 — CI pipeline, E1-F1-S5 — env/config profiles, E1-F2 — core data model (+59 more)
 
 ### Community 83 - "OrderStatus"
 Cohesion: 0.17
@@ -538,6 +520,10 @@ Nodes (6): Authentication, AuthController, GetMapping, RequestMapping, ResponseE
 Cohesion: 0.29
 Nodes (6): InvalidNotificationRequestException, ExceptionHandler, Logger, ResponseEntity, RestControllerAdvice, NotificationExceptionHandler
 
+### Community 86 - "OrderController"
+Cohesion: 0.39
+Nodes (5): PostMapping, RequestMapping, ResponseEntity, RestController, OrderController
+
 ### Community 87 - "TradingModeExceptionHandler.java"
 Cohesion: 0.29
 Nodes (6): RiskConsentNotGivenException, ExceptionHandler, Logger, ResponseEntity, RestControllerAdvice, TradingModeExceptionHandler
@@ -545,10 +531,6 @@ Nodes (6): RiskConsentNotGivenException, ExceptionHandler, Logger, ResponseEntit
 ### Community 88 - "plugins"
 Cohesion: 0.22
 Nodes (8): plugins, rules, react/only-export-components, react/rules-of-hooks, $schema, oxc, typescript, warn
-
-### Community 89 - ".runAndVerify"
-Cohesion: 0.39
-Nodes (3): Candle, BacktestHarnessTest, Test
 
 ### Community 91 - "signal-rule-review skill"
 Cohesion: 0.43
@@ -563,19 +545,19 @@ Cohesion: 0.60
 Nodes (3): ClockConfig, Bean, Configuration
 
 ### Community 95 - "TradingModeService"
-Cohesion: 0.27
-Nodes (4): RiskConsentEventRepository, TradingModeEventRepository, Service, TradingModeService
+Cohesion: 0.14
+Nodes (11): Pageable, Query, OrderRepository, RiskConsentEventRepository, TradingModeEventRepository, Service, TradingModeService, SpringBootTest (+3 more)
 
 ### Community 96 - "BackendApplicationTests.java"
 Cohesion: 0.60
 Nodes (3): BackendApplicationTests, SpringBootTest, Test
 
 ### Community 97 - "OrderQueryControllerTest"
-Cohesion: 0.16
+Cohesion: 0.15
 Nodes (5): AutoConfigureMockMvc, MockMvc, Test, WebMvcTest, OrderQueryControllerTest
 
 ### Community 98 - "TickerController"
-Cohesion: 0.36
+Cohesion: 0.29
 Nodes (6): PostMapping, RequestMapping, ResponseEntity, RestController, TickerController, TickerResponse
 
 ### Community 99 - ".calculate"
@@ -595,16 +577,12 @@ Cohesion: 0.50
 Nodes (4): E7 — Observability & Hardening, E7-F1 Structured logging, E7-F2 Security review gate, E7-F3 Backup/restore
 
 ### Community 104 - "CheckpointStats"
-Cohesion: 0.23
-Nodes (5): CheckpointStats, CheckpointStatsTest, Test, IndicatorExpectancyCalibrationTest, Test
-
-### Community 106 - "LiveDriftBaselineTest.java"
-Cohesion: 0.27
-Nodes (3): BacktestCandleCsvLoader, Test, LiveDriftBaselineTest
+Cohesion: 0.25
+Nodes (4): CheckpointStats, CheckpointStatsTest, Test, IndicatorExpectancyCalibrationTest
 
 ### Community 107 - "BacktestReport"
 Cohesion: 0.12
-Nodes (8): DirectionalOutcomeStats, BacktestReport, HoldGateStats, RegimeSplitStats, Test, RsiOversoldRecalibrationTest, Test, WeightedVoteBacktestTest
+Nodes (8): DirectionalOutcomeStats, BacktestReport, HoldGateStats, RegimeSplitStats, Test, RsiOverboughtRecalibrationTest, Test, WeightedVoteBacktestTest
 
 ### Community 108 - "TickerControllerTest"
 Cohesion: 0.32
@@ -622,12 +600,12 @@ Nodes (6): ConditionalOnProperty, GetMapping, RequestMapping, RestController, Si
 Cohesion: 0.27
 Nodes (5): GetMapping, RequestMapping, RestController, MarketDataController, PriceHistoryResponse
 
-### Community 120 - ".getPriceHistory"
-Cohesion: 0.18
-Nodes (9): MarketDataClient, Service, MarketDataService, Component, MarketHoursService, BeforeEach, ExtendWith, Test (+1 more)
+### Community 120 - ".findRegistered"
+Cohesion: 0.17
+Nodes (7): MarketDataClient, Component, MarketHoursService, BeforeEach, ExtendWith, Test, MarketDataServiceTest
 
-### Community 121 - "TickerServiceTest"
-Cohesion: 0.39
+### Community 121 - ".getId"
+Cohesion: 0.33
 Nodes (4): SpringBootTest, Test, Transactional, TickerServiceTest
 
 ### Community 122 - "TradingModeBanner.tsx"
@@ -635,28 +613,28 @@ Cohesion: 0.42
 Nodes (8): fetchTradingMode(), giveRiskConsent(), switchTradingMode(), TradingMode, TradingModeState, describeError(), otherMode(), TradingModeBanner()
 
 ### Community 124 - "TickerService"
-Cohesion: 0.28
-Nodes (4): TickerRepository, Service, Transactional, TickerService
+Cohesion: 0.24
+Nodes (5): Service, Transactional, TickerService, Service, WatchlistService
 
-### Community 125 - "AssetType"
+### Community 125 - "Ticker"
 Cohesion: 0.10
-Nodes (9): BrokerPosition, AssetType, CRYPTO, STOCK, Entity, Table, SpringBootTest, Transactional (+1 more)
+Nodes (8): Autowired, Entity, Override, PrePersist, Table, Ticker, TickerNotRegisteredException, TickerRepository
 
 ### Community 126 - "Notification system + WatchlistSignalPoller"
 Cohesion: 0.40
 Nodes (5): Notification system + WatchlistSignalPoller, Watchlist feature (watchlist_entries), F3.3 Watchlist (stretch), E3-F3-S1 Watchlist persisted in Oracle DB, F5.4 Notifications
 
-### Community 127 - "SignalService"
-Cohesion: 0.13
-Nodes (15): Component, ConditionalOnProperty, Logger, Scheduled, WatchlistSignalPoller, SignalCallEntryRepository, Service, SignalService (+7 more)
+### Community 127 - "WatchlistSignalPollerTest"
+Cohesion: 0.22
+Nodes (9): Component, ConditionalOnProperty, Logger, Scheduled, WatchlistSignalPoller, BeforeEach, ExtendWith, Test (+1 more)
 
 ### Community 130 - ".calculate"
 Cohesion: 0.29
 Nodes (4): MathContext, RsiCalculator, Test, RsiCalculatorTest
 
-### Community 131 - "ThresholdCalibrationTest"
-Cohesion: 0.39
-Nodes (3): Test, NamedCandidate, ThresholdCalibrationTest
+### Community 131 - "RuleThresholds"
+Cohesion: 0.35
+Nodes (4): RuleThresholds, Test, NamedCandidate, ThresholdCalibrationTest
 
 ### Community 132 - "Backing up and restoring the Oracle instance (E7-F3-S1)"
 Cohesion: 0.40
@@ -666,53 +644,29 @@ Nodes (4): Backing up and restoring the Oracle instance (E7-F3-S1), Backup proce
 Cohesion: 0.29
 Nodes (6): GetMapping, PostMapping, RequestMapping, ResponseEntity, RestController, OrderQueryController
 
-### Community 134 - "RegimeCalibrationTest"
-Cohesion: 0.31
-Nodes (3): RegimeClassifier, Test, RegimeCalibrationTest
-
-### Community 138 - "BrokerCredentialServiceFindTest.java"
-Cohesion: 0.39
-Nodes (4): BrokerCredentialServiceFindTest, SpringBootTest, Test, Transactional
-
-### Community 140 - "AlpacaTradingAdapterContractTest"
-Cohesion: 0.48
-Nodes (3): AlpacaTradingAdapterContractTest, ExtendWith, Override
-
-### Community 141 - "BinanceFuturesTradingAdapterContractTest"
-Cohesion: 0.48
-Nodes (3): BinanceFuturesTradingAdapterContractTest, ExtendWith, Override
-
-### Community 142 - "Broker"
+### Community 135 - "IndicatorId"
 Cohesion: 0.14
-Nodes (8): Broker, ALPACA, BINANCE, BrokerAdapterException, BrokerAdapterRateLimitedException, BrokerAdapterTransientException, BrokerAdapterUnavailableException, MarketDataRateLimitedException
-
-### Community 143 - "RetryingAlpacaTradingAdapterContractTest"
-Cohesion: 0.48
-Nodes (3): ExtendWith, Override, RetryingAlpacaTradingAdapterContractTest
-
-### Community 144 - "RetryingBinanceFuturesTradingAdapterContractTest"
-Cohesion: 0.48
-Nodes (3): ExtendWith, Override, RetryingBinanceFuturesTradingAdapterContractTest
+Nodes (9): IndicatorId, MA_CROSSOVER, MACD, RSI, BacktestHarnessTest, Test, Test, Test (+1 more)
 
 ## Knowledge Gaps
-- **262 isolated node(s):** `com.autotrade.dashboard:backend`, `MIN`, `MID`, `MAX`, `WIN` (+257 more)
+- **263 isolated node(s):** `com.autotrade.dashboard:backend`, `MIN`, `MID`, `MAX`, `WIN` (+258 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **24 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **23 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `TradingMode` connect `TradingMode` to `BrokerOrderRequest`, `BinanceFuturesTradingAdapter`, `AlpacaTradingAdapter`, `Order`, `TradingModeResponse`, `OrderQueryController`, `BrokerAdapterContractTest`, `LiveSignalDriftServiceTest.java`, `BrokerCredentialServiceFindTest.java`, `AlpacaTradingAdapterContractTest`, `BrokerCredential`, `BinanceFuturesTradingAdapterContractTest`, `TradingModeServiceTest`, `RetryingAlpacaTradingAdapterContractTest`, `MockBrokerAdapterContractTest`, `RetryingBinanceFuturesTradingAdapterContractTest`, `RetryingMockBrokerAdapterContractTest`, `TradingModeEvent`, `BrokerCredentialService`, `.submitOrder`, `OrderServiceTest.java`, `OrderService`, `RetryingBrokerAdapter`, `BrokerAdapterConfig.java`, `BinanceFuturesAdapterConfig.java`, `BrokerOrderResult`, `CoreDataModelIntegrationTest.java`, `OrderStatus`, `.getAccountStatus`, `TradingModeService`, `OrderQueryControllerTest`, `.placeOrder`, `AssetType`?**
-  _High betweenness centrality (0.110) - this node is a cross-community bridge._
-- **Why does `BrokerCredentialService` connect `BrokerCredentialService` to `BinanceFuturesTradingAdapter`, `AlpacaTradingAdapter`, `LiveSignalDriftServiceTest.java`, `BrokerCredentialServiceFindTest.java`, `AlpacaTradingAdapterContractTest`, `BrokerCredential`, `BinanceFuturesTradingAdapterContractTest`, `RetryingAlpacaTradingAdapterContractTest`, `RetryingBinanceFuturesTradingAdapterContractTest`, `FakeBinanceFuturesTradingServer`, `.submitOrder`, `OrderServiceTest.java`, `OrderService`, `security-review skill`, `CredentialEncryptionService`, `BrokerAdapterConfig.java`, `BinanceFuturesAdapterConfig.java`, `CoreDataModelIntegrationTest.java`, `AssetType`?**
-  _High betweenness centrality (0.080) - this node is a cross-community bridge._
-- **Why does `Candle` connect `Candle` to `.calculate`, `ThresholdCalibrationTest`, `AlpacaMarketDataClient`, `OutOfSampleValidationTest`, `RegimeCalibrationTest`, `LiveSignalDriftServiceTest.java`, `.calculate`, `.calculate`, `BinanceMarketDataClient`, `SignalRuleId`, `IndicatorService`, `.getChartData`, `OrderServiceTest.java`, `MarketDataControllerTest`, `Checkpoint`, `.findFirstCrossing`, `LiveSignalDriftService.java`, `.run`, `.calculate`, `PriceHistoryResult`, `.runAndVerify`, `.calculate`, `CheckpointStats`, `LiveDriftBaselineTest.java`, `BacktestReport`, `MarketDataController`, `.getPriceHistory`, `AssetType`?**
-  _High betweenness centrality (0.080) - this node is a cross-community bridge._
+- **Why does `TradingMode` connect `TradingMode` to `MockBrokerAdapter`, `BinanceFuturesTradingAdapter`, `AlpacaTradingAdapter`, `Order`, `.switchTo`, `OrderQueryController`, `BrokerAdapterContractTest`, `AssetType`, `BrokerCredential`, `TradingModeServiceTest`, `TradingModeEvent`, `.run`, `FakeBinanceFuturesTradingServer`, `.submitOrder`, `OrderServiceTest.java`, `OrderService`, `TradingModeController`, `BrokerAdapterConfig.java`, `BinanceFuturesAdapterConfig.java`, `BrokerOrderResult`, `CoreDataModelIntegrationTest.java`, `TradingModeResponse`, `OrderStatus`, `TradingModeService`, `OrderQueryControllerTest`, `Ticker`?**
+  _High betweenness centrality (0.103) - this node is a cross-community bridge._
+- **Why does `Candle` connect `Candle` to `.calculate`, `RuleThresholds`, `AlpacaMarketDataClient`, `IndicatorId`, `SignalCallEntry`, `RegimeCalibrationTest`, `AssetType`, `.calculate`, `.calculate`, `BinanceMarketDataClient`, `SignalRuleId`, `IndicatorService`, `IndicatorControllerTest`, `OrderServiceTest.java`, `MarketDataControllerTest`, `Checkpoint`, `.findFirstCrossing`, `LiveSignalDriftService.java`, `.run`, `.getPriceHistory`, `RsiOversoldRecalibrationTest`, `LiveSignalDriftServiceTest`, `.calculate`, `CheckpointStats`, `BacktestReport`, `MarketDataController`, `.findRegistered`, `Ticker`?**
+  _High betweenness centrality (0.092) - this node is a cross-community bridge._
+- **Why does `BrokerCredentialService` connect `BrokerCredential` to `MockBrokerAdapter`, `BinanceFuturesTradingAdapter`, `AlpacaTradingAdapter`, `CoreDataModelIntegrationTest.java`, `.submitOrder`, `BrokerAdapterContractTest`, `OrderServiceTest.java`, `AssetType`, `OrderService`, `security-review skill`, `CredentialEncryptionService`, `.run`, `BrokerAdapterConfig.java`, `BinanceFuturesAdapterConfig.java`, `FakeBinanceFuturesTradingServer`, `TradingModeService`?**
+  _High betweenness centrality (0.074) - this node is a cross-community bridge._
 - **Are the 6 inferred relationships involving `Candle` (e.g. with `.chartData_marketClosedWithCachedFallback_returns200Stale()` and `.chartData_registeredTicker_returns200WithCandlesAndIndicators()`) actually correct?**
   _`Candle` has 6 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `com.autotrade.dashboard:backend`, `MIN`, `MID` to the rest of the system?**
-  _262 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `BrokerOrderRequest` be split into smaller, more focused modules?**
-  _Cohesion score 0.14935988620199148 - nodes in this community are weakly interconnected._
+  _263 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `MockBrokerAdapter` be split into smaller, more focused modules?**
+  _Cohesion score 0.05518925518925519 - nodes in this community are weakly interconnected._
 - **Should `BinanceFuturesTradingAdapter` be split into smaller, more focused modules?**
-  _Cohesion score 0.0629076372817168 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.06222222222222222 - nodes in this community are weakly interconnected._

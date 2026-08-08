@@ -28,7 +28,12 @@ closing out F8.5, its only feature) are all done. E8-F1-S2 is a follow-up
 backlog story added to F8.1 after E8-F4-S1 flagged the BUY-side RSI
 recalibration as future work — same "found post-launch, added to an
 already-listed feature" pattern as E4-F3-S3 — and is also done, though it
-shipped no threshold change (see its entry below for why).
+shipped no threshold change (see its entry below for why). E8-F1-S3, a
+second follow-up added after E8-F1-S2 traced the BUY-side gain to
+`rsiOverbought` instead of `rsiOversold`, is also done and also shipped no
+threshold change — see its entry below for why, and for how it closes out
+the E8-F4-S1 BUY-side mismatch as a flagged, understood, not-fixable-via-
+either-RSI-bound-alone finding.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -772,6 +777,33 @@ shipped no threshold change (see its entry below for why).
   closed finding, same treatment E8-F3-S2 gave its own mixed regime
   evidence. The original E8-F4-S1 BUY-side mismatch remains open, flagged
   as not fixable via `rsiOversold` alone.
+- E8-F1-S3: `rsiOverbought` recalibration, following up on E8-F1-S2's own
+  finding that traced E8-F1-S1's original BUY-side gain to the
+  `rsiOverbought` move rather than `rsiOversold`.
+  `RsiOverboughtRecalibrationTest` swept `rsiOverbought` candidates 68-76
+  (holding `rsiOversold` fixed at the current 25 — E8-F1-S2 already showed
+  it has no BUY-side effect) against the same tuning window, then all
+  three of E8-F4-S1's out-of-sample surfaces. Result: no ship, but for a
+  different reason than E8-F1-S2. Unlike `rsiOversold`, `rsiOverbought`
+  *does* measurably affect the BUY side (confirming E8-F1-S2's hypothesis)
+  and, mirroring that finding in reverse, has zero measurable effect on
+  the SELL side anywhere in the swept range (exactly 5 distinct SELL-side
+  result lines across all 8 candidates x 3 fixtures) — each RSI bound only
+  ever moves vote counts on its own opposing side's dissent. But checked
+  against the actual pre-tuning 30/70 baseline's out-of-sample BUY-side
+  expectancy, the effect is asset-dependent in a way no single value
+  resolves: BTCUSDT's BUY side improves as `rsiOverbought` is lowered
+  toward 68, DOGEUSDT's improves as it's raised toward 75/76, and
+  SOLUSDT's is best near the pre-tuning value of 70 and degrades at both
+  swept extremes. No candidate in 68-76 beats the pre-tuning baseline on
+  all three surfaces at once — a genuine three-way conflict, not a noisy
+  single fixture. `RULE_TABLE_VERSION`/thresholds stay at v2, 25/75,
+  unchanged; `SignalRuleEngine`'s class Javadoc documents this closed
+  finding. This closes out the E8-F4-S1 BUY-side mismatch as understood
+  but not fixable via either RSI bound adjusted alone — a fix, if pursued,
+  would need a mechanism neither S2 nor S3 tested (e.g. per-asset
+  thresholds, or accepting the fixture-dependence as inherent to RSI at a
+  daily-candle horizon).
 
 ## Build / lint / test
 

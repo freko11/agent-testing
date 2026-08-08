@@ -53,6 +53,26 @@ import java.math.BigDecimal;
  * nothing ships. RSI stays 25/75/v2; see docs/CHANGELOG.md's E8-F1-S2 entry for the full
  * figures. The original E8-F4-S1 BUY-side mismatch remains open — not fixable via {@code
  * rsiOversold} alone, per this finding.
+ *
+ * <p><b>E8-F1-S3 isolated {@code rsiOverbought} — the lever E8-F1-S2 traced the original
+ * BUY-side gain to — and found it doesn't fix the mismatch either, for a new reason.</b>
+ * {@code RsiOverboughtRecalibrationTest} swept {@code rsiOverbought} candidates 68 through 76 —
+ * holding {@code rsiOversold} fixed at 25 — against the same tuning window and three
+ * out-of-sample surfaces. Unlike {@code rsiOversold}, {@code rsiOverbought} does measurably
+ * affect the BUY side (confirming E8-F1-S2's hypothesis) and, mirroring that finding in reverse,
+ * has zero measurable effect on the SELL side in this data (exactly 5 distinct SELL-side result
+ * lines across all 8 candidates &times; 3 fixtures) — each RSI bound only ever moves the vote
+ * count on its own opposing side's dissent, never the other rule branch. But the BUY-side effect
+ * is asset-dependent in a way that blocks any single fix: against the actual pre-tuning 30/70
+ * baseline's out-of-sample BUY-side expectancy, BTCUSDT improves as {@code rsiOverbought} is
+ * lowered toward 68, DOGEUSDT improves as it's raised toward 75/76, and SOLUSDT is best near the
+ * pre-tuning value of 70 and degrades at both swept extremes — a genuine three-way conflict, not
+ * an artifact of one noisy fixture. No candidate in the swept range beats the pre-tuning baseline
+ * on all three surfaces simultaneously, so nothing ships here either; RSI stays 25/75/v2. See
+ * docs/CHANGELOG.md's E8-F1-S3 entry for the full figures. The E8-F4-S1 BUY-side mismatch is now
+ * closed as a flagged finding: neither RSI bound, adjusted alone, fixes it — a resolution would
+ * need a mechanism this pair of stories didn't test (e.g. per-asset thresholds, or accepting the
+ * fixture-dependence as inherent to this indicator at a daily-candle horizon).
  */
 public final class SignalRuleEngine {
 
