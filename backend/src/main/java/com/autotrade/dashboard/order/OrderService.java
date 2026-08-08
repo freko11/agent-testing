@@ -11,6 +11,7 @@ import com.autotrade.dashboard.brokeradapter.BrokerAdapterRouter;
 import com.autotrade.dashboard.brokeradapter.BrokerAdapterUnavailableException;
 import com.autotrade.dashboard.brokeradapter.BrokerOrderRequest;
 import com.autotrade.dashboard.brokeradapter.BrokerOrderResult;
+import com.autotrade.dashboard.common.PagedResponse;
 import com.autotrade.dashboard.common.TradingMode;
 import com.autotrade.dashboard.notification.NotificationService;
 import com.autotrade.dashboard.risk.KillSwitchCancelSummary;
@@ -233,6 +234,12 @@ public class OrderService {
         return orderRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(0, limit)).stream()
                 .map(OrderResponse::from)
                 .toList();
+    }
+
+    /** Newest-first page of the audit trail (E6-F3-S3) — bounds validation lives in {@link OrderQueryController}, same split as {@link #listOrders}. */
+    public PagedResponse<AuditEntryResponse> listAuditEntries(int page, int size) {
+        return PagedResponse.from(orderAuditEntryRepository.findAllByOrderByLoggedAtDesc(PageRequest.of(page, size))
+                .map(AuditEntryResponse::from));
     }
 
     /**

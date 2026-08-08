@@ -33,7 +33,11 @@ second follow-up added after E8-F1-S2 traced the BUY-side gain to
 `rsiOverbought` instead of `rsiOversold`, is also done and also shipped no
 threshold change — see its entry below for why, and for how it closes out
 the E8-F4-S1 BUY-side mismatch as a flagged, understood, not-fixable-via-
-either-RSI-bound-alone finding.
+either-RSI-bound-alone finding. E6-F3-S3, a third followup backlog story —
+this one added to E6's F6.3 (Audit log) rather than E8 — is also done: it
+builds the audit-trail viewer that E6-F3-S1/S2 repeatedly deferred, found
+during a general sweep for overdue flagged findings rather than tied to any
+specific prior story's own follow-up note.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -322,6 +326,59 @@ either-RSI-bound-alone finding.
   Denormalized rather than left as a join through the existing
   `signal_call_id` FK, so the audit row is self-contained for a future
   audit-trail viewer. No config, no new endpoint, no frontend change.
+- E6-F3-S3: The audit-trail viewer itself — a new `GET /api/orders/audit-entries`
+  endpoint (newest-first, true page-number pagination via a new
+  `OrderAuditEntryRepository.findAllByOrderByLoggedAtDesc(Pageable)` — this
+  codebase's first genuinely paginated query; every earlier "list" endpoint is
+  limit-only, always page 0) and a new "Audit Trail" dashboard tab
+  (`frontend/src/auditentry/AuditTrail.tsx`) rendering it. Folded into the
+  existing `OrderQueryController`/`OrderService` rather than new classes —
+  `OrderService.listOrders`/`exportOrdersCsv` already establish "read-side
+  order-history methods live here, bounds validation lives in the
+  controller," so `listAuditEntries` follows the same split rather than
+  introducing a parallel service. New `AuditEntryResponse` DTO (ticker, side,
+  signal call/matched rule + its rationale, rule-table version, hold-term
+  range, result status, rejection reason, entry price, logged-at — enough for
+  a row to be self-explanatory without a second lookup, deliberately leaving
+  out `IndicatorSnapshot`'s raw RSI/MACD values as backtest/calibration-tool
+  territory) and a new generic `common.PagedResponse&lt;T&gt;` wrapper (not
+  Spring's own `Page&lt;T&gt;` serialized directly — an unstable wire
+  contract). The repository query `JOIN FETCH`es `order`/`ticker`/
+  `signalCallEntry` with an explicit `countQuery`, same lazy-init-avoidance
+  precedent as E8-F5-S1's own audit-entry query. Design gate (`Plan` agent)
+  scoped this before implementation; one deviation from its recommendation,
+  made after reading the actual code: it proposed a new `OrderAuditEntryService`
+  and a new top-level `/api/audit-entries` resource, but `OrderService`
+  already held `listOrders` as a read-side method despite being nominally
+  "submission-focused," so extending it matched the codebase's real existing
+  precedent better than adding a parallel service class would have found.
+  While implementing, also fixed a real, unrelated, long-flagged bug found
+  during the same "any overdue findings?" sweep that scoped this story: the
+  E2-F4-S2 CHANGELOG entry (and CLAUDE.md's own matching Status line) had
+  BTCUSDT's and DOGEUSDT's expectancy findings swapped — E8-F1-S1 had already
+  caught this via a CSV price-magnitude check but left it uncorrected to stay
+  scoped to its own AC; corrected in both files ahead of this story.
+  Frontend: `frontend/src/order/statusTone.ts` extracted out of
+  `OrderHistory.tsx` (small dedup — `AuditTrail` needed the same status→tone
+  mapping) with no behavior change; new `.audit-trail-table*` CSS (a
+  dedicated class, not reusing `.order-history-table` directly, since that
+  class's `td:nth-child` font-family overrides are tuned to `OrderHistory`'s
+  own column order and would have applied to the wrong columns here).
+  Test coverage across all three new layers: `OrderAuditEntryRepositoryTest`
+  (new, real H2-in-Oracle-mode round trip — proves the `JOIN FETCH`/explicit
+  `countQuery` JPQL and pagination math actually work against a real
+  datasource, not just a mock), `OrderServiceTest`/`OrderQueryControllerTest`
+  (mapping and validation, mocked collaborators, same pattern as `listOrders`'
+  own tests), and a new `OrderAuditControllerIntegrationTest` (real HTTP +
+  real session-cookie/CSRF login flow, same shape as E8-F5-S1's
+  `SignalDriftControllerIntegrationTest`). Docker wasn't available in this
+  session either (same blocker E8-F5-S1 hit, re-confirmed rather than assumed:
+  the `local` Spring profile requires real Oracle, and H2 is test-scope only,
+  not on the `spring-boot:run` runtime classpath), so that integration test
+  stands in for the `run` skill's normal live-browser verification — it
+  exercises the real repository query, real service wiring, and real
+  session auth end to end, just not a real browser render. `npm run build`/
+  `lint`/`test` and `./mvnw verify` both green.
 
 ### E7 — Observability & Hardening
 - E7-F1-S1: Structured logging across every backend service, via a single
@@ -869,7 +926,10 @@ either-RSI-bound-alone finding.
 - `order` — `OrderService` (bracket-order submission, re-derives signal
   server-side, never trusts client-cached data), status polling, CSV export,
   `OrderAuditEntry` (E6-F3-S1's write-once, never-updated audit log of an
-  order's submission-time decision).
+  order's submission-time decision). `listAuditEntries`/`GET
+  /api/orders/audit-entries` (E6-F3-S3) is this codebase's first genuinely
+  paginated endpoint (`common.PagedResponse<T>`, page-number/page-size —
+  every earlier list endpoint is limit-only).
 - `notification` — `WatchlistSignalPoller` (scheduled job, the app's first
   background task), `NotificationService`.
 - `tradingmode` — `TradingModeService` (append-only `trading_mode_events`,
@@ -901,9 +961,11 @@ either-RSI-bound-alone finding.
   log line further down the same call chain.
 
 **Frontend** (`frontend/src/`) mirrors the backend split: `marketdata`, `signal`,
-`chart`, `trade`, `order`, `watchlist`, `notification`, `tradingmode`, `killswitch`,
-`auth`. Each domain has its own `api.ts` (typed fetch wrapper, shared `MarketDataError`
-parsing) and one or two components wired into `DashboardPage`.
+`chart`, `trade`, `order`, `auditentry` (E6-F3-S3's audit-trail viewer, its own
+domain despite reading through the `order` resource — a distinct concept, order
+status vs. why an order fired), `watchlist`, `notification`, `tradingmode`,
+`killswitch`, `auth`. Each domain has its own `api.ts` (typed fetch wrapper, shared
+`MarketDataError` parsing) and one or two components wired into `DashboardPage`.
 
 Project-specific subagents live in `.claude/agents/` (`Plan`, `Explore`,
 `general-purpose`); project-specific skills in `.claude/skills/` (`run`, `dataviz`,

@@ -11,6 +11,7 @@ import com.autotrade.dashboard.brokeradapter.BrokerAdapterRouter;
 import com.autotrade.dashboard.brokeradapter.BrokerAdapterUnavailableException;
 import com.autotrade.dashboard.brokeradapter.BrokerOrderRequest;
 import com.autotrade.dashboard.brokeradapter.BrokerOrderResult;
+import com.autotrade.dashboard.common.PagedResponse;
 import com.autotrade.dashboard.common.TradingMode;
 import com.autotrade.dashboard.indicator.IndicatorResponse;
 import com.autotrade.dashboard.indicator.IndicatorSnapshot;
@@ -41,6 +42,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -627,6 +629,36 @@ class OrderServiceTest {
         assertEquals(5L, responses.get(0).id());
         assertEquals("BTCUSDT", responses.get(0).tickerSymbol());
         assertEquals(OrderStatus.FILLED, responses.get(0).status());
+    }
+
+    @Test
+    void listAuditEntries_mapsRepositoryPageToPagedResponseOfAuditEntryResponse() {
+        Ticker ticker = cryptoTicker();
+        Order order = persistedOrder(5L, ticker, "client-1");
+        SignalCallEntry signalCallEntry = mock(SignalCallEntry.class);
+        when(signalCallEntry.getCall()).thenReturn(SignalCall.BUY);
+        when(signalCallEntry.getMatchedRule()).thenReturn(SignalRuleId.BULLISH_MAJORITY);
+        when(signalCallEntry.getHoldTermMinDays()).thenReturn(1);
+        when(signalCallEntry.getHoldTermMaxDays()).thenReturn(5);
+        OrderAuditEntry entry = new OrderAuditEntry(order, signalCallEntry, "v2", OrderStatus.FILLED, null,
+                "broker-order-1", new BigDecimal("100.5"));
+        ReflectionTestUtils.setField(entry, "id", 9L);
+        when(orderAuditEntryRepository.findAllByOrderByLoggedAtDesc(PageRequest.of(0, 25)))
+                .thenReturn(new PageImpl<>(List.of(entry), PageRequest.of(0, 25), 1));
+
+        PagedResponse<AuditEntryResponse> response = service.listAuditEntries(0, 25);
+
+        assertEquals(1, response.totalElements());
+        assertEquals(1, response.content().size());
+        AuditEntryResponse mapped = response.content().get(0);
+        assertEquals(9L, mapped.id());
+        assertEquals("BTCUSDT", mapped.tickerSymbol());
+        assertEquals(OrderSide.BUY, mapped.side());
+        assertEquals(SignalCall.BUY, mapped.call());
+        assertEquals(SignalRuleId.BULLISH_MAJORITY, mapped.matchedRule());
+        assertEquals(SignalRuleId.BULLISH_MAJORITY.rationale(), mapped.matchedRuleRationale());
+        assertEquals("v2", mapped.ruleTableVersion());
+        assertEquals(OrderStatus.FILLED, mapped.resultStatus());
     }
 
     @Test

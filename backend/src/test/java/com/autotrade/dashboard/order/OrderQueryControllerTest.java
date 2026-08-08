@@ -1,7 +1,10 @@
 package com.autotrade.dashboard.order;
 
 import com.autotrade.dashboard.broker.Broker;
+import com.autotrade.dashboard.common.PagedResponse;
 import com.autotrade.dashboard.common.TradingMode;
+import com.autotrade.dashboard.signal.SignalCall;
+import com.autotrade.dashboard.signal.SignalRuleId;
 import com.autotrade.dashboard.ticker.AssetType;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -63,6 +66,46 @@ class OrderQueryControllerTest {
     @Test
     void listOrders_limitTooLow_returns400() throws Exception {
         mockMvc.perform(get("/api/orders").param("limit", "0"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("INVALID_REQUEST"));
+    }
+
+    private AuditEntryResponse sampleAuditEntryResponse(Long id) {
+        return new AuditEntryResponse(id, "BTCUSDT", AssetType.CRYPTO, OrderSide.BUY, SignalCall.BUY,
+                SignalRuleId.BULLISH_MAJORITY, SignalRuleId.BULLISH_MAJORITY.rationale(), "v2", 1, 5,
+                OrderStatus.FILLED, null, new BigDecimal("100.5"), Instant.parse("2026-07-29T00:00:00Z"));
+    }
+
+    @Test
+    void listAuditEntries_defaultPaging_returns200() throws Exception {
+        when(orderService.listAuditEntries(0, 25)).thenReturn(
+                new PagedResponse<>(List.of(sampleAuditEntryResponse(1L)), 0, 25, 1, 1));
+
+        mockMvc.perform(get("/api/orders/audit-entries"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(1))
+                .andExpect(jsonPath("$.content[0].matchedRule").value("BULLISH_MAJORITY"))
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.totalPages").value(1));
+    }
+
+    @Test
+    void listAuditEntries_negativePage_returns400() throws Exception {
+        mockMvc.perform(get("/api/orders/audit-entries").param("page", "-1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("INVALID_REQUEST"));
+    }
+
+    @Test
+    void listAuditEntries_sizeTooHigh_returns400() throws Exception {
+        mockMvc.perform(get("/api/orders/audit-entries").param("size", "101"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("INVALID_REQUEST"));
+    }
+
+    @Test
+    void listAuditEntries_sizeTooLow_returns400() throws Exception {
+        mockMvc.perform(get("/api/orders/audit-entries").param("size", "0"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("INVALID_REQUEST"));
     }

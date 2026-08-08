@@ -5618,3 +5618,169 @@ Javadoc-only edit to `SignalRuleEngine` — no `RULE_TABLE_VERSION`,
 `RSI_OVERSOLD_THRESHOLD`/`RSI_OVERBOUGHT_THRESHOLD`, `OrderService`, or
 `PlaceOrderRequest` changes. No frontend changes. `graphify update .` run
 after implementation, per this repo's CLAUDE.md graphify rule.
+
+## E6-F3-S3 — audit-trail viewer
+
+**Why this story exists.** Not tied to a specific prior story's own flagged
+follow-up, unlike E4-F3-S3/E8-F1-S2/E8-F1-S3 above — found during a general
+"are there overdue pending items/findings we can fix?" sweep of this
+CHANGELOG and CLAUDE.md. E6-F3-S1 built the immutable `OrderAuditEntry` audit
+log; E6-F3-S2 added its `rule_table_version` column and explicitly noted "a
+dedicated audit-trail viewer is left for a future story once this column
+landed; it has now landed, but the viewer itself is still that future
+story, not this one." That future story was never scheduled. Scoped as its
+own backlog story first (`docs/agile-plan.md`'s new E6-F3-S3 row), same
+"scope before implementing" pattern as E4-F3-S3/E8-F1-S2/S3, then a `Plan`
+design gate before any code.
+
+**Design gate, and one deviation from it.** The `Plan` agent's design gate
+recommended a new `OrderAuditEntryService` class (reasoning: `OrderService`
+is "already a large, submission-focused class," this is "a pure read-side
+concern") and a new top-level `/api/audit-entries` resource/controller.
+Reading the actual code before implementing surfaced a contradiction in that
+reasoning: `OrderService.listOrders`/`exportOrdersCsv` are *already*
+read-side, non-submission methods living in that same "submission-focused"
+class, with `OrderQueryController` as the separate controller that calls
+them — the real established split in this codebase is "one service handles
+both read and write for a resource area; read/write get separate
+controllers," not "read and write get separate services." Followed the
+actual precedent instead: `OrderService.listAuditEntries` (new method, sits
+right after `listOrders`) and `OrderQueryController`'s new `GET
+/api/orders/audit-entries` (bounds validation in the controller, exactly
+mirroring `listOrders`'s own `limit` validation — plain pass-through in the
+service). This avoided adding a parallel service class whose only reason to
+exist would have been "audit entries are conceptually different from
+orders," which the codebase's own `OrderResponse`/`AuditEntryResponse` DTO
+split (see below) already expresses without needing a second service.
+
+**Backend, mechanically.**
+- `OrderAuditEntryRepository.findAllByOrderByLoggedAtDesc(Pageable)`: new
+  `@Query` (`JOIN FETCH order/ticker/signalCallEntry`, explicit
+  `countQuery`) returning `Page<OrderAuditEntry>` — this codebase's first
+  genuinely paginated query. Every earlier "list" endpoint
+  (`OrderRepository.findAllByOrderByCreatedAtDesc`,
+  `NotificationRepository.findAllByOrderByCreatedAtDesc`) only ever calls
+  `PageRequest.of(0, limit)` — always page 0, a "top N" shape, not real
+  paging. The explicit `countQuery` sidesteps relying on Spring Data to
+  correctly strip `JOIN FETCH` out of an auto-derived count query; since
+  every join here targets a to-one association, the fetch doesn't change
+  the row count either way, so a plain `SELECT COUNT(a) FROM
+  OrderAuditEntry a` is exactly right.
+- New `common.PagedResponse<T>` record (`content`, `page`, `size`,
+  `totalElements`, `totalPages`) wraps the repository's `Page<T>` for the
+  wire — deliberately not serializing Spring's `Page<T>` directly over
+  HTTP, since its JSON shape isn't a stable, intentional contract.
+- New `order.AuditEntryResponse` DTO, same "flat record + package-private
+  static `from(...)` factory" shape as `OrderResponse`: `id`,
+  `tickerSymbol`, `assetType`, `side` (from `order.getSide()` — the
+  actually-executed side, more authoritative than re-deriving it from
+  `signalCallEntry.getCall()`), `call`, `matchedRule` **and its
+  `rationale()`** (a small addition beyond the AC's literal field list —
+  turns e.g. `BULLISH_MAJORITY` into "A majority of indicators (RSI/MACD/MA)
+  are bullish, with no dissent." at near-zero cost, since `SignalRuleId`
+  already carries the string), `ruleTableVersion` (read from
+  `OrderAuditEntry`'s own frozen field per E6-F3-S2, not re-read from
+  `signalCallEntry` — the value guaranteed never to drift), hold-term
+  range, `resultStatus`, `rejectionReason`, `entryPrice`, `loggedAt`.
+  Deliberately excludes `indicatorSnapshot`'s raw RSI/MACD values —
+  backtest/calibration-tool territory (`BacktestReport`), out of proportion
+  for a review row.
+- `OrderQueryController.listAuditEntries`: `GET
+  /api/orders/audit-entries?page=&size=`, default `page=0`/`size=25`, cap
+  `size` at 100 — a denser default than `listOrders`'s 50, since each
+  audit row carries more columns. Bounds violations throw the same
+  `InvalidTradeRequestException`/400 `INVALID_REQUEST` `listOrders` already
+  uses, no new exception type needed.
+
+**No production write-path changes** — `OrderService.recordAuditEntry`,
+`OrderAuditEntry` itself, `SignalCallEntry`, and every other write path are
+untouched. Purely additive/read-only on top of already-shipped
+infrastructure, matching this story's own scoped AC.
+
+**Frontend, mechanically.** New `frontend/src/auditentry/` domain (own
+folder despite reading through the `order` resource — a genuinely distinct
+concept, "what is this order's current status" vs. "why did this order
+fire," matching the `OrderResponse`/`AuditEntryResponse` split above):
+`api.ts` (`fetchAuditEntries(page, size)`, mirrors `order/api.ts`'s
+`apiFetch`/`parseMarketDataError` pattern) and `AuditTrail.tsx` (mirrors
+`OrderHistory.tsx`'s loading/empty/error-state shape, plus Prev/Next +
+"Page X of Y" pagination controls driven by the response's own
+`page`/`totalPages`). Reachable via a new "Audit Trail" tab in
+`DashboardPage.tsx`'s `TABS` array — a new top-level sibling tab rather than
+nested inside the existing Orders tab, since Orders already has its own
+internal structure (table + CSV export) and a second table with a different
+pagination model would have added real interaction complexity there for no
+benefit over a flat new tab.
+
+Small dedup caught during the `simplify` pass: `OrderHistory.tsx`'s
+`statusTone` helper (status → success/warning/error/neutral) is exactly what
+`AuditTrail` needed too (both render `OrderStatus` values), so it moved out
+to a new shared `order/statusTone.ts` with no behavior change, rather than
+duplicating the switch statement. The `simplify` pass also caught a real
+gap in the first draft: `AuditEntryResponse.entryPrice` was fetched by the
+frontend's `AuditEntry` type but never rendered in the table — added an
+"Entry price" column rather than dropping the field, since the design
+gate's own rationale for including it ("makes a row self-explanatory") only
+holds if it's actually shown. `assetType` stays fetched-but-unrendered,
+same as `OrderResponse.assetType` already is in `OrderHistory`'s own
+table — an existing, not newly-introduced, pattern in this codebase.
+
+New CSS: `.audit-trail-table*` (sticky header, zebra stripe, hover — same
+structural shape as `.order-history-table`), deliberately a separate class
+rather than reusing `.order-history-table` directly, since that class's
+`td:nth-child(2)`/`td:nth-child(8)` font-family overrides are tuned to
+`OrderHistory`'s own column order and would have silently applied to the
+wrong columns in a 9-column audit table with a different layout.
+
+**Also fixed, found during the same "overdue findings" sweep that scoped
+this story (before any of the above code was written):** the E2-F4-S2
+CHANGELOG entry above had BTCUSDT's and DOGEUSDT's expectancy findings
+swapped, a bug E8-F1-S1's own entry had already caught (CSV price-magnitude
+sanity check) but left uncorrected — "worth a correction pass if anyone
+revisits that entry." Corrected in both that entry and CLAUDE.md's matching
+E2-F4-S2 Status line, which had copied the same swap. Unrelated to this
+story's own code, done as a separate commit ahead of it.
+
+**Test coverage, one per layer.**
+- `OrderAuditEntryRepositoryTest` (new, real `@SpringBootTest` against
+  H2-in-Oracle-mode, not `@DataJpaTest` — same "real configured datasource,
+  not an auto-replaced embedded one" reasoning `CoreDataModelIntegrationTest`
+  already established) — the layer a mock-based test can't cover: proves the
+  `JOIN FETCH`/explicit-`countQuery` JPQL is actually valid and pagination
+  math (ordering, `totalElements`, `totalPages`, page splitting) actually
+  works against a real datasource. Caught a real bug in its own first draft:
+  `broker_credentials` has a unique `(broker, environment)` constraint, so
+  the test's per-audit-entry fixture helper couldn't insert a fresh
+  credential on every call — fixed by sharing one credential per test
+  method, matching how a real account only ever has one active credential
+  per broker/environment pair anyway.
+- `OrderServiceTest.listAuditEntries_mapsRepositoryPageToPagedResponseOfAuditEntryResponse`
+  and three `OrderQueryControllerTest` cases (default paging, negative
+  page, oversized `size`) — mocked-collaborator mapping/validation
+  coverage, same pattern as `listOrders`'s own existing tests.
+- New `OrderAuditControllerIntegrationTest` — real HTTP through the real
+  session-cookie/CSRF login flow (same shape as E8-F5-S1's
+  `SignalDriftControllerIntegrationTest`, including its own doc-comment
+  explaining why this exists rather than a mocked test alone), proving
+  `OrderService`/`OrderAuditEntryRepository`/`OrderQueryController`/session
+  auth all wire together end to end. Runs against an empty
+  `order_audit_entries` table (no fixture rows), same "no live network
+  calls, minimal setup" choice `SignalDriftControllerIntegrationTest` made.
+
+**Live verification.** Docker wasn't available in this session either — the
+same blocker E8-F5-S1 hit, re-confirmed here rather than assumed: the
+`local` Spring profile's datasource config requires a real Oracle instance
+(`application-local.properties`), and H2 is `src/test/resources`-scoped
+only, never on the `spring-boot:run` runtime classpath. `npm run dev`/`./mvnw
+spring-boot:run` against a real browser was therefore not possible; per
+E8-F5-S1's own precedent, `OrderAuditControllerIntegrationTest` stands in as
+the closest available substitute — it exercises the real repository query,
+real service wiring, and real session auth end to end via actual HTTP, just
+not an actual browser render. `npm run build`/`lint`/`test` all green;
+`./mvnw verify` green (full suite, including the three new/changed test
+files above).
+
+No `SignalRuleEngine`/`RULE_TABLE_VERSION`/`OrderService.submitOrder`/
+`OrderAuditEntry`/`PlaceOrderRequest` changes — purely additive read path.
+`graphify update .` run after implementation, per this repo's CLAUDE.md
+graphify rule.

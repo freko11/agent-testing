@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { MarketDataError } from '../marketdata/api'
 import { fetchOrders, refreshOrder, type OrderSummary } from './api'
 import OrderExport from './OrderExport'
+import { statusTone } from './statusTone'
 
 interface OrderHistoryProps {
   refreshKey: number
@@ -9,24 +10,6 @@ interface OrderHistoryProps {
 
 function describeError(reason: unknown, fallback: string): string {
   return reason instanceof MarketDataError ? reason.message : fallback
-}
-
-type StatusTone = 'success' | 'warning' | 'error' | 'neutral'
-
-function statusTone(status: OrderSummary['status']): StatusTone {
-  switch (status) {
-    case 'FILLED':
-    case 'PARTIALLY_FILLED':
-      return 'success'
-    case 'PARTIALLY_PROTECTED':
-    case 'SUBMISSION_UNKNOWN':
-      return 'warning'
-    case 'REJECTED':
-    case 'FAILED':
-      return 'error'
-    default:
-      return 'neutral'
-  }
 }
 
 /**

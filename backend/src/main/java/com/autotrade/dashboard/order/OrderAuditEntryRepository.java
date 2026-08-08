@@ -1,5 +1,7 @@
 package com.autotrade.dashboard.order;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -9,6 +11,25 @@ import java.util.Collection;
 import java.util.List;
 
 public interface OrderAuditEntryRepository extends JpaRepository<OrderAuditEntry, Long> {
+
+    /**
+     * Newest-first page of every audit entry, for the audit-trail viewer (E6-F3-S3) -- unlike
+     * {@link #findByResultStatusInAndLoggedAtAfterOrderByLoggedAtAsc} below, this is unfiltered by
+     * {@code resultStatus} (a rejected/failed order is exactly the kind of row a review UI needs to
+     * surface, not just filled ones) and paginated rather than a bounded time-window scan. {@code
+     * JOIN FETCH}es {@code order}/{@code ticker}/{@code signalCallEntry} for the same reason as the
+     * query below -- avoids a lazy-init exception on those associations once the transaction that
+     * loaded them has closed. An explicit {@code countQuery} avoids relying on Spring Data to strip
+     * {@code JOIN FETCH} out of an auto-derived count query, since the join targets here are all
+     * to-one associations and don't affect the row count either way.
+     */
+    @Query(value = "SELECT a FROM OrderAuditEntry a "
+            + "JOIN FETCH a.order "
+            + "JOIN FETCH a.ticker "
+            + "JOIN FETCH a.signalCallEntry "
+            + "ORDER BY a.loggedAt DESC",
+            countQuery = "SELECT COUNT(a) FROM OrderAuditEntry a")
+    Page<OrderAuditEntry> findAllByOrderByLoggedAtDesc(Pageable pageable);
 
     /**
      * Audit entries whose entry leg actually filled (E8-F5-S1: {@code resultStatus} in {@code

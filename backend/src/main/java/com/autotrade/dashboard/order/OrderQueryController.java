@@ -1,5 +1,6 @@
 package com.autotrade.dashboard.order;
 
+import com.autotrade.dashboard.common.PagedResponse;
 import com.autotrade.dashboard.common.TradingMode;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -26,6 +27,8 @@ public class OrderQueryController {
 
     private static final int DEFAULT_LIMIT = 50;
     private static final int MAX_LIMIT = 500;
+    private static final int DEFAULT_AUDIT_PAGE_SIZE = 25;
+    private static final int MAX_AUDIT_PAGE_SIZE = 100;
 
     private final OrderService orderService;
 
@@ -39,6 +42,19 @@ public class OrderQueryController {
             throw new InvalidTradeRequestException("limit must be between 1 and " + MAX_LIMIT + ", got " + limit);
         }
         return orderService.listOrders(limit);
+    }
+
+    /** Audit-trail viewer (E6-F3-S3) — a distinct, newest-first paginated resource, not the limit-only {@link #listOrders} shape. */
+    @GetMapping("/audit-entries")
+    public PagedResponse<AuditEntryResponse> listAuditEntries(@RequestParam(defaultValue = "0") int page,
+                                                                @RequestParam(defaultValue = "" + DEFAULT_AUDIT_PAGE_SIZE) int size) {
+        if (page < 0) {
+            throw new InvalidTradeRequestException("page must be >= 0, got " + page);
+        }
+        if (size < 1 || size > MAX_AUDIT_PAGE_SIZE) {
+            throw new InvalidTradeRequestException("size must be between 1 and " + MAX_AUDIT_PAGE_SIZE + ", got " + size);
+        }
+        return orderService.listAuditEntries(page, size);
     }
 
     @PostMapping("/{id}/refresh")
