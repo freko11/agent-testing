@@ -21,14 +21,19 @@ package com.autotrade.dashboard.signal;
  * identically with either one.
  *
  * <p><b>Deliberately not wired into production.</b> {@code SignalService}/{@code OrderService}
- * still call {@link SignalRuleEngine#evaluate} directly, unfiltered — wiring this in is pending
- * evidence from {@code RegimeCalibrationTest} showing ranging-regime expectancy is consistently
- * and materially worse than trending-regime expectancy, the same evidence-gated approach {@code
- * WeightedVoteRuleEngine} (E8-F3-S1) took. E8-F4-S1's out-of-sample validation pass covered
- * E8-F1-S1's threshold shift and {@code WeightedVoteRuleEngine}'s weights, but explicitly left
- * this story's regime filter/{@code ADX_TRENDING_THRESHOLD} out of scope — its calibration was
- * already fixture-mixed rather than a clean value to validate, so it remains unvalidated
- * out-of-sample pending a future story.
+ * still call {@link SignalRuleEngine#evaluate} directly, unfiltered — wiring this in was
+ * conditioned on evidence from {@code RegimeCalibrationTest} showing ranging-regime expectancy is
+ * consistently and materially worse than trending-regime expectancy, the same evidence-gated
+ * approach {@code WeightedVoteRuleEngine} (E8-F3-S1) took. E8-F4-S1's out-of-sample validation
+ * pass covered E8-F1-S1's threshold shift and {@code WeightedVoteRuleEngine}'s weights, but
+ * explicitly left this story's regime filter/{@code ADX_TRENDING_THRESHOLD} out of scope. E8-F4-S2
+ * closed that gap: {@code RegimeOutOfSampleValidationTest} replayed the held-out tail of all three
+ * fixtures (BTCUSDT/DOGEUSDT/SOLUSDT) and found the SELL side does hold up out-of-sample (trending
+ * beats ranging on every symbol at every checkpoint) but the BUY side doesn't (ranging actually
+ * beats trending on BTCUSDT and DOGEUSDT, only SOLUSDT favors trending) — since {@link #applyGate}
+ * gates both directions identically with no BUY/SELL split, this doesn't clear the "uniformly and
+ * materially worse across all three symbols" bar the wiring decision was conditioned on, so this
+ * class remains unwired. See {@code docs/CHANGELOG.md}'s E8-F4-S2 entry for the full figures.
  */
 public final class RegimeGatedRuleEngine {
 

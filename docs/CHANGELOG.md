@@ -6107,3 +6107,95 @@ updates, zero behavior change). No `OrderService`/`PlaceOrderRequest`/
 override-map changes beyond the constructor-arity update, no schema
 migration, no frontend changes. `graphify update .` run after
 implementation, per this repo's CLAUDE.md graphify rule.
+
+## E8-F4-S2 — out-of-sample validation of `RegimeGatedRuleEngine` (no ship)
+
+**Why this story exists.** `OutOfSampleValidationTest` (E8-F4-S1) validated
+E8-F1-S1's RSI threshold shift and E8-F3-S1's `WeightedVoteRuleEngine`
+weights out-of-sample, but explicitly named `RegimeGatedRuleEngine`
+(E8-F3-S2) as out of scope: "not named in this story's AC... its
+calibration was already fixture-mixed rather than a clean value to
+validate." That left the regime filter as the only E8-F3 mechanism never
+checked against held-out data — this backlog story (`docs/agile-plan.md`
+E8-F4-S2) closes that specific gap.
+
+**No new fixture or split needed, confirmed before writing any test.**
+Every other E8-F4/E8-F1 follow-up either introduced a chronological
+tune/held-out split or reused `FixtureSplits`'s existing one because the
+value under test had been *tuned* against the fixtures' early ~700
+candles. `RegimeClassifier.ADX_TRENDING_THRESHOLD` (25) was never tuned at
+all — it's a fixed industry rule-of-thumb, per that class's own Javadoc.
+That means `FixtureSplits.BTCUSDT_HELD_OUT`/`DOGEUSDT_HELD_OUT`/
+`SOLUSDT_HELD_OUT` (the same ~300-candle tails E8-F1-S4/S5 held out from
+their own tuning) are already genuine out-of-sample evidence for this
+mechanism specifically — no tuning-window run needed for comparison, unlike
+E8-F1-S4/S5's per-symbol tests which print both.
+
+**New `backtest.RegimeOutOfSampleValidationTest`**, `src/test/java`-only,
+three tests (one per symbol) that run `BacktestHarness.run` against each
+symbol's held-out tail and read off the harness's existing
+`buyByRegime`/`sellByRegime` split (`RegimeSplitStats`, already computed by
+every `BacktestHarness.run` call since E8-F3-S2 — no new production code
+needed to gather this evidence) — structurally identical to
+`RegimeCalibrationTest`'s own `printAndVerify`/`printLine`/`printCheckpoint`
+methods, just pointed at the held-out slices instead of the full fixtures.
+Assertions are structural only (the regime split partitions
+`overallBuy`/`overallSell` exactly, the usual win/loss-sign and
+tpHit+slHit+horizonExpired invariants) — the printed report is the
+evidence under review, same as every other E8 calibration test.
+
+**Finding: SELL confirms out-of-sample, BUY doesn't — same split verdict
+E8-F3-S2's original in-sample run reached, now with held-out evidence
+behind it instead of just the two tuning fixtures.** Max-checkpoint
+after-cost expectancy (trending vs. ranging), all three held-out tails:
+
+| Symbol | BUY trending | BUY ranging | SELL trending | SELL ranging |
+|---|---|---|---|---|
+| BTCUSDT | -0.795% | **-0.077%** (ranging better) | **+1.003%** | +0.990% |
+| DOGEUSDT | +1.164% | **+1.280%** (ranging better) | **+1.780%** | -0.973% |
+| SOLUSDT | **+0.400%** | -0.898% | **+1.233%** | +0.469% |
+
+SELL: trending beats ranging on all three symbols, at every checkpoint
+(min/mid/max), not just the max column shown above — the cleanest,
+most-consistent regime signal found in any E8 calibration test to date.
+BUY: ranging actually *beats* trending on BTCUSDT and DOGEUSDT (only by a
+small margin on DOGEUSDT, but unambiguous on BTCUSDT — ranging is
+less-negative at every checkpoint); only SOLUSDT shows the direction the
+story's hypothesis predicted. This is the same fixture-dependent,
+no-single-answer-wins-everywhere shape E8-F1-S3 (rsiOverbought) and
+E8-F1-S5 (MACD magnitude) each found on their own axes, now found on a
+third, structurally unrelated axis (a regime post-filter, not a rule
+threshold).
+
+**Decision: no ship, per this story's own confirmed AC bar.** The AC
+conditions wiring `RegimeGatedRuleEngine` into `SignalService`/
+`OrderService` on ranging expectancy being "uniformly and materially worse
+than trending across all three symbols" — met for SELL, not for BUY. Since
+`RegimeGatedRuleEngine.applyGate` gates any directional (BUY or SELL) call
+identically (it takes a `SignalRuleId` and a `Regime`, with no branch on
+which direction the rule represents), there is no mechanism in this story's
+scope to ship a SELL-only gate without also gating BUY calls the evidence
+says shouldn't be gated. Unlike E8-F1-S4 (which had a per-symbol axis to
+ship a partial win on) or the MACD magnitude story's SELL-side secondary
+finding (explicitly flagged rather than shipped, for the same
+"instrument doesn't exist yet" reason), no narrower-scoped ship is
+possible here without a new mechanism (e.g. a direction-aware gate) that
+this story's AC didn't ask for and wasn't built. Left as a flagged,
+understood finding: `RegimeGatedRuleEngine`'s class Javadoc and
+`RegimeCalibrationTest`'s class Javadoc both updated from "unvalidated
+out-of-sample, pending a future story" to record this closed result,
+including a pointer to a SELL-only direction-aware gate as the one
+mechanism that could plausibly clear the bar, if a future story wants to
+build it. `RegimeGatedRuleEngine` stays unwired; no `RULE_TABLE_VERSION`
+bump (this mechanism was never wired to begin with, so there's nothing to
+revert); no `SignalService`/`OrderService`/`PlaceOrderRequest` changes.
+
+**`./mvnw verify`: 489 tests, 0 failures/errors, `BUILD SUCCESS`.**
+
+Backend, `src/test/java`-only (the new `RegimeOutOfSampleValidationTest`)
+plus two Javadoc-only updates in `src/main/java`
+(`RegimeGatedRuleEngine`) and `src/test/java`
+(`RegimeCalibrationTest`) recording the now-closed finding — no production
+logic changes anywhere, no schema migration, no frontend changes.
+`graphify update .` run after implementation, per this repo's CLAUDE.md
+graphify rule.

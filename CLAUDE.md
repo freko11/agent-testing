@@ -48,7 +48,12 @@ F8.1), tries the one non-RSI axis E8-F1-S2/S3 named as untried — a MACD
 histogram-magnitude vote gate — and is also done; like S2/S3 (and unlike
 S4) it shipped no threshold change, see its entry below for the per-symbol
 sweep and why no candidate cleared the ship bar on all three symbols at
-once.
+once. E8-F4-S2, a sixth follow-up (back on F8.4, alongside E8-F4-S1 rather
+than F8.1), closes the one gap E8-F4-S1 explicitly left open — out-of-sample
+validation of `RegimeGatedRuleEngine` (E8-F3-S2), the one E8-F3 mechanism
+E8-F4-S1's own AC never named — and is also done; the engine stays unwired,
+see its entry below for why (SELL side confirms out-of-sample, BUY side
+doesn't, so the uniform-across-all-three-symbols bar isn't met).
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -970,6 +975,40 @@ once.
   `macdMinHistogramMagnitudePct` values, which is always behavior-preserving
   since the default threshold comparison passes for any non-negative
   magnitude. `./mvnw verify`: all green.
+- E8-F4-S2: out-of-sample validation of `RegimeGatedRuleEngine` (E8-F3-S2),
+  the one E8-F3 mechanism `OutOfSampleValidationTest` (E8-F4-S1) explicitly
+  left out of scope ("not named in this story's AC... its calibration was
+  already fixture-mixed rather than a clean value to validate"). New
+  `backtest.RegimeOutOfSampleValidationTest` reuses `FixtureSplits`'
+  existing chronological tune/held-out split verbatim (no new fixture, no
+  new split) — confirmed as genuine held-out evidence for this mechanism
+  specifically, since `RegimeClassifier.ADX_TRENDING_THRESHOLD` (25) was
+  fixed a priori as an industry rule-of-thumb and was never tuned against
+  any of the three fixtures, unlike the RSI thresholds or indicator
+  weights E8-F4-S1 validated. Replayed each symbol's held-out tail
+  (BTCUSDT/DOGEUSDT/SOLUSDT) through `BacktestHarness`'s existing
+  `buyByRegime`/`sellByRegime` split, same as `RegimeCalibrationTest` does
+  for the full fixtures. Result: mixed, same conclusion as E8-F3-S2's
+  original in-sample finding, now confirmed rather than just suspected —
+  engine stays unwired. The SELL side holds up cleanly: trending beats
+  ranging after-cost expectancy on all three symbols at every checkpoint
+  (e.g. max: BTCUSDT +1.003% vs. +0.990%, DOGEUSDT +1.780% vs. -0.973%,
+  SOLUSDT +1.233% vs. +0.469%). The BUY side doesn't: ranging actually
+  *beats* trending on BTCUSDT (max -0.795% vs. -0.077%) and DOGEUSDT (max
+  +1.164% vs. +1.280%), and only SOLUSDT favors trending (max +0.400% vs.
+  -0.898%) — the same fixture-dependent pattern E8-F1-S3/E8-F1-S5 each
+  found on their own axes. Per this story's AC, wiring `applyGate` into
+  `SignalService`/`OrderService` requires ranging to be uniformly and
+  materially worse than trending *across all three symbols* — met for
+  SELL, not for BUY — and since `applyGate` gates both directions
+  identically with no BUY/SELL split, the mechanism as specified doesn't
+  clear that bar. `RegimeGatedRuleEngine` and `RegimeCalibrationTest`'s
+  class Javadocs updated to record this closed finding (previously said
+  "unvalidated out-of-sample, pending a future story"); no `RULE_TABLE_VERSION`
+  bump, no `SignalService`/`OrderService` change. Assertions are
+  structural only (partition invariants), same as every other E8
+  calibration test — the printed report is the evidence under review.
+  `./mvnw verify`: all green.
 
 ## Build / lint / test
 

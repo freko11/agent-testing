@@ -24,8 +24,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * backtest-derived, and this pass doesn't attempt to calibrate it. E8-F4-S1's out-of-sample
  * validation pass covered E8-F1-S1's threshold shift and {@code WeightedVoteRuleEngine}'s
  * weights but explicitly left this story's regime filter out of scope (its calibration was
- * already fixture-mixed rather than a clean value to validate) — still unvalidated
- * out-of-sample, pending a future story.
+ * already fixture-mixed rather than a clean value to validate). E8-F4-S2 closed that gap —
+ * see {@code RegimeOutOfSampleValidationTest} and {@code RegimeGatedRuleEngine}'s class Javadoc
+ * for the held-out result (SELL side confirms, BUY side doesn't, engine stays unwired).
  *
  * <p>Assertions here are structural only, mirroring every other E8 calibration test — the printed
  * report is the evidence under review, not a regression target. Read the printed output (rerun

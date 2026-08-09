@@ -1255,8 +1255,8 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1786253984.8643103,
-    "ast_hash": "816e405040840134e7d5fe53b26eacf6",
+    "mtime": 1786255509.9177961,
+    "ast_hash": "8d76a717804ff7931c1ec01faa7d2672",
     "semantic_hash": ""
   },
   "docker-compose.yml": {
@@ -1305,8 +1305,8 @@
     "semantic_hash": ""
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1786254074.244632,
-    "ast_hash": "a4c6e66dc05e7ccda61baf0673623e26",
+    "mtime": 1786255582.5643017,
+    "ast_hash": "d0c1526510c415687954bb5d21f5c8eb",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/risk/RiskExceptionHandler.java": {
@@ -1545,13 +1545,13 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/signal/RegimeGatedRuleEngine.java": {
-    "mtime": 1786018752.8181274,
-    "ast_hash": "54b2756e6014399b56003da9ea5b21b8",
+    "mtime": 1786254387.2676735,
+    "ast_hash": "adee31215b39535f2d27dffc7af9b6d2",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/RegimeCalibrationTest.java": {
-    "mtime": 1786018776.8231049,
-    "ast_hash": "4bb74d1250803d0301b0b68d59f417a7",
+    "mtime": 1786254396.1297338,
+    "ast_hash": "899bd8190d638e1fc2fff993f93da972",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/RegimeSplitStats.java": {
@@ -1737,6 +1737,11 @@
   "backend/src/test/java/com/autotrade/dashboard/backtest/MacdHistogramMagnitudeCalibrationTest.java": {
     "mtime": 1786253330.2809994,
     "ast_hash": "b2b351ce97741cd39d42b4264d228162",
+    "semantic_hash": ""
+  },
+  "backend/src/test/java/com/autotrade/dashboard/backtest/RegimeOutOfSampleValidationTest.java": {
+    "mtime": 1786254335.2367752,
+    "ast_hash": "4a0ff05f0467c21d346c6242410e0713",
     "semantic_hash": ""
   }
 }
