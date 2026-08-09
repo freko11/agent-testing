@@ -198,7 +198,7 @@ class WeightedVoteRuleEngineTest {
     }
 
     private static MacdResult macd(String histogram) {
-        return new MacdResult(new BigDecimal("1.0"), new BigDecimal("1.0"), new BigDecimal(histogram));
+        return new MacdResult(new BigDecimal("1.0"), new BigDecimal("1.0"), new BigDecimal(histogram), BigDecimal.ZERO);
     }
 
     private static MovingAverageResult ma(MovingAverageRelation relation) {

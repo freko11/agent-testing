@@ -77,7 +77,7 @@ class WatchlistSignalPollerTest {
     private SignalService.SignalComputation computationWithCall(Ticker ticker, SignalCall call) {
         IndicatorSnapshot snapshot = new IndicatorSnapshot(ticker, Instant.parse("2026-07-29T00:00:00Z"),
                 new BigDecimal("100"), Broker.BINANCE);
-        MacdResult macd = new MacdResult(new BigDecimal("1"), new BigDecimal("1"), new BigDecimal("0"));
+        MacdResult macd = new MacdResult(new BigDecimal("1"), new BigDecimal("1"), new BigDecimal("0"), new BigDecimal("0"));
         MovingAverageResult ma = new MovingAverageResult(10, new BigDecimal("100"), 30, new BigDecimal("100"),
                 MovingAverageRelation.SHORT_ABOVE_LONG);
         IndicatorResponse indicators = new IndicatorResponse(TickerSummary.from(ticker), Broker.BINANCE,

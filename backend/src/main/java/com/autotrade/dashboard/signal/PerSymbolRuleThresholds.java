@@ -45,7 +45,8 @@ public final class PerSymbolRuleThresholds {
                     SignalRuleEngine.RSI_OVERSOLD_THRESHOLD,
                     new BigDecimal("70"),
                     SignalRuleEngine.RuleThresholds.DEFAULT.volatilityExtreme(),
-                    SignalRuleEngine.RuleThresholds.DEFAULT.volumeDriedUp()));
+                    SignalRuleEngine.RuleThresholds.DEFAULT.volumeDriedUp(),
+                    SignalRuleEngine.RuleThresholds.DEFAULT.macdMinHistogramMagnitudePct()));
 
     private PerSymbolRuleThresholds() {
     }

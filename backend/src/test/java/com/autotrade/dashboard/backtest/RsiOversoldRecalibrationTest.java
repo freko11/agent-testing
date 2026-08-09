@@ -118,7 +118,7 @@ class RsiOversoldRecalibrationTest {
 
     private RuleThresholds thresholdsFor(BigDecimal oversold) {
         return new RuleThresholds(oversold, SignalRuleEngine.RSI_OVERBOUGHT_THRESHOLD,
-                DEFAULT.volatilityExtreme(), DEFAULT.volumeDriedUp());
+                DEFAULT.volatilityExtreme(), DEFAULT.volumeDriedUp(), DEFAULT.macdMinHistogramMagnitudePct());
     }
 
     private BacktestReport runAndPrint(String symbolLabel, List<Candle> candles, String thresholdLabel, RuleThresholds thresholds) {

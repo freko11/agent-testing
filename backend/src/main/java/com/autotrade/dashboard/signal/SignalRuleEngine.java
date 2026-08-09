@@ -88,6 +88,25 @@ import java.math.BigDecimal;
  * mechanism itself, per this story's confirmed scope, regardless of how many symbols ended up with
  * a non-default override. See {@link PerSymbolRuleThresholds}'s own class Javadoc and
  * docs/CHANGELOG.md's E8-F1-S4 entry for the full per-symbol sweep and figures.
+ *
+ * <p><b>E8-F1-S5 tried a non-RSI axis: {@link #MACD_MIN_HISTOGRAM_MAGNITUDE_PCT}.</b> E8-F1-S2/S3
+ * named MACD/MA-crossover thresholds as the one untried mechanism short of E8-F1-S4's per-symbol
+ * RSI override; this story added a minimum-magnitude gate to the MACD vote (a crossover only
+ * counts as bullish/bearish once {@code |histogram| / price} clears this threshold, rather than
+ * any nonzero crossover counting) and swept it the same independent-per-symbol way E8-F1-S4 did.
+ * {@code MacdHistogramMagnitudeCalibrationTest}'s result: no candidate clears the ship bar. BTCUSDT's
+ * BUY side improves at the MID/MAX checkpoints under a magnitude filter but not at MIN; SOLUSDT's
+ * BUY side improves uniformly around 0.50%-1.00%; but DOGEUSDT's BUY side is best with no filter at
+ * all (magnitude 0) on both its tuning window and its own held-out tail — the same asset-dependent,
+ * no-single-value-wins-everywhere conflict E8-F1-S3 found for {@code rsiOverbought}. Net: nothing
+ * ships; {@link #MACD_MIN_HISTOGRAM_MAGNITUDE_PCT} stays 0 (today's any-nonzero-crossover behavior,
+ * unchanged), {@link #RULE_TABLE_VERSION} stays v3. A secondary, out-of-scope finding worth
+ * flagging: unlike either RSI bound, the magnitude filter improved SELL-side after-cost expectancy
+ * fairly consistently across all three symbols at nonzero candidates — but this story was chartered
+ * to fix the BUY-side mismatch specifically, and a SELL-only gain wasn't independently validated as
+ * robust enough to ship on its own here. MA-crossover thresholding (E8-F1-S5's own named fallback)
+ * remains the one axis still untried. See {@code MacdHistogramMagnitudeCalibrationTest}'s class
+ * Javadoc and docs/CHANGELOG.md's E8-F1-S5 entry for the full per-symbol sweep and figures.
  */
 public final class SignalRuleEngine {
 
@@ -98,6 +117,12 @@ public final class SignalRuleEngine {
     public static final BigDecimal VOLATILITY_EXTREME_THRESHOLD = new BigDecimal("8.0");
     public static final BigDecimal VOLUME_DRIED_UP_THRESHOLD = new BigDecimal("0.20");
 
+    /** E8-F1-S5: minimum {@code MacdResult#histogramPctOfPrice} for a MACD crossover to count as a
+     * bullish/bearish vote, rather than any nonzero histogram counting regardless of size. Default 0
+     * reproduces the pre-existing any-nonzero-crossover behavior exactly (a magnitude &gt;= 0 always
+     * passes) until a calibration ships a nonzero value. */
+    public static final BigDecimal MACD_MIN_HISTOGRAM_MAGNITUDE_PCT = new BigDecimal("0");
+
     /**
      * The four calibration-candidate thresholds bundled together (E8-F1-S1), so
      * {@code ThresholdCalibrationTest} can sweep candidate values through {@link #evaluate}
@@ -106,10 +131,11 @@ public final class SignalRuleEngine {
      * overload.
      */
     public record RuleThresholds(BigDecimal rsiOversold, BigDecimal rsiOverbought, BigDecimal volatilityExtreme,
-                                  BigDecimal volumeDriedUp) {
+                                  BigDecimal volumeDriedUp, BigDecimal macdMinHistogramMagnitudePct) {
 
         public static final RuleThresholds DEFAULT = new RuleThresholds(RSI_OVERSOLD_THRESHOLD,
-                RSI_OVERBOUGHT_THRESHOLD, VOLATILITY_EXTREME_THRESHOLD, VOLUME_DRIED_UP_THRESHOLD);
+                RSI_OVERBOUGHT_THRESHOLD, VOLATILITY_EXTREME_THRESHOLD, VOLUME_DRIED_UP_THRESHOLD,
+                MACD_MIN_HISTOGRAM_MAGNITUDE_PCT);
     }
 
     /**
@@ -134,8 +160,9 @@ public final class SignalRuleEngine {
                                                RuleThresholds thresholds) {
         boolean rsiBullish = rsi.compareTo(thresholds.rsiOversold()) < 0;
         boolean rsiBearish = rsi.compareTo(thresholds.rsiOverbought()) > 0;
-        boolean macdBullish = macd.histogram().signum() > 0;
-        boolean macdBearish = macd.histogram().signum() < 0;
+        boolean macdClearsMagnitude = macd.histogramPctOfPrice().compareTo(thresholds.macdMinHistogramMagnitudePct()) >= 0;
+        boolean macdBullish = macd.histogram().signum() > 0 && macdClearsMagnitude;
+        boolean macdBearish = macd.histogram().signum() < 0 && macdClearsMagnitude;
         boolean maBullish = movingAverage.relation() == MovingAverageRelation.SHORT_ABOVE_LONG;
         boolean maBearish = movingAverage.relation() == MovingAverageRelation.SHORT_BELOW_LONG;
         return new IndicatorVotes(rsiBullish, rsiBearish, macdBullish, macdBearish, maBullish, maBearish);

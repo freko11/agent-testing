@@ -130,7 +130,7 @@ class OrderServiceTest {
 
     private SignalService.SignalComputation buyComputation(Ticker ticker, BigDecimal price) {
         IndicatorSnapshot snapshot = new IndicatorSnapshot(ticker, Instant.parse("2026-07-29T00:00:00Z"), price, Broker.BINANCE);
-        MacdResult macd = new MacdResult(new BigDecimal("2.0"), new BigDecimal("1.0"), new BigDecimal("1.0"));
+        MacdResult macd = new MacdResult(new BigDecimal("2.0"), new BigDecimal("1.0"), new BigDecimal("1.0"), new BigDecimal("0"));
         MovingAverageResult ma = new MovingAverageResult(10, new BigDecimal("111.0"), 30,
                 new BigDecimal("108.0"), MovingAverageRelation.SHORT_ABOVE_LONG);
         IndicatorResponse indicators = new IndicatorResponse(TickerSummary.from(ticker), Broker.BINANCE,
@@ -404,7 +404,7 @@ class OrderServiceTest {
         Ticker ticker = new Ticker("AAPL", AssetType.STOCK, "NASDAQ");
         IndicatorSnapshot snapshot = new IndicatorSnapshot(ticker, Instant.parse("2026-07-29T00:00:00Z"),
                 new BigDecimal("200"), Broker.ALPACA);
-        MacdResult macd = new MacdResult(new BigDecimal("-2.0"), new BigDecimal("-1.0"), new BigDecimal("-1.0"));
+        MacdResult macd = new MacdResult(new BigDecimal("-2.0"), new BigDecimal("-1.0"), new BigDecimal("-1.0"), new BigDecimal("0"));
         MovingAverageResult ma = new MovingAverageResult(10, new BigDecimal("108.0"), 30,
                 new BigDecimal("111.0"), MovingAverageRelation.SHORT_BELOW_LONG);
         IndicatorResponse indicators = new IndicatorResponse(TickerSummary.from(ticker), Broker.ALPACA,

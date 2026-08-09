@@ -41,7 +41,7 @@ class SignalControllerTest {
     @Test
     void signal_registeredTicker_returns200() throws Exception {
         Ticker ticker = new Ticker("AAPL", AssetType.STOCK, "NASDAQ");
-        MacdResult macd = new MacdResult(new BigDecimal("2.0"), new BigDecimal("1.0"), new BigDecimal("1.0"));
+        MacdResult macd = new MacdResult(new BigDecimal("2.0"), new BigDecimal("1.0"), new BigDecimal("1.0"), new BigDecimal("0"));
         MovingAverageResult ma = new MovingAverageResult(10, new BigDecimal("111.0"), 30,
                 new BigDecimal("108.0"), MovingAverageRelation.SHORT_ABOVE_LONG);
         IndicatorResponse indicators = new IndicatorResponse(TickerSummary.from(ticker), Broker.ALPACA,
@@ -65,7 +65,7 @@ class SignalControllerTest {
     @Test
     void signal_holdCall_holdTermIsNull() throws Exception {
         Ticker ticker = new Ticker("AAPL", AssetType.STOCK, "NASDAQ");
-        MacdResult macd = new MacdResult(new BigDecimal("2.0"), new BigDecimal("1.0"), new BigDecimal("0"));
+        MacdResult macd = new MacdResult(new BigDecimal("2.0"), new BigDecimal("1.0"), new BigDecimal("0"), new BigDecimal("0"));
         MovingAverageResult ma = new MovingAverageResult(10, new BigDecimal("111.0"), 30,
                 new BigDecimal("108.0"), MovingAverageRelation.EQUAL);
         IndicatorResponse indicators = new IndicatorResponse(TickerSummary.from(ticker), Broker.ALPACA,

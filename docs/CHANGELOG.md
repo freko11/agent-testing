@@ -5976,3 +5976,134 @@ two stale-literal fixture fixes. No `WeightedVoteRuleEngine`/
 `RegimeGatedRuleEngine`/`OrderService`/`PlaceOrderRequest` changes, no
 schema migration, no frontend changes. `graphify update .` run after
 implementation, per this repo's CLAUDE.md graphify rule.
+
+## E8-F1-S5 — MACD histogram-magnitude calibration axis (no ship)
+
+**Why this story exists.** E8-F1-S2 and E8-F1-S3 closed the E8-F4-S1
+BUY-side out-of-sample mismatch as "understood but not fixable via either
+RSI bound adjusted alone," and named MACD/MA-crossover thresholds as the
+one mechanism left untried short of E8-F1-S4's per-symbol RSI override.
+This story tries MACD only, scoped narrower than E8-F1-S4's per-symbol
+mechanism: the AC adds one new field to the *global* `RuleThresholds`
+record (not a per-symbol override table), so the ship bar is E8-F1-S3's
+all-surfaces bar, not E8-F1-S4's per-symbol bar.
+
+**Design snag found before any code was written, resolved with the user.**
+`MacdCalculator`'s histogram is `EMA(fast) - EMA(slow) - signal` in raw
+price units — dollars for BTCUSDT, fractions of a cent for DOGEUSDT. A
+single global raw-magnitude threshold (as the backlog story literally
+described it) would be meaningless across symbols of very different price
+scales: a value calibrated to matter for BTCUSDT would be astronomically
+large relative to DOGEUSDT's histogram, permanently disabling MACD's
+dissent vote for it. Presented three options to the user (normalize as a
+percentage of price; keep it raw and extend `PerSymbolRuleThresholds` to
+cover it; keep it raw and global, accepting the scale mismatch as a known
+limitation). **Chosen: normalize as a percentage of price**, matching
+`VolatilityCalculator`'s own precedent (`ATR / close * 100`, documented
+there as "so volatility is comparable across tickers of very different
+price scales"). Implemented inside `MacdCalculator.calculate` itself as a
+new `MacdResult.histogramPctOfPrice` field (`histogram.abs() / lastClose *
+100`, scale 4 HALF_UP, matching `VolatilityCalculator`'s own rounding),
+not by threading a `price` parameter through `SignalRuleEngine.evaluate`/
+`computeVotes`, `WeightedVoteRuleEngine.evaluate`, and `BacktestHarness`'s
+`RuleEvaluator` functional interface — the latter would have rippled
+across every call site of every rule engine in the codebase for what this
+story's AC scopes as a MACD-only change; encapsulating the normalization
+inside the indicator layer (where `VolatilityCalculator` already does the
+same thing for ATR) kept the blast radius to `MacdResult`/`MacdCalculator`
+plus every direct construction site of either type (13 total, all test
+fixtures except `MacdCalculator` itself) needing a 4th/5th constructor
+argument.
+
+**New `SignalRuleEngine.RuleThresholds.macdMinHistogramMagnitudePct`**
+(default `0`, via a new `MACD_MIN_HISTOGRAM_MAGNITUDE_PCT` constant).
+`computeVotes`'s MACD read changed from `histogram.signum() > 0`/`< 0` to
+additionally requiring `histogramPctOfPrice >= macdMinHistogramMagnitudePct`
+— with the default `0`, this is unconditionally true for any histogram
+value (a percentage magnitude is always `>= 0`), so production behavior is
+byte-identical to before this story until a nonzero value ships. Every
+existing `MacdResult`/`RuleThresholds` fixture across the codebase (12
+`MacdResult` construction sites, 6 `RuleThresholds` construction sites)
+updated to pass `0` for the new field/argument — always safe under the
+default threshold, verified by `./mvnw test-compile` before writing any
+new test.
+
+**New `backtest.MacdHistogramMagnitudeCalibrationTest`**, `src/test/java`-
+only, mirroring `PerSymbolRsiOverboughtCalibrationTest`'s (E8-F1-S4)
+independent per-symbol tune/held-out design exactly — reusing its
+`FixtureSplits` 70/30 split rather than a new one. Candidate grid `{0.00,
+0.10, 0.25, 0.50, 0.75, 1.00, 1.50, 2.00}` (percent), sized from a
+throwaway probe run of real `histogramPctOfPrice` values across all three
+fixtures' tuning windows (BTCUSDT: min 0.0003%, median 0.5361%, max
+2.6089%; DOGEUSDT: min 0.0017%, median 1.0295%, max 6.0011%; SOLUSDT: min
+0.0008%, median 1.0942%, max 4.8818%) — the probe test was written, run
+once, and deleted before committing, not left in the tree.
+
+**Finding: no candidate clears the all-surfaces ship bar, for a third
+distinct reason across the three E8-F1 recalibration stories.** On the
+held-out tails:
+- **BTCUSDT** (`0.00%` baseline: BUY min -0.225%/mid -0.114%/max -0.227%,
+  n=80/78/78): a magnitude filter helps at MID/MAX but never at MIN — e.g.
+  `0.75%` gives -0.488%/+0.244%/+0.713% (n=28), worse than baseline at MIN
+  despite being clearly better at MID/MAX.
+- **DOGEUSDT** (`0.00%` baseline: BUY +0.205%/+0.945%/+1.226%, n=47): every
+  nonzero candidate makes the BUY side *worse* or at best marginally mixed
+  — e.g. `0.25%` gives +0.203%/+1.109%/+1.432% (n=38), essentially flat at
+  MIN and only slightly better at MID/MAX, with fewer decision points
+  surviving the filter. DOGEUSDT's BUY side is genuinely best with no MACD
+  magnitude filter at all, on both its tuning window and its held-out tail.
+- **SOLUSDT** (`0.00%` baseline: BUY -0.447%/-0.489%/-0.522%, n=69): the
+  only symbol where a filter uniformly helps — `0.50%` through `1.00%` all
+  beat baseline at every checkpoint (e.g. `0.50%`: -0.131%/+0.087%/+0.152%,
+  n=52).
+
+No single value in the swept range beats the `0.00%` baseline at every
+checkpoint on all three symbols' own held-out tails simultaneously — the
+same asset-dependent, no-single-value-wins-everywhere conflict E8-F1-S3
+found for `rsiOverbought`, now confirmed on a structurally different axis
+(a magnitude gate, not a threshold direction). This is the third time this
+backlog thread has hit this exact shape of result (E8-F1-S3, then E8-F1-S4
+per-symbol confirming only 1 of 3, now this), reinforcing that the
+BUY-side mismatch's root cause is more likely genuine per-asset behavioral
+divergence than a single mistunable global parameter on any axis tried so
+far.
+
+**Secondary finding, flagged but not acted on.** Unlike either RSI bound
+(each of which E8-F1-S2/S3 found moves only one side — `rsiOversold` only
+SELL, `rsiOverbought` only BUY), the MACD magnitude filter improved
+SELL-side after-cost expectancy fairly consistently across all three
+symbols at nonzero candidates (e.g. BTCUSDT SELL at `0.75%`:
++1.247%/+2.008%/+2.049% vs. `0.00%` baseline +0.736%/+0.963%/+0.999%;
+DOGEUSDT SELL at `0.75%`: +0.731%/+2.249%/+2.593% vs. baseline
++0.230%/+1.042%/+1.206%; SOLUSDT SELL at `0.75%`: +0.455%/+0.959%/+1.187%
+vs. baseline +0.357%/+0.647%/+0.844%). This story was chartered to fix the
+BUY-side mismatch specifically, per E8-F1-S2/S3's own framing, and a
+SELL-only gain wasn't independently validated as robust enough (own ship
+bar, own held-out confirmation) to ship unilaterally here — left as a
+flagged finding for a future, SELL-side-scoped story rather than shipped
+opportunistically.
+
+**Decision: no ship.** `MACD_MIN_HISTOGRAM_MAGNITUDE_PCT` stays `0`,
+`RULE_TABLE_VERSION` stays v3 — consistent with E8-F1-S2/S3's precedent of
+shipping the investigation's infrastructure (the new field/mechanism)
+without shipping a nonzero value, since the field itself was the AC's
+deliverable regardless of calibration outcome. `SignalRuleEngine`'s class
+Javadoc gained a sixth paragraph recording this closed finding. MA-
+crossover thresholding — E8-F1-S5's own named fallback, only warranted if
+MACD didn't resolve the mismatch — remains the one axis in this backlog
+thread still untried.
+
+**`./mvnw verify`: 486 tests, 0 failures/errors, `BUILD SUCCESS`.**
+
+Backend only: `src/main/java` for `MacdResult`/`MacdCalculator`
+(`histogramPctOfPrice` field/computation), `SignalRuleEngine`
+(`macdMinHistogramMagnitudePct` field + gated `computeVotes` logic +
+Javadoc), and every production `RuleThresholds`/`MacdResult` construction
+site (`PerSymbolRuleThresholds`); `src/test/java` for the new
+`MacdHistogramMagnitudeCalibrationTest` plus every existing test file that
+constructed a `MacdResult`/`RuleThresholds` directly (fixture-only
+updates, zero behavior change). No `OrderService`/`PlaceOrderRequest`/
+`WeightedVoteRuleEngine`/`RegimeGatedRuleEngine`/`PerSymbolRuleThresholds`
+override-map changes beyond the constructor-arity update, no schema
+migration, no frontend changes. `graphify update .` run after
+implementation, per this repo's CLAUDE.md graphify rule.

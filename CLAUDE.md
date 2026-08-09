@@ -43,7 +43,12 @@ F8.1), implements the per-asset-thresholds mechanism E8-F1-S3 flagged as
 untried — a per-symbol `rsiOverbought` override — and is also done; unlike
 S2/S3 it did ship a change (`RULE_TABLE_VERSION` v2→v3, one symbol-specific
 override), see its entry below for the per-symbol sweep and why only one of
-the three calibrated symbols confirmed.
+the three calibrated symbols confirmed. E8-F1-S5, a fifth follow-up (also
+F8.1), tries the one non-RSI axis E8-F1-S2/S3 named as untried — a MACD
+histogram-magnitude vote gate — and is also done; like S2/S3 (and unlike
+S4) it shipped no threshold change, see its entry below for the per-symbol
+sweep and why no candidate cleared the ship bar on all three symbols at
+once.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -919,6 +924,52 @@ the three calibrated symbols confirmed.
   last fixture genuinely untouched by any tuning; after this story none of
   BTCUSDT/DOGEUSDT/SOLUSDT remains clean for a future recalibration story
   to validate against.
+- E8-F1-S5: MACD histogram-magnitude calibration axis, the one non-RSI
+  mechanism E8-F1-S2/S3 named as untried short of E8-F1-S4's per-symbol RSI
+  override. `SignalRuleEngine.RuleThresholds` gains a new
+  `macdMinHistogramMagnitudePct` field (default 0, reproducing today's
+  any-nonzero-crossover MACD vote exactly) — a MACD crossover only counts
+  as bullish/bearish once `|histogram| / price` clears this threshold.
+  Normalized as a percentage of price rather than a raw histogram value:
+  `MacdCalculator`'s histogram is in raw price units (dollars for BTCUSDT,
+  fractions of a cent for DOGEUSDT), so a single global raw-magnitude
+  threshold would be meaningless across symbols of very different price
+  scales — confirmed with the user before implementation, resolved the
+  same way `VolatilityCalculator` already normalizes ATR to a percentage
+  of price for the same cross-symbol-comparability reason. Computed inside
+  `MacdCalculator.calculate` itself as a new 4th `MacdResult` field
+  (`histogramPctOfPrice`) rather than threading a price parameter through
+  every `SignalRuleEngine`/`WeightedVoteRuleEngine` call site — far less
+  invasive than a signature change rippling through `evaluate`/
+  `computeVotes`/`RuleEvaluator` and every caller. New
+  `backtest.MacdHistogramMagnitudeCalibrationTest` swept BTCUSDT/DOGEUSDT/
+  SOLUSDT independently, same per-symbol tune/held-out design E8-F1-S4
+  established (each symbol's own 700-candle tuning window, validated
+  against that same symbol's own 300-candle held-out tail), with a grid
+  (0%, 0.10%-2.00%) sized from a probe run of real `histogramPctOfPrice`
+  values across all three fixtures (medians 0.54%/1.03%/1.09%, maxima up to
+  ~2.6%-6.0%). Result: no ship. BTCUSDT's BUY side improves at the MID/MAX
+  checkpoints under a magnitude filter but not at MIN; SOLUSDT's BUY side
+  improves fairly uniformly around 0.50%-1.00%; but DOGEUSDT's BUY side is
+  best with no filter at all (magnitude 0) on both its tuning window and
+  its own held-out tail — the same asset-dependent, no-single-value-wins-
+  everywhere conflict E8-F1-S3 found for `rsiOverbought`, on a different
+  axis. `RULE_TABLE_VERSION` stays v3, `macdMinHistogramMagnitudePct`
+  stays 0 (unwired at the default, matching S2/S3's precedent of shipping
+  the investigation infrastructure without shipping a value change).
+  Secondary finding, flagged but not acted on since this story was
+  chartered to fix the BUY-side mismatch specifically: the magnitude
+  filter improved SELL-side after-cost expectancy fairly consistently
+  across all three symbols at nonzero candidates, unlike either RSI bound
+  (which each affected only one side). `SignalRuleEngine`'s class Javadoc
+  documents this closed finding. MA-crossover thresholding — E8-F1-S5's
+  own named fallback — remains the one axis still untried. Every direct
+  `MacdResult`/`RuleThresholds` construction site across the codebase
+  (production and test fixtures) updated for the new field; existing test
+  fixtures pass `0` for the new `histogramPctOfPrice`/
+  `macdMinHistogramMagnitudePct` values, which is always behavior-preserving
+  since the default threshold comparison passes for any non-negative
+  magnitude. `./mvnw verify`: all green.
 
 ## Build / lint / test
 

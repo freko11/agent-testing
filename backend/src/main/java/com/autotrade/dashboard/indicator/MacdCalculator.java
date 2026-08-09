@@ -45,11 +45,14 @@ public final class MacdCalculator {
         BigDecimal line = macdLine.get(macdLine.size() - 1);
         BigDecimal signal = signalEma[signalEma.length - 1];
         BigDecimal histogram = line.subtract(signal);
+        BigDecimal lastClose = closes.get(closes.size() - 1);
+        BigDecimal histogramPctOfPrice = histogram.abs().divide(lastClose, MC).multiply(BigDecimal.valueOf(100));
 
         return new MacdResult(
                 line.setScale(8, RoundingMode.HALF_UP),
                 signal.setScale(8, RoundingMode.HALF_UP),
-                histogram.setScale(8, RoundingMode.HALF_UP));
+                histogram.setScale(8, RoundingMode.HALF_UP),
+                histogramPctOfPrice.setScale(4, RoundingMode.HALF_UP));
     }
 
     /** Standard EMA: seeded by the SMA of the first {@code period} values at index {@code period - 1}. */
