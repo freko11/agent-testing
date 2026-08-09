@@ -53,7 +53,10 @@ than F8.1), closes the one gap E8-F4-S1 explicitly left open — out-of-sample
 validation of `RegimeGatedRuleEngine` (E8-F3-S2), the one E8-F3 mechanism
 E8-F4-S1's own AC never named — and is also done; the engine stays unwired,
 see its entry below for why (SELL side confirms out-of-sample, BUY side
-doesn't, so the uniform-across-all-three-symbols bar isn't met).
+doesn't, so the uniform-across-all-three-symbols bar isn't met). E2-F1-S4, a
+backlog story added to E2's F2.1 after E2-F1-S3 explicitly scoped out
+holiday/early-close handling ("out of scope for v1"), is also done — see
+its entry below for the hardcoded 2024-2027 calendar and early-close cutoff.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -70,6 +73,21 @@ doesn't, so the uniform-across-all-three-symbols bar isn't met).
 - E2-F1-S1: Ticker price-history ingestion (Alpaca/Binance)
 - E2-F1-S2: Clear error for an unregistered ticker
 - E2-F1-S3: Market-hours handling
+- E2-F1-S4: Holiday/early-close calendar. `MarketHoursService` gained a
+  hardcoded NYSE/NASDAQ full-holiday and 1:00pm-ET-early-close date set for
+  2024-2027 (a bounded near-term range, not a computed Easter/nth-weekday
+  calendar — same "hardcoded, no library" precedent as the rest of this
+  class), checked in `isRegularMarketOpen()` right alongside the existing
+  weekend/09:30-16:00 check: a full holiday returns the existing
+  `MARKET_CLOSED` state unchanged since E2-F1-S3, and an early-close day
+  swaps the 16:00 close for 13:00 rather than presenting the afternoon as
+  still-live. Dates outside 2024-2027 fall back to the plain calendar with
+  no holiday awareness — a known, flagged limit, not a silent gap; extending
+  the range is a data-only addition when it's next needed. Backend-only
+  (`MarketHoursServiceTest` gained 5 new cases: a fixed federal holiday, the
+  day immediately before it, and the early-close open/at-cutoff/after-cutoff
+  boundary), no frontend change — the frontend only ever reacted to the
+  generic `MARKET_CLOSED` 409, never to calendar specifics itself.
 - E2-F2-S1: RSI, MACD, moving-average crossover
 - E2-F2-S2: Volatility (ATR%) / volume-trend metric
 - E2-F3-S1: Indicators combined into a Buy/Sell/Hold call (rule engine)

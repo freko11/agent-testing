@@ -6199,3 +6199,74 @@ plus two Javadoc-only updates in `src/main/java`
 logic changes anywhere, no schema migration, no frontend changes.
 `graphify update .` run after implementation, per this repo's CLAUDE.md
 graphify rule.
+
+## E2-F1-S4 — holiday/early-close calendar
+
+E2-F1-S4 (NYSE/NASDAQ holiday and early-close calendar) is done, closing the
+gap E2-F1-S3 explicitly scoped out of v1 ("holiday and early-close awareness
+are out of scope — flagged, not silently ignored"). No design gate was run —
+the story's own AC already fully specified the mechanism (a hardcoded
+calendar, checked alongside the existing weekend/hours check), and the
+change is confined to one class already-established as "hardcoded, no
+library" territory by E2-F1-S3 itself, so a `Plan` pass would have had
+nothing to resolve.
+
+`MarketHoursService` gained two new `Set<LocalDate>` constants: `HOLIDAYS`
+(full-day closures) and `EARLY_CLOSE_DAYS` (1:00pm ET close instead of the
+normal 4:00pm), both hardcoded for 2024-2027 — a bounded near-term range,
+not a computed calendar. Deliberately not algorithmic (no Easter calculation
+for Good Friday, no nth-weekday-of-month rule for Presidents Day/MLK/
+Memorial/Labor Day): the AC calls for a "hardcoded... calendar" and
+`MarketHoursService`'s existing regular-hours check is already hardcoded
+rather than rule-derived, so literal dates matched the codebase's own
+established precedent better than introducing date-calculation logic this
+class has never needed before. The holiday set covers the ten standard NYSE
+closures (New Year's Day, MLK Day, Washington's Birthday, Good Friday,
+Memorial Day, Juneteenth, Independence Day, Labor Day, Thanksgiving,
+Christmas) for each of 2024-2027, with the usual Saturday-observed-Friday/
+Sunday-observed-Monday weekend shift applied where a fixed-date holiday
+falls on a weekend (e.g. 2026's Independence Day falls on a Saturday, so
+the actual closure date is Friday 2026-07-03). The early-close set covers
+the day after Thanksgiving every year (always 1:00pm) plus the day before
+Independence Day in years where July 4th itself is a full mid-week trading
+holiday (2024, 2025) — years where July 4th is itself weekend-shifted onto
+a different observed date (2026, 2027) have no separate July early-close
+day, since the adjacent weekday isn't a special NYSE session in those years.
+
+`isRegularMarketOpen()` now checks `HOLIDAYS.contains(date)` right after the
+existing Saturday/Sunday check (same "return false and stop" shape), and
+resolves its close-time comparison against `EARLY_CLOSE` (13:00) instead of
+`MARKET_CLOSE` (16:00) when `EARLY_CLOSE_DAYS.contains(date)` — one ternary,
+no new branch structure. Both checks are pure `LocalDate`/`LocalTime`
+comparisons against the already-computed `ZonedDateTime`, so there's no new
+dependency on `Clock` or any other collaborator beyond what E2-F1-S3 already
+wired. Dates outside the 2024-2027 range fall back to the plain calendar
+with no holiday awareness — a known, explicitly flagged limit (documented in
+the class Javadoc) rather than a silent gap; extending the range is a
+data-only addition (more `LocalDate.of(...)` entries) whenever it's next
+needed, not a structural change.
+
+`MarketHoursServiceTest` gained 5 new cases on top of the existing 9:
+`fixedFederalHoliday_isClosedAllDay` (2025-12-25, a Thursday that would
+otherwise be a normal trading day), `dayBeforeHoliday_isUnaffected` (control
+case, 2025-12-24 is a normal day in this calendar), and three cases pinning
+down the early-close boundary using 2025-11-28 (the day after Thanksgiving):
+one second before 13:00 (open), exactly 13:00 (closed), and 15:00 — which
+would be open under the plain 16:00 close, so this last case is the one that
+actually proves the early-close swap fires rather than being silently
+ignored. All 14 cases in the file pass; full `./mvnw verify`: 493 tests, 0
+failures/errors, `BUILD SUCCESS` (up from 489 after E8-F4-S2, matching the 5
+new cases exactly plus zero regressions elsewhere — nothing else in the
+existing 483+ tests depends on wall-clock "today" landing on a non-calendar
+date, since every existing test already supplies its own fixed `Clock`).
+
+No frontend changes: the frontend only ever reacted to the generic
+`MARKET_CLOSED` 409 (`api.ts`'s `MarketDataErrorCode` union,
+`TickerLookup.tsx`'s error-message map, both from E2-F1-S3), never to
+calendar specifics of its own — confirmed by inspection before starting,
+not assumed. No schema migration, no `SignalService`/`OrderService`/
+`PlaceOrderRequest` changes — this story only ever touches whether a stock
+ticker's price-history/indicator/signal endpoints treat "now" as open or
+closed, the same blast radius E2-F1-S3 already established.
+`graphify update .` run after implementation, per this repo's CLAUDE.md
+graphify rule.

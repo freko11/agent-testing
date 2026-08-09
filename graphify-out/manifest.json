@@ -320,8 +320,8 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/marketdata/MarketHoursService.java": {
-    "mtime": 1785205147.4710963,
-    "ast_hash": "03a48a7f92b9f589154ecf2f8a3a88cf",
+    "mtime": 1786258151.157212,
+    "ast_hash": "a1d7143622275e89c0b4dec412aa8378",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/marketdata/NoPriceDataException.java": {
@@ -920,8 +920,8 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/marketdata/MarketHoursServiceTest.java": {
-    "mtime": 1785205212.522076,
-    "ast_hash": "8b9e2786f6a0ab9b7a8124e914789981",
+    "mtime": 1786258164.036102,
+    "ast_hash": "76974f5bd33b39b405c9fd440f5195d3",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/notification/NotificationControllerTest.java": {
@@ -1255,8 +1255,8 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1786255509.9177961,
-    "ast_hash": "8d76a717804ff7931c1ec01faa7d2672",
+    "mtime": 1786258583.5370004,
+    "ast_hash": "5bc65847d80cf5524e17e8ed2844848b",
     "semantic_hash": ""
   },
   "docker-compose.yml": {
@@ -1305,8 +1305,8 @@
     "semantic_hash": ""
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1786255582.5643017,
-    "ast_hash": "d0c1526510c415687954bb5d21f5c8eb",
+    "mtime": 1786258628.8500152,
+    "ast_hash": "c24ce7c57bbdbff3825def72294d4987",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/risk/RiskExceptionHandler.java": {
