@@ -57,6 +57,15 @@ doesn't, so the uniform-across-all-three-symbols bar isn't met). E2-F1-S4, a
 backlog story added to E2's F2.1 after E2-F1-S3 explicitly scoped out
 holiday/early-close handling ("out of scope for v1"), is also done — see
 its entry below for the hardcoded 2024-2027 calendar and early-close cutoff.
+E8-F3-S3, a seventh E8 follow-up (back on F8.3, alongside E8-F3-S1/S2),
+wires `RegimeGatedRuleEngine`'s regime filter into production for SELL
+calls only — found during a review of open flagged findings across E8,
+picking up the one gap E8-F4-S2 computed but didn't act on: its SELL-side
+out-of-sample evidence was clean and uniform across all three symbols even
+though the combined BUY+SELL engine stayed unwired. Also done; unlike
+E8-F1-S4/S5 it did ship a real behavior change (`RULE_TABLE_VERSION`
+v3→v4) — see its entry below for the crypto-only scoping decision and the
+recomputed `LiveDriftBaseline` SELL figures.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -1027,6 +1036,69 @@ its entry below for the hardcoded 2024-2027 calendar and early-close cutoff.
   structural only (partition invariants), same as every other E8
   calibration test — the printed report is the evidence under review.
   `./mvnw verify`: all green.
+- E8-F3-S3: wires the regime filter into production for SELL calls only,
+  picking up the one gap E8-F4-S2 computed but didn't act on: its SELL-side
+  out-of-sample evidence held cleanly and uniformly across all three
+  symbols even though the combined BUY+SELL mechanism stayed mixed and
+  unwired. `RegimeGatedRuleEngine` gains `applySellGate` (SELL-only —
+  BUY calls and every HOLD-cause rule pass through unchanged regardless of
+  regime) and `sellGateAppliesTo(AssetType)`, scoped to `AssetType.CRYPTO`
+  only — confirmed with the user before implementation, following the same
+  reasoning `PerSymbolRuleThresholds`'s own Javadoc already established for
+  its per-symbol RSI override: zero stock evidence exists anywhere in this
+  backlog, so extrapolating onto stock tickers would repeat that exact
+  mistake. Unlike a per-symbol RSI *value*, ADX/regime is treated as a
+  general trend-persistence mechanism the evidence found works uniformly
+  across every crypto symbol tested, so it's scoped to the whole asset type
+  rather than a fixed per-symbol allow-list. `IndicatorService.
+  IndicatorComputation` gained a third field (`adx`, computed but never
+  persisted to `IndicatorSnapshot` or exposed on `IndicatorResponse` — a
+  `RegimeGatedRuleEngine` concern only, matching how the class already
+  stayed out of `NO_STRONG_SIGNAL`'s rationale string); `SignalService.
+  computeSignalWithProvenance` resolves the ticker's asset type and, for
+  crypto, classifies that `adx` into a `Regime` and calls `applySellGate`
+  on the rule-table match before `HoldTermCalculator`/persistence — the
+  same "resolve something extra, apply it after `evaluate` returns" seam
+  E8-F1-S4's `PerSymbolRuleThresholds` wiring already established.
+  `RULE_TABLE_VERSION` bumps v3→v4: unlike E8-F1-S4/S5's own no-value-change
+  version bumps, this one changes a real resolved `SignalRuleId` for a real
+  input class (a crypto SELL call in a ranging regime). `BacktestHarness.run`
+  gained a 5th-arg `applySellRegimeGate` overload (default `false`,
+  zero behavior change for every existing caller) so `LiveDriftBaselineTest`
+  could replay the gated behavior against the real BTCUSDT/DOGEUSDT
+  fixtures — `LiveDriftBaseline`'s SELL constants were genuinely
+  *recomputed* against that gated run, not just relabeled like E8-F1-S4's
+  v2→v3 bump was: a live v4 SELL audit entry can only ever be a
+  trending-regime call now, so the old ungated-pooled SELL figures no
+  longer describe what a v4 SELL call looks like. Every checkpoint moved up
+  from its v3 value (MIN -0.019962→0.033652, MID 0.159881→0.180769, MAX
+  0.153708→0.222951 after-cost expectancy %) — expected, since dropping the
+  ranging-regime SELL calls removes exactly the calls E8-F4-S2 found
+  perform worse. BUY constants are unaffected and confirmed byte-identical
+  by `LiveDriftBaselineTest`'s own unchanged (ungated) BUY assertions. Found
+  a real, previously-unnoticed hardcoded-version-literal fixture the same
+  way E8-F1-S4's own CHANGELOG entry flagged as a recurring risk:
+  `OrderCsvExporterTest` asserted a literal `"...,v3,..."` CSV row (the
+  version came from the real, dynamically-read `SignalRuleEngine.
+  RULE_TABLE_VERSION`, not a mock) — fixed to `"...,v4,..."`. New tests:
+  `RegimeGatedRuleEngineTest` (pure enum-in/enum-out coverage of
+  `applySellGate`/`sellGateAppliesTo`, mirroring `applyGate`'s existing
+  style), four new `SignalServiceTest` cases exercising the real
+  (unmocked) `SignalService`→`RegimeGatedRuleEngine` path end to end
+  (ranging-regime crypto SELL suppressed, trending-regime crypto SELL
+  control, ranging-regime crypto BUY unaffected, ranging-regime stock SELL
+  unaffected — proving the regime-driven suppression, the BUY passthrough,
+  and the crypto-only scoping are each independently real, not assumed),
+  and a new `BacktestHarnessTest` case pinning the gated overload
+  structurally (gated SELL total = ungated SELL total minus its
+  ranging-regime calls; BUY totals identical either way) on both
+  BTCUSDT/DOGEUSDT fixtures. Docker wasn't available in this session (same
+  recurring blocker prior E8/E6 stories hit), so the four real-`SignalService`
+  `SignalServiceTest` cases above stood in for the `run` skill's normal
+  live-browser verification, same fallback E8-F1-S4 used. `./mvnw verify`:
+  504 tests, 0 failures, up from 493 — no frontend changes (`SignalResponse`'s
+  shape is unchanged — only which `SignalRuleId` a crypto SELL call can
+  resolve to, for inputs that already existed).
 
 ## Build / lint / test
 
@@ -1058,7 +1130,7 @@ its entry below for the hardcoded 2024-2027 calendar and early-close cutoff.
   (pure static, no library — see `docs/CHANGELOG.md` E2-F2-S1 for why), plus
   `IndicatorService`/`IndicatorSnapshot` persistence.
 - `signal` — `SignalRuleEngine` (versioned rule table, currently
-  `RULE_TABLE_VERSION` v3, safety gates + 2-of-3 directional vote →
+  `RULE_TABLE_VERSION` v4, safety gates + 2-of-3 directional vote →
   BUY/SELL/HOLD), `HoldTermCalculator` (versioned day-range table),
   `SignalCallEntry` audit log. `PerSymbolRuleThresholds` (E8-F1-S4) resolves
   `RuleThresholds` per normalized ticker symbol — currently only SOLUSDT has
@@ -1070,12 +1142,13 @@ its entry below for the hardcoded 2024-2027 calendar and early-close cutoff.
   **unwired** weighted-vote scoring layer — reuses
   `SignalRuleEngine.computeVotes`/`IndicatorVotes`, not called by
   `SignalService`/`OrderService`. `IndicatorId` (RSI/MACD/MA_CROSSOVER) keys
-  per-indicator data for both. `RegimeGatedRuleEngine` (E8-F3-S2) is another
-  deliberately **unwired** class — a pure `SignalRuleId x Regime ->
-  SignalRuleId` post-filter (`applyGate`) that suppresses a directional call
-  in a RANGING regime, composable with either `SignalRuleEngine` or
-  `WeightedVoteRuleEngine`'s output; `Regime`/`RegimeClassifier` classify an
-  `AdxCalculator` reading into TRENDING/RANGING.
+  per-indicator data for both. `RegimeGatedRuleEngine` (E8-F3-S2) has both a
+  both-directions `applyGate` (still **unwired** — the combined BUY+SELL
+  mechanism never cleared the wiring bar) and a SELL-only `applySellGate`
+  (E8-F3-S3, **wired** — `SignalService.computeSignalWithProvenance` calls
+  it for crypto tickers, per `sellGateAppliesTo(AssetType)`, after
+  `SignalRuleEngine.evaluate` returns) — `Regime`/`RegimeClassifier`
+  classify an `AdxCalculator` reading into TRENDING/RANGING for both.
 - `backtest` (`src/main/java`, E8-F5-S1) — the TP/SL-aware walk-forward scoring
   primitives promoted out of the test-only `BacktestHarness` so live signal
   monitoring can reuse them: `WalkForwardScorer` (`score`/`findFirstCrossing`/

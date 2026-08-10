@@ -3,7 +3,7 @@ package com.autotrade.dashboard.monitoring;
 import com.autotrade.dashboard.backtest.Checkpoint;
 
 /**
- * The current {@code SignalRuleEngine.RULE_TABLE_VERSION} ("v3")'s already-computed BUY/SELL
+ * The current {@code SignalRuleEngine.RULE_TABLE_VERSION} ("v4")'s already-computed BUY/SELL
  * {@code CheckpointStats.expectancyPctAfterCosts()} at MIN/MID/MAX — the reference point {@link
  * LiveSignalDriftService} compares live {@code OrderAuditEntry} performance against to surface
  * expectancy drift (E8-F5-S1's AC).
@@ -27,32 +27,46 @@ import com.autotrade.dashboard.backtest.Checkpoint;
  * update here, not a re-derivation.</b> That story's only shipped override is SOLUSDT-specific;
  * BTCUSDT/DOGEUSDT — the only two fixtures this baseline is computed from — still resolve to
  * {@code RuleThresholds.DEFAULT} under v3 exactly as they did under v2, so {@code
- * BacktestHarness.run}'s output for them, and therefore every constant below, is byte-identical.
- * {@link LiveDriftBaselineTest} needed no changes and still passes unmodified, confirming this.
- * Only {@link #RULE_TABLE_VERSION} itself moved, so newly-produced (v3) audit entries keep
- * matching this baseline instead of silently losing their comparison.
+ * BacktestHarness.run}'s output for them, and therefore every constant below, was byte-identical.
+ * {@link LiveDriftBaselineTest} needed no changes and passed unmodified, confirming this.
+ *
+ * <p><b>E8-F3-S3's v3&rarr;v4 bump is different: the SELL constants were genuinely recomputed, not
+ * just relabeled.</b> Wiring {@code RegimeGatedRuleEngine.applySellGate} into production means a
+ * live v4 SELL audit entry can only ever be a trending-regime call (a ranging-regime SELL never
+ * fires at all, for crypto tickers) — the pre-existing SELL constants below were derived from
+ * BTCUSDT/DOGEUSDT's <em>ungated</em> {@code overallSell()}, which pools both regimes, so they no
+ * longer describe what a v4 SELL call actually looks like. {@link LiveDriftBaselineTest} now calls
+ * {@code BacktestHarness.run}'s gated overload ({@code applySellRegimeGate=true}) for the SELL
+ * assertions specifically, and the SELL constants below were re-derived from that run's actual
+ * output. BUY is unaffected by the gate (it never touches BUY calls) and the BUY constants below
+ * are confirmed byte-identical to their v3 values by {@link LiveDriftBaselineTest}'s own unchanged
+ * (ungated) BUY assertions.
  *
  * <p>Scoped to only the CURRENT rule table version, per this story's confirmed scope — no
- * baseline exists (or is attempted) for v1 or any future version. If {@code RULE_TABLE_VERSION}
- * is ever bumped again by a change that actually alters BTCUSDT/DOGEUSDT's own behavior (unlike
- * E8-F1-S4's SOLUSDT-only change), these constants become stale for newly-produced audit entries
- * until a future story re-derives them; {@link LiveSignalDriftService} does not attempt to detect
- * or warn about that staleness itself.
+ * baseline exists (or is attempted) for v1/v2/v3 or any future version. If {@code
+ * RULE_TABLE_VERSION} is ever bumped again by a change that alters BTCUSDT/DOGEUSDT's own
+ * resolved behavior, these constants become stale for newly-produced audit entries until a future
+ * story re-derives them; {@link LiveSignalDriftService} does not attempt to detect or warn about
+ * that staleness itself.
  */
 public final class LiveDriftBaseline {
 
     /** The rule table version these baseline figures were computed against — {@code
      * LiveSignalDriftService} only compares audit entries whose own {@code ruleTableVersion}
      * matches this, never a stale cross-version comparison. */
-    public static final String RULE_TABLE_VERSION = "v3";
+    public static final String RULE_TABLE_VERSION = "v4";
 
     public static final double BUY_MIN_EXPECTANCY_PCT_AFTER_COSTS = -0.053166;
     public static final double BUY_MID_EXPECTANCY_PCT_AFTER_COSTS = 0.027064;
     public static final double BUY_MAX_EXPECTANCY_PCT_AFTER_COSTS = 0.033141;
 
-    public static final double SELL_MIN_EXPECTANCY_PCT_AFTER_COSTS = -0.019962;
-    public static final double SELL_MID_EXPECTANCY_PCT_AFTER_COSTS = 0.159881;
-    public static final double SELL_MAX_EXPECTANCY_PCT_AFTER_COSTS = 0.153708;
+    /** E8-F3-S3: recomputed against the gated ({@code applySellRegimeGate=true}) SELL behavior —
+     * see class Javadoc. Every checkpoint moved up from its v3 (ungated) value, since dropping the
+     * ranging-regime SELL calls (E8-F4-S2 found ranging SELL expectancy consistently worse than
+     * trending on both fixtures) removes exactly the weaker-performing calls from the pool. */
+    public static final double SELL_MIN_EXPECTANCY_PCT_AFTER_COSTS = 0.033652;
+    public static final double SELL_MID_EXPECTANCY_PCT_AFTER_COSTS = 0.180769;
+    public static final double SELL_MAX_EXPECTANCY_PCT_AFTER_COSTS = 0.222951;
 
     private LiveDriftBaseline() {
     }

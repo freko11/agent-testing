@@ -3,6 +3,7 @@ package com.autotrade.dashboard.signal;
 import com.autotrade.dashboard.indicator.IndicatorResponse;
 import com.autotrade.dashboard.indicator.IndicatorService;
 import com.autotrade.dashboard.indicator.IndicatorSnapshot;
+import com.autotrade.dashboard.ticker.AssetType;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -36,8 +37,19 @@ public class SignalService {
         String normalizedSymbol = computation.snapshot().getTicker().getSymbol();
         SignalRuleEngine.RuleThresholds thresholds = PerSymbolRuleThresholds.forSymbol(normalizedSymbol);
 
-        SignalRuleId matchedRule = SignalRuleEngine.evaluate(indicators.rsi(), indicators.macd(),
+        SignalRuleId ruleTableMatch = SignalRuleEngine.evaluate(indicators.rsi(), indicators.macd(),
                 indicators.movingAverage(), indicators.volatility(), indicators.volumeTrend(), thresholds);
+
+        // E8-F3-S3: a SELL call is suppressed to NO_STRONG_SIGNAL in a RANGING regime, for crypto
+        // tickers only — see RegimeGatedRuleEngine.sellGateAppliesTo/applySellGate's Javadoc for why
+        // BUY stays unfiltered and why this is scoped to crypto.
+        SignalRuleId matchedRule = ruleTableMatch;
+        AssetType assetType = computation.snapshot().getTicker().getAssetType();
+        if (RegimeGatedRuleEngine.sellGateAppliesTo(assetType)) {
+            Regime regime = RegimeClassifier.classify(computation.adx());
+            matchedRule = RegimeGatedRuleEngine.applySellGate(ruleTableMatch, regime);
+        }
+
         HoldTerm holdTerm = HoldTermCalculator.calculate(matchedRule, indicators.volatility());
 
         SignalCallEntry entry = new SignalCallEntry(computation.snapshot().getTicker(), computation.snapshot(),

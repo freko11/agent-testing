@@ -69,8 +69,13 @@ public class IndicatorService {
         snapshot.setVolumeTrend(indicators.volumeTrend());
         indicatorSnapshotRepository.save(snapshot);
 
+        // E8-F3-S3: ADX, computed but not persisted to IndicatorSnapshot/exposed on IndicatorResponse —
+        // regime classification is a signal.RegimeGatedRuleEngine concern, not a chart/API-surfaced
+        // indicator, matching how the class stayed out of NO_STRONG_SIGNAL's rationale string too.
+        BigDecimal adx = AdxCalculator.calculate(candles, AdxCalculator.DEFAULT_PERIOD);
+
         IndicatorResponse response = IndicatorResponse.from(priceHistory.ticker(), priceHistory.source(), latest, indicators);
-        return new IndicatorComputation(response, snapshot);
+        return new IndicatorComputation(response, snapshot, adx);
     }
 
     /**
@@ -135,6 +140,6 @@ public class IndicatorService {
                                  java.math.BigDecimal volumeTrend) {
     }
 
-    public record IndicatorComputation(IndicatorResponse response, IndicatorSnapshot snapshot) {
+    public record IndicatorComputation(IndicatorResponse response, IndicatorSnapshot snapshot, BigDecimal adx) {
     }
 }

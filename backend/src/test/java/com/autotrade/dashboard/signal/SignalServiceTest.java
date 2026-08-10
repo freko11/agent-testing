@@ -35,6 +35,12 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class SignalServiceTest {
 
+    /** Above {@link RegimeClassifier#ADX_TRENDING_THRESHOLD} (25) — used by every test not
+     * specifically exercising the E8-F3-S3 regime gate, so those tests' outcomes are unaffected by
+     * it regardless of ticker asset type or matched rule. */
+    private static final BigDecimal TRENDING_ADX = new BigDecimal("30");
+    private static final BigDecimal RANGING_ADX = new BigDecimal("20");
+
     @Mock
     private IndicatorService indicatorService;
     @Mock
@@ -61,7 +67,7 @@ class SignalServiceTest {
                 new BigDecimal("2.0"), new BigDecimal("1000000.0000"), new BigDecimal("1.0000"));
 
         when(indicatorService.computeForSignal("AAPL", 200))
-                .thenReturn(new IndicatorService.IndicatorComputation(response, snapshot));
+                .thenReturn(new IndicatorService.IndicatorComputation(response, snapshot, TRENDING_ADX));
 
         SignalResponse signalResponse = service.computeSignal("AAPL", 200);
 
@@ -99,7 +105,7 @@ class SignalServiceTest {
                 new BigDecimal("2.0"), new BigDecimal("1000000.0000"), new BigDecimal("1.0000"));
 
         when(indicatorService.computeForSignal("AAPL", 200))
-                .thenReturn(new IndicatorService.IndicatorComputation(response, snapshot));
+                .thenReturn(new IndicatorService.IndicatorComputation(response, snapshot, TRENDING_ADX));
 
         SignalResponse signalResponse = service.computeSignal("AAPL", 200);
 
@@ -161,7 +167,7 @@ class SignalServiceTest {
                 new BigDecimal("2.0"), new BigDecimal("1000000.0000"), new BigDecimal("1.0000"));
 
         when(indicatorService.computeForSignal("SOLUSDT", 200))
-                .thenReturn(new IndicatorService.IndicatorComputation(response, snapshot));
+                .thenReturn(new IndicatorService.IndicatorComputation(response, snapshot, TRENDING_ADX));
 
         SignalResponse signalResponse = service.computeSignal("SOLUSDT", 200);
 
@@ -187,11 +193,108 @@ class SignalServiceTest {
                 new BigDecimal("2.0"), new BigDecimal("1000000.0000"), new BigDecimal("1.0000"));
 
         when(indicatorService.computeForSignal("AAPL", 200))
-                .thenReturn(new IndicatorService.IndicatorComputation(response, snapshot));
+                .thenReturn(new IndicatorService.IndicatorComputation(response, snapshot, TRENDING_ADX));
 
         SignalResponse signalResponse = service.computeSignal("AAPL", 200);
 
         assertEquals(SignalCall.HOLD, signalResponse.call());
         assertEquals(SignalRuleId.NO_STRONG_SIGNAL.name(), signalResponse.matchedRule());
+    }
+
+    /**
+     * E8-F3-S3: proves {@code RegimeGatedRuleEngine.applySellGate} is actually wired into the real
+     * production call path — {@link SignalService} is not mocked here, only {@code
+     * IndicatorService} is, so this exercises the real {@code sellGateAppliesTo}/{@code
+     * applySellGate} calls, not a mocked stand-in. A crypto ticker's SELL-unanimous indicators, in
+     * a RANGING regime, are suppressed to {@code NO_STRONG_SIGNAL} rather than resolving to
+     * {@code BEARISH_UNANIMOUS} as they would without the gate.
+     */
+    @Test
+    void sellCallInRangingRegime_forCryptoTicker_suppressedToNoStrongSignal() {
+        SignalResponse signalResponse = computeCryptoSignal(bearishIndicators(), RANGING_ADX);
+
+        assertEquals(SignalCall.HOLD, signalResponse.call());
+        assertEquals(SignalRuleId.NO_STRONG_SIGNAL.name(), signalResponse.matchedRule());
+    }
+
+    /** Control for {@link #sellCallInRangingRegime_forCryptoTicker_suppressedToNoStrongSignal} —
+     * identical indicators, a TRENDING regime instead. Confirms the suppression above is really
+     * driven by the regime, not some other difference between the two scenarios. */
+    @Test
+    void sellCallInTrendingRegime_forCryptoTicker_unaffected() {
+        SignalResponse signalResponse = computeCryptoSignal(bearishIndicators(), TRENDING_ADX);
+
+        assertEquals(SignalCall.SELL, signalResponse.call());
+        assertEquals(SignalRuleId.BEARISH_UNANIMOUS.name(), signalResponse.matchedRule());
+    }
+
+    /** E8-F3-S3: proves BUY calls pass through the gate completely unaffected, even in a RANGING
+     * regime — {@code RegimeGatedRuleEngine.applySellGate} only ever touches SELL calls, per
+     * E8-F4-S2's finding that only the SELL side's out-of-sample evidence held uniformly. */
+    @Test
+    void buyCallInRangingRegime_forCryptoTicker_unaffected() {
+        SignalResponse signalResponse = computeCryptoSignal(bullishIndicators(), RANGING_ADX);
+
+        assertEquals(SignalCall.BUY, signalResponse.call());
+        assertEquals(SignalRuleId.BULLISH_UNANIMOUS.name(), signalResponse.matchedRule());
+    }
+
+    /** E8-F3-S3: proves the gate is scoped to crypto tickers only — a stock ticker's SELL call in
+     * a RANGING regime is unaffected, since {@code RegimeGatedRuleEngine.sellGateAppliesTo}
+     * returns {@code false} for {@code AssetType.STOCK} (zero stock evidence exists for this
+     * mechanism). */
+    @Test
+    void sellCallInRangingRegime_forStockTicker_unaffected() {
+        Ticker ticker = new Ticker("AAPL", AssetType.STOCK, "NASDAQ");
+        IndicatorSnapshot snapshot = new IndicatorSnapshot(ticker, Instant.parse("2026-02-09T00:00:00Z"),
+                new BigDecimal("113.10"), Broker.ALPACA);
+        IndicatorResponse response = bearishIndicators().apply(ticker, Broker.ALPACA);
+
+        when(indicatorService.computeForSignal("AAPL", 200))
+                .thenReturn(new IndicatorService.IndicatorComputation(response, snapshot, RANGING_ADX));
+
+        SignalResponse signalResponse = service.computeSignal("AAPL", 200);
+
+        assertEquals(SignalCall.SELL, signalResponse.call());
+        assertEquals(SignalRuleId.BEARISH_UNANIMOUS.name(), signalResponse.matchedRule());
+    }
+
+    private SignalResponse computeCryptoSignal(IndicatorFactory indicators, BigDecimal adx) {
+        Ticker ticker = new Ticker("BTCUSDT", AssetType.CRYPTO, null);
+        IndicatorSnapshot snapshot = new IndicatorSnapshot(ticker, Instant.parse("2026-02-09T00:00:00Z"),
+                new BigDecimal("50000.00"), Broker.BINANCE);
+        IndicatorResponse response = indicators.apply(ticker, Broker.BINANCE);
+
+        when(indicatorService.computeForSignal("BTCUSDT", 200))
+                .thenReturn(new IndicatorService.IndicatorComputation(response, snapshot, adx));
+
+        return service.computeSignal("BTCUSDT", 200);
+    }
+
+    @FunctionalInterface
+    private interface IndicatorFactory {
+        IndicatorResponse apply(Ticker ticker, Broker broker);
+    }
+
+    private static IndicatorFactory bullishIndicators() {
+        return (ticker, broker) -> {
+            MacdResult macd = new MacdResult(new BigDecimal("2.0"), new BigDecimal("1.0"), new BigDecimal("1.0"), new BigDecimal("0"));
+            MovingAverageResult ma = new MovingAverageResult(10, new BigDecimal("111.0"), 30,
+                    new BigDecimal("108.0"), MovingAverageRelation.SHORT_ABOVE_LONG);
+            return new IndicatorResponse(TickerSummary.from(ticker), broker, Instant.parse("2026-02-09T00:00:00Z"),
+                    new BigDecimal("113.10"), new BigDecimal("20"), macd, ma, new BigDecimal("2.0"),
+                    new BigDecimal("1000000.0000"), new BigDecimal("1.0000"));
+        };
+    }
+
+    private static IndicatorFactory bearishIndicators() {
+        return (ticker, broker) -> {
+            MacdResult macd = new MacdResult(new BigDecimal("-2.0"), new BigDecimal("-1.0"), new BigDecimal("-1.0"), new BigDecimal("0"));
+            MovingAverageResult ma = new MovingAverageResult(10, new BigDecimal("108.0"), 30,
+                    new BigDecimal("111.0"), MovingAverageRelation.SHORT_BELOW_LONG);
+            return new IndicatorResponse(TickerSummary.from(ticker), broker, Instant.parse("2026-02-09T00:00:00Z"),
+                    new BigDecimal("113.10"), new BigDecimal("80"), macd, ma, new BigDecimal("2.0"),
+                    new BigDecimal("1000000.0000"), new BigDecimal("1.0000"));
+        };
     }
 }

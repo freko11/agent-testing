@@ -107,10 +107,25 @@ import java.math.BigDecimal;
  * robust enough to ship on its own here. MA-crossover thresholding (E8-F1-S5's own named fallback)
  * remains the one axis still untried. See {@code MacdHistogramMagnitudeCalibrationTest}'s class
  * Javadoc and docs/CHANGELOG.md's E8-F1-S5 entry for the full per-symbol sweep and figures.
+ *
+ * <p><b>E8-F3-S3 wired in {@link RegimeGatedRuleEngine#applySellGate}</b> — not this class's own
+ * threshold axes, but a real, evidence-backed change to what a matched rule can resolve to. E8-F4-S2
+ * found the regime filter's out-of-sample SELL-side evidence clean and uniform across all three
+ * fixtures (trending beats ranging at every checkpoint) while the BUY side stayed mixed, so the
+ * combined {@code applyGate} (both directions) never cleared the ship bar and stayed unwired — but
+ * the SELL-only evidence alone did clear it on its own. {@code SignalService.computeSignalWithProvenance}
+ * now calls {@code RegimeGatedRuleEngine.applySellGate} after this class's own {@link #evaluate},
+ * for crypto tickers only ({@code RegimeGatedRuleEngine.sellGateAppliesTo}) — a SELL call in a
+ * RANGING regime resolves to {@link SignalRuleId#NO_STRONG_SIGNAL} instead of its rule-table match;
+ * BUY calls and every stock ticker are completely unaffected. {@link #RULE_TABLE_VERSION} bumps to
+ * v4 since this changes a real resolved {@link SignalRuleId} for a real input class (a crypto SELL
+ * call in a ranging regime), unlike E8-F1-S4/S5's own no-value-change v3 stay. See {@code
+ * docs/CHANGELOG.md}'s E8-F3-S3 entry for the wiring rationale and the recomputed {@code
+ * LiveDriftBaseline} SELL figures.
  */
 public final class SignalRuleEngine {
 
-    public static final String RULE_TABLE_VERSION = "v3";
+    public static final String RULE_TABLE_VERSION = "v4";
 
     public static final BigDecimal RSI_OVERSOLD_THRESHOLD = new BigDecimal("25");
     public static final BigDecimal RSI_OVERBOUGHT_THRESHOLD = new BigDecimal("75");

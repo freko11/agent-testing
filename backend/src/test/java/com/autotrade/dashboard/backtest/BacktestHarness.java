@@ -15,6 +15,7 @@ import com.autotrade.dashboard.signal.HoldTermCalculator;
 import com.autotrade.dashboard.signal.IndicatorId;
 import com.autotrade.dashboard.signal.Regime;
 import com.autotrade.dashboard.signal.RegimeClassifier;
+import com.autotrade.dashboard.signal.RegimeGatedRuleEngine;
 import com.autotrade.dashboard.signal.SignalCall;
 import com.autotrade.dashboard.signal.SignalRuleEngine;
 import com.autotrade.dashboard.signal.SignalRuleEngine.IndicatorVotes;
@@ -92,6 +93,21 @@ public final class BacktestHarness {
      */
     public static BacktestReport run(String label, List<Candle> candles, RuleEvaluator evaluator,
                                       SignalRuleEngine.RuleThresholds thresholds) {
+        return run(label, candles, evaluator, thresholds, false);
+    }
+
+    /**
+     * E8-F3-S3: as the 4-arg overload above, but when {@code applySellRegimeGate} is {@code true},
+     * every decision point's {@code evaluator}-resolved rule additionally passes through {@link
+     * RegimeGatedRuleEngine#applySellGate} using the regime this loop already computes for its
+     * existing trending/ranging split reporting — the same wiring {@code SignalService} applies in
+     * production, replayed here so {@code LiveDriftBaselineTest} can recompute {@code
+     * LiveDriftBaseline}'s SELL constants against the gated behavior. Defaults to {@code false}
+     * (today's ungated behavior) everywhere it isn't explicitly requested, so every existing caller
+     * is unaffected.
+     */
+    public static BacktestReport run(String label, List<Candle> candles, RuleEvaluator evaluator,
+                                      SignalRuleEngine.RuleThresholds thresholds, boolean applySellRegimeGate) {
         Map<SignalRuleId, Integer> callCounts = new EnumMap<>(SignalRuleId.class);
         Map<SignalRuleId, DirectionalAccumulator> directional = new EnumMap<>(SignalRuleId.class);
         Map<SignalRuleId, HoldGateAccumulator> holdGate = new EnumMap<>(SignalRuleId.class);
@@ -135,7 +151,10 @@ public final class BacktestHarness {
             BigDecimal adx = AdxCalculator.calculate(window, AdxCalculator.DEFAULT_PERIOD);
             Regime regime = RegimeClassifier.classify(adx);
 
-            SignalRuleId matchedRule = evaluator.evaluate(rsi, macd, ma, volatility, volumeTrend);
+            SignalRuleId ruleTableMatch = evaluator.evaluate(rsi, macd, ma, volatility, volumeTrend);
+            SignalRuleId matchedRule = applySellRegimeGate
+                    ? RegimeGatedRuleEngine.applySellGate(ruleTableMatch, regime)
+                    : ruleTableMatch;
             HoldTerm holdTerm = HoldTermCalculator.calculate(matchedRule, volatility);
 
             callCounts.merge(matchedRule, 1, Integer::sum);

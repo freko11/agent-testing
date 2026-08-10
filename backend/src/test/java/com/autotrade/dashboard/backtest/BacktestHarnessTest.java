@@ -3,6 +3,7 @@ package com.autotrade.dashboard.backtest;
 import com.autotrade.dashboard.marketdata.Candle;
 import com.autotrade.dashboard.signal.IndicatorId;
 import com.autotrade.dashboard.signal.SignalCall;
+import com.autotrade.dashboard.signal.SignalRuleEngine;
 import com.autotrade.dashboard.signal.SignalRuleId;
 import org.junit.jupiter.api.Test;
 
@@ -38,6 +39,32 @@ class BacktestHarnessTest {
     @Test
     void backtestDogeUsdt() {
         runAndVerify("DOGEUSDT", "backtest/dogeusdt-daily-history.csv");
+    }
+
+    /**
+     * E8-F3-S3: pins down the new {@code applySellRegimeGate} overload structurally — every
+     * ranging-regime SELL call the ungated run counts (already reported by the existing
+     * {@code sellByRegime} split) is exactly what the gated run reclassifies away from a
+     * directional SELL bucket, and nothing else moves: BUY totals are completely untouched by the
+     * gate, on both fixtures.
+     */
+    @Test
+    void sellRegimeGate_reclassifiesExactlyTheRangingSellCalls_leavesBuyUntouched() {
+        assertGatedSellReclassifiesRangingCallsOnly("BTCUSDT", "backtest/btcusdt-daily-history.csv");
+        assertGatedSellReclassifiesRangingCallsOnly("DOGEUSDT", "backtest/dogeusdt-daily-history.csv");
+    }
+
+    private void assertGatedSellReclassifiesRangingCallsOnly(String label, String fixture) {
+        List<Candle> candles = BacktestCandleCsvLoader.load(fixture);
+        BacktestReport ungated = BacktestHarness.run(label, candles);
+        BacktestReport gated = BacktestHarness.run(label, candles, SignalRuleEngine::evaluate,
+                SignalRuleEngine.RuleThresholds.DEFAULT, true);
+
+        assertEquals(ungated.overallBuy().totalCalls(), gated.overallBuy().totalCalls(),
+                label + ": the SELL-only gate must never change BUY call counts");
+        assertEquals(ungated.overallSell().totalCalls() - ungated.sellByRegime().ranging().totalCalls(),
+                gated.overallSell().totalCalls(),
+                label + ": gated SELL total must equal ungated SELL total minus its ranging-regime calls");
     }
 
     private void runAndVerify(String label, String fixture) {
