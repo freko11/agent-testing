@@ -18,10 +18,17 @@ package com.autotrade.dashboard.backtest;
  * crossing before this checkpoint's day, vs. one that fell back to the fixed-day endpoint scoring
  * this checkpoint used prior to E8-F2-S1. Always sums to {@code scored()}.
  *
+ * <p>{@code avgHoldingDays} (E8-F2-S3) is the average number of days forward a scored call (win,
+ * loss, or wash — a wash still means a position was held and paid funding while open) actually
+ * resolved at, across every {@code scored()} call at this checkpoint — feeds {@link
+ * #expectancyPctAfterCostsAndFunding()}'s duration-scaled funding cost. 0.0 when nothing at this
+ * checkpoint was scored.
+ *
  * <p>Promoted to main scope (E8-F5-S1) — see {@link BacktestConfig}'s class Javadoc.
  */
 public record CheckpointStats(int win, int loss, int wash, int notScored, double avgWinReturnPct,
-                               double avgLossReturnPct, int tpHit, int slHit, int horizonExpired) {
+                               double avgLossReturnPct, int tpHit, int slHit, int horizonExpired,
+                               double avgHoldingDays) {
 
     public int scored() {
         return win + loss + wash;
@@ -51,5 +58,22 @@ public record CheckpointStats(int win, int loss, int wash, int notScored, double
     public double expectancyPctAfterCosts() {
         return scored() == 0 ? 0.0
                 : expectancyPct() - BacktestConfig.TRANSACTION_COST_BPS.doubleValue() / 100.0;
+    }
+
+    /** {@link #expectancyPctAfterCosts()} after also subtracting Binance Futures perpetual
+     * funding-rate carry cost (E8-F2-S3), scaled by this checkpoint's own {@link
+     * #avgHoldingDays()} rather than applied once flat like {@link BacktestConfig
+     * #TRANSACTION_COST_BPS}. Exact, not an approximation: funding cost is linear in days held,
+     * so {@code rate * avg(daysHeld)} over every scored call is algebraically identical to
+     * netting each call's own funding cost before re-averaging — the same identity {@link
+     * #expectancyPctAfterCosts()} already relies on for its flat cost, generalized to a
+     * per-call-varying one. 0.0 when nothing at this checkpoint was scored. */
+    public double expectancyPctAfterCostsAndFunding() {
+        return scored() == 0 ? 0.0 : expectancyPctAfterCosts() - fundingCostPct();
+    }
+
+    private double fundingCostPct() {
+        double periodsPerDay = 24.0 / BacktestConfig.FUNDING_PERIOD_HOURS;
+        return BacktestConfig.FUNDING_RATE_BPS_PER_PERIOD.doubleValue() / 100.0 * periodsPerDay * avgHoldingDays;
     }
 }

@@ -109,8 +109,22 @@ split actively contradicts the crypto-wide pattern the SELL gate already
 relies on (ranging beats trending on AAPL, not trending beats ranging) —
 see its entry below for the full figures. Neither `PerSymbolRuleThresholds`
 nor `RegimeGatedRuleEngine`'s crypto-only scoping changes; no
-`RULE_TABLE_VERSION` bump. Of the 6 backlog stories filed in the same
-batch as this one, only E8-F2-S3 (funding-rate carry cost) remains open.
+`RULE_TABLE_VERSION` bump. E8-F2-S3, the twelfth and last E8 follow-up
+(back on F8.2, alongside E8-F2-S1/S2), closes out the one gap E8-F2-S2
+itself flagged as out of scope — Binance Futures perpetual funding-rate
+carry cost, which (unlike that story's flat `TRANSACTION_COST_BPS`) scales
+with how long a position is actually held. Also done: `BacktestConfig`
+gained `FUNDING_RATE_BPS_PER_PERIOD`/`FUNDING_PERIOD_HOURS`, and
+`CheckpointStats.expectancyPctAfterCostsAndFunding()` scales that cost by
+each checkpoint's own average holding duration (tracked end-to-end from
+`WalkForwardScorer.score`'s crossing/horizon-expired paths through
+`DirectionalScoreResult`/`DirectionalAccumulator`) rather than applying it
+once flat — purely additive to the backtest report, no
+`RULE_TABLE_VERSION` bump, no production wiring change, no change to
+`LiveSignalDriftService`/`LiveDriftBaseline`'s live comparison (confirmed
+scope boundary, same backtest-report-only precedent E8-F2-S1/S2 set). This
+closes out all 6 backlog stories filed in the same batch as E8-F1-S6/S7 and
+E8-F3-S4/S5 — E8's backlog is now fully complete.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -1408,6 +1422,48 @@ batch as this one, only E8-F2-S3 (funding-rate carry cost) remains open.
   the calibration tests' own run — the same no-production-change
   precedent E8-F1-S2/S3/S5/S6/E8-F3-S4 established. `./mvnw verify`: 532
   tests, 0 failures, up from 530.
+- E8-F2-S3: funding-rate carry cost, closing the gap E8-F2-S2 itself
+  flagged as out of scope (funding is paid periodically and scales with
+  hold duration, unlike that story's flat `TRANSACTION_COST_BPS`). New
+  `BacktestConfig.FUNDING_RATE_BPS_PER_PERIOD` (3, i.e. 0.03%/8h — roughly
+  3x Binance's documented 0.01%/period floor rate, the same "overstate
+  cost is the safer failure mode" bias `TRANSACTION_COST_BPS` already
+  uses, confirmed with the user before implementation) and
+  `FUNDING_PERIOD_HOURS` (8, Binance's real funding settlement cadence).
+  `WalkForwardScorer.score`'s two return paths (a TP/SL crossing vs. the
+  horizon-expired fallback) now both record how many days forward they
+  actually resolved at, threaded through a new `DirectionalScoreResult
+  .daysHeld` field into a new per-checkpoint `CheckpointStats
+  .avgHoldingDays` (via `DirectionalAccumulator`, shared by
+  `BacktestHarness` and `monitoring.LiveSignalDriftService`) that feeds a
+  new derived method, `expectancyPctAfterCostsAndFunding()` — exact, not
+  an approximation, since funding cost is linear in days held so
+  `rate * avg(daysHeld)` over every scored call (win/loss/**wash**, since
+  a wash still means a position was held and paid funding) is
+  algebraically identical to netting each call's own cost before
+  re-averaging, the same identity the existing flat-cost method already
+  relies on. `BacktestReport.printCheckpoint` now shows the funding-
+  inclusive figure alongside the existing after-costs one, per the AC's
+  "with and without funding cost side by side" requirement — purely
+  additive at the `CheckpointStats` layer, so it applies everywhere that
+  method is already reused (per-rule, overall BUY/SELL, per-indicator,
+  regime-split rows) with no per-caller changes. Confirmed with the user
+  before implementation, matching E8-F2-S1/S2's own backtest-report-only
+  precedent: `LiveSignalDriftService`/`LiveDriftBaseline`'s live-
+  monitoring comparison keeps comparing on `expectancyPctAfterCosts()`
+  unchanged — wiring the funding-adjusted figure into live drift
+  monitoring is a real, separate future story, not folded in here.
+  Illustrative, not a ship/no-ship finding: on the real fixtures, funding
+  materially widens already-negative branches (BTCUSDT Overall BUY max,
+  3.7-day avg hold: after-costs -0.079% → after-costs+funding -0.412%)
+  and can erode a positive-after-costs branch toward breakeven (DOGEUSDT
+  Overall BUY max, 1.7-day avg hold: +0.197% → +0.042%) — exactly the
+  duration-sensitivity a flat per-trade cost couldn't show. No
+  `RULE_TABLE_VERSION` bump, no `SignalService`/`OrderService`/
+  `PlaceOrderRequest` changes, no schema migration, no frontend changes.
+  `./mvnw verify`: 538 tests, 0 failures, up from 532. This was the last
+  of the 6 backlog stories filed alongside E8-F1-S6/S7 and E8-F3-S4/S5 —
+  E8's backlog is now fully complete.
 
 ## Build / lint / test
 
@@ -1475,9 +1531,12 @@ batch as this one, only E8-F2-S3 (funding-rate carry cost) remains open.
   monitoring can reuse them: `WalkForwardScorer` (`score`/`findFirstCrossing`/
   `percentChange`, taking a `forwardCandles` slice rather than a full candle
   list + index), `DirectionalAccumulator` (top-level now, was a private nested
-  class), `BacktestConfig` (TP/SL %, deadband, transaction-cost bps —
-  diagnostic placeholders), `Checkpoint`, `CheckpointStats`,
-  `DirectionalOutcome`, `DirectionalOutcomeStats`, `DirectionalScoreResult`,
+  class), `BacktestConfig` (TP/SL %, deadband, transaction-cost bps,
+  funding-rate bps/period (E8-F2-S3) — diagnostic placeholders),
+  `Checkpoint`, `CheckpointStats` (`expectancyPctAfterCostsAndFunding()`
+  scales funding cost by `avgHoldingDays`, unlike the flat
+  `expectancyPctAfterCosts()`), `DirectionalOutcome`,
+  `DirectionalOutcomeStats`, `DirectionalScoreResult` (carries `daysHeld`),
   `ExitReason`. `BacktestHarness` itself (and `BacktestReport`,
   `BacktestDecisionPoint`, `HoldGateStats`/`HoldGateOutcome`,
   `RegimeSplitStats`, the per-indicator/`HoldGate` accumulators) stays

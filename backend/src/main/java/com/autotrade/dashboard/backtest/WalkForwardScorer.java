@@ -51,7 +51,7 @@ public final class WalkForwardScorer {
         if (crossing.isPresent() && crossing.get().daysForward() <= daysForward) {
             CrossingEvent event = crossing.get();
             DirectionalOutcome outcome = event.exitReason() == ExitReason.TP_HIT ? DirectionalOutcome.WIN : DirectionalOutcome.LOSS;
-            return Optional.of(new DirectionalScoreResult(outcome, event.signedReturnPct(), event.exitReason()));
+            return Optional.of(new DirectionalScoreResult(outcome, event.signedReturnPct(), event.exitReason(), event.daysForward()));
         }
 
         int forwardIndex = daysForward - 1;
@@ -64,7 +64,7 @@ public final class WalkForwardScorer {
         DirectionalOutcome outcome = signedForCall.abs().compareTo(BacktestConfig.WIN_LOSS_DEADBAND_PCT) <= 0
                 ? DirectionalOutcome.WASH
                 : (signedForCall.signum() > 0 ? DirectionalOutcome.WIN : DirectionalOutcome.LOSS);
-        return Optional.of(new DirectionalScoreResult(outcome, signedForCall, ExitReason.HORIZON_EXPIRED));
+        return Optional.of(new DirectionalScoreResult(outcome, signedForCall, ExitReason.HORIZON_EXPIRED, daysForward));
     }
 
     /**

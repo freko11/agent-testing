@@ -50,10 +50,29 @@ public final class BacktestConfig {
      * not asset-differentiated — the harness carries no asset-type parameter through its call
      * chain today, so a per-symbol figure would be a materially larger change than this constant.
      * Excludes Binance Futures funding-rate carry cost (paid periodically, scales with hold
-     * duration rather than being a flat one-time cost) — out of scope per this story's AC, which
-     * covers spread/slippage/fees only.
+     * duration rather than being a flat one-time cost) — covered separately by {@link
+     * #FUNDING_RATE_BPS_PER_PERIOD} (E8-F2-S3).
      */
     public static final BigDecimal TRANSACTION_COST_BPS = new BigDecimal("20");
+
+    /**
+     * Binance Futures perpetual funding-rate carry cost per funding period (E8-F2-S3), in basis
+     * points — unlike {@link #TRANSACTION_COST_BPS}'s one-time round-trip cost, this is paid
+     * repeatedly for as long as a position stays open, so {@link CheckpointStats
+     * #expectancyPctAfterCostsAndFunding()} scales it by each checkpoint's own average holding
+     * duration rather than applying it once per trade. Binance settles funding 3x/day (every
+     * {@link #FUNDING_PERIOD_HOURS} hours) with a 0.01%/period floor rate that most realized
+     * funding sits near (~0.0094%/period historical average); this constant is a deliberately
+     * uncalibrated placeholder set at roughly 3x that floor/mean — the same "overstate cost is
+     * the safer failure mode for a story about not overstating paper profitability" bias {@link
+     * #TRANSACTION_COST_BPS} already uses, not asset-differentiated for the same reason that
+     * constant isn't (the harness carries no asset-type parameter through this call chain).
+     */
+    public static final BigDecimal FUNDING_RATE_BPS_PER_PERIOD = new BigDecimal("3");
+
+    /** Binance Futures perpetual funding settlement interval (E8-F2-S3) — funding is charged 3x
+     * per day at this cadence, not once per trade. */
+    public static final int FUNDING_PERIOD_HOURS = 8;
 
     private BacktestConfig() {
     }

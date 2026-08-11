@@ -93,6 +93,7 @@ class BacktestHarnessTpSlTest {
         assertTrue(result.isPresent());
         assertEquals(ExitReason.HORIZON_EXPIRED, result.get().exitReason());
         assertEquals(DirectionalOutcome.WIN, result.get().outcome(), "2% close-to-close move exceeds the 0.25% deadband");
+        assertEquals(3, result.get().daysHeld(), "horizon-expired fallback should record the checkpoint's own day count as days held");
     }
 
     @Test
@@ -131,8 +132,10 @@ class BacktestHarnessTpSlTest {
 
         assertTrue(minResult.isPresent());
         assertEquals(ExitReason.HORIZON_EXPIRED, minResult.get().exitReason(), "day-1 checkpoint predates the day-2 crossing");
+        assertEquals(1, minResult.get().daysHeld(), "horizon-expired MIN checkpoint held for its own day count, not the later crossing's");
         assertTrue(maxResult.isPresent());
         assertEquals(ExitReason.TP_HIT, maxResult.get().exitReason(), "day-2 checkpoint is at the crossing day itself");
+        assertEquals(2, maxResult.get().daysHeld(), "TP-hit MAX checkpoint held for the crossing's own day count");
     }
 
     /** Every fixture in this test decision-indexes at 0, so the forward slice is always

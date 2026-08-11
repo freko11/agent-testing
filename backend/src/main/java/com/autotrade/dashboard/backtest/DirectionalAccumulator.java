@@ -23,6 +23,7 @@ public final class DirectionalAccumulator {
     private final Map<Checkpoint, Integer> notScoredCounts = new EnumMap<>(Checkpoint.class);
     private final Map<Checkpoint, BigDecimal> winReturnSums = new EnumMap<>(Checkpoint.class);
     private final Map<Checkpoint, BigDecimal> lossReturnSums = new EnumMap<>(Checkpoint.class);
+    private final Map<Checkpoint, Long> holdingDaysSums = new EnumMap<>(Checkpoint.class);
 
     public DirectionalAccumulator() {
         for (Checkpoint checkpoint : Checkpoint.values()) {
@@ -39,6 +40,7 @@ public final class DirectionalAccumulator {
             notScoredCounts.put(checkpoint, 0);
             winReturnSums.put(checkpoint, BigDecimal.ZERO);
             lossReturnSums.put(checkpoint, BigDecimal.ZERO);
+            holdingDaysSums.put(checkpoint, 0L);
         }
     }
 
@@ -50,6 +52,7 @@ public final class DirectionalAccumulator {
         DirectionalScoreResult scoreResult = result.get();
         outcomeCounts.get(checkpoint).merge(scoreResult.outcome(), 1, Integer::sum);
         exitReasonCounts.get(checkpoint).merge(scoreResult.exitReason(), 1, Integer::sum);
+        holdingDaysSums.merge(checkpoint, (long) scoreResult.daysHeld(), Long::sum);
         if (scoreResult.outcome() == DirectionalOutcome.WIN) {
             winReturnSums.merge(checkpoint, scoreResult.signedReturnPct(), BigDecimal::add);
         } else if (scoreResult.outcome() == DirectionalOutcome.LOSS) {
@@ -66,11 +69,14 @@ public final class DirectionalAccumulator {
         EnumMap<DirectionalOutcome, Integer> counts = outcomeCounts.get(checkpoint);
         int win = counts.get(DirectionalOutcome.WIN);
         int loss = counts.get(DirectionalOutcome.LOSS);
+        int wash = counts.get(DirectionalOutcome.WASH);
+        int scored = win + loss + wash;
         double avgWin = win == 0 ? 0.0 : winReturnSums.get(checkpoint).doubleValue() / win;
         double avgLoss = loss == 0 ? 0.0 : lossReturnSums.get(checkpoint).doubleValue() / loss;
+        double avgHoldingDays = scored == 0 ? 0.0 : holdingDaysSums.get(checkpoint) / (double) scored;
         EnumMap<ExitReason, Integer> reasons = exitReasonCounts.get(checkpoint);
-        return new CheckpointStats(win, loss, counts.get(DirectionalOutcome.WASH), notScoredCounts.get(checkpoint),
+        return new CheckpointStats(win, loss, wash, notScoredCounts.get(checkpoint),
                 avgWin, avgLoss, reasons.get(ExitReason.TP_HIT), reasons.get(ExitReason.SL_HIT),
-                reasons.get(ExitReason.HORIZON_EXPIRED));
+                reasons.get(ExitReason.HORIZON_EXPIRED), avgHoldingDays);
     }
 }

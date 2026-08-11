@@ -7255,3 +7255,160 @@ changed in either class).
 Of the 6 backlog stories filed alongside this one (E2-F1-S5, E8-F1-S6,
 E8-F1-S7, E8-F2-S3, E8-F3-S4, E8-F3-S5), only **E8-F2-S3** (funding-rate
 carry cost) remains open.
+
+## E8-F2-S3 — funding-rate carry cost in the backtest's transaction-cost model
+
+**Story**: `BacktestConfig.TRANSACTION_COST_BPS` (E8-F2-S2) covers spread/
+slippage/fees but explicitly excluded Binance Futures perpetual funding —
+that story's own Javadoc named it out of scope since funding is paid
+periodically and scales with hold duration, unlike a flat one-time cost.
+This story closes that gap: a real cost a live leveraged position pays
+that the after-cost expectancy figures didn't reflect. Last of the 6
+backlog stories filed alongside E8-F1-S6/S7 and E8-F3-S4/S5 — E8's backlog
+is now fully closed out.
+
+### Design gate
+
+Scoped via the `Plan` agent before implementation, since this touches a
+record (`CheckpointStats`) shared by three call sites (`BacktestHarness`'s
+own accumulator plus two duplicated combine-formula reimplementations —
+`BacktestHarness.combineCheckpoint` and `LiveDriftBaselineTest`'s private
+`combine()`) and would break compilation everywhere if the shape changed
+carelessly. The design gate traced the exact mechanism: `WalkForwardScorer
+.score`'s two return paths each already know how many days forward a
+decision point actually resolved at — `CrossingEvent.daysForward()` on a
+TP/SL crossing, the `daysForward` parameter itself on the horizon-expired
+fallback — but neither reached `DirectionalScoreResult`, so nothing
+downstream could scale a cost by real holding duration.
+
+Two judgment calls, confirmed with the user before implementation (same
+"placeholder value, confirm before shipping" treatment `TAKE_PROFIT_PCT`/
+`TRANSACTION_COST_BPS` each got):
+
+1. **Funding-rate placeholder value.** Binance settles funding 3x/day
+   (every 8h) with a documented 0.01%/period floor rate that most realized
+   funding sits near (~0.0094%/period historical average). Recommended
+   and confirmed: `FUNDING_RATE_BPS_PER_PERIOD = 3` (0.03%/8h) — roughly
+   3x the floor/historical mean, the same "overstate cost is the safer
+   failure mode" bias `TRANSACTION_COST_BPS` already uses (that constant's
+   own ~10bps fee + ~10bps slippage-buffer precedent), not the raw
+   historical mean itself.
+2. **Scope boundary.** Confirmed backtest-report-only, matching every
+   prior E8-F2 story's precedent (E8-F2-S1/S2 were diagnostic-only too):
+   `LiveSignalDriftService`/`LiveDriftBaseline`'s live-monitoring
+   comparison keeps comparing on `expectancyPctAfterCosts()`, unchanged.
+   Wiring funding-adjusted expectancy into the live drift monitor is a
+   real, separate future story, not folded in here.
+
+### Implementation
+
+**`BacktestConfig`** gained `FUNDING_RATE_BPS_PER_PERIOD` (`3`, i.e.
+0.03%/8h) and `FUNDING_PERIOD_HOURS` (`8`) — `TRANSACTION_COST_BPS`'s
+Javadoc updated to point at the new constant instead of saying funding is
+out of scope.
+
+**`DirectionalScoreResult`** gained a trailing `int daysHeld` field,
+populated by `WalkForwardScorer.score` at both existing construction
+sites: `event.daysForward()` on the crossing branch, the `daysForward`
+parameter on the horizon-expired fallback. No signature change to
+`score`/`findFirstCrossing` themselves.
+
+**`CheckpointStats`** gained a trailing `double avgHoldingDays` field and
+a new derived method, `expectancyPctAfterCostsAndFunding()`:
+
+```java
+public double expectancyPctAfterCostsAndFunding() {
+    return scored() == 0 ? 0.0 : expectancyPctAfterCosts() - fundingCostPct();
+}
+private double fundingCostPct() {
+    double periodsPerDay = 24.0 / BacktestConfig.FUNDING_PERIOD_HOURS;
+    return BacktestConfig.FUNDING_RATE_BPS_PER_PERIOD.doubleValue() / 100.0 * periodsPerDay * avgHoldingDays;
+}
+```
+
+This is exact, not an approximation: because funding cost is linear in
+`daysHeld`, `rate * avg(daysHeld)` over every scored call (win + loss +
+**wash** — a wash still means a position was held and paid funding while
+open) is algebraically identical to netting each call's own funding cost
+before re-averaging, generalizing the same identity
+`expectancyPctAfterCosts()` already relies on for its own flat cost.
+
+**`DirectionalAccumulator`** (main scope, shared by `BacktestHarness` and
+`LiveSignalDriftService`) gained a per-checkpoint holding-days sum, merged
+in `record()` and averaged over `scored()` count in `statsFor()`.
+**`BacktestHarness`**'s two other `CheckpointStats`-building sites needed
+the same treatment: `combineCheckpoint` (package-private, also reused by
+`IndicatorExpectancyCalibrationTest`/`LiveDriftBaselineTest`'s own
+reimplementation) now call-count-weights `avgHoldingDays` the same way it
+already weights `avgWinReturnPct`/`avgLossReturnPct`; the private
+`IndicatorAccumulator` nested class gained the same `holdingDaysSum`
+tally as `DirectionalAccumulator`. `LiveDriftBaselineTest`'s own
+duplicated `combine()` got the identical formula so it keeps compiling —
+per the confirmed scope boundary, it exercises no new assertions on the
+field, only `expectancyPctAfterCosts()` as before.
+
+**`BacktestReport.printCheckpoint()`** gained an `avg hold` column and a
+third expectancy figure, `(after costs+funding ...)`, alongside the
+existing `(after costs ...)` — per the AC's "with and without funding
+cost side by side" requirement, consistent with E8-F2-S2's own
+presentation. Purely additive at the `CheckpointStats` layer, so it
+automatically applies everywhere `printCheckpoint` is already reused
+(per-rule, overall BUY/SELL, per-indicator, and regime-split rows) with
+no per-caller changes.
+
+### Illustrative figures (not a ship/no-ship story — purely additive)
+
+From the real checked-in fixtures (`BacktestHarnessTest`'s printed
+report), funding materially changes the picture on branches with longer
+average holds, exactly the case a flat per-trade cost couldn't capture:
+
+```
+BTCUSDT Overall BUY  max: avg hold 3.7d | expectancy +0.121% (after costs -0.079%) (after costs+funding -0.412%)
+DOGEUSDT Overall BUY max: avg hold 1.7d | expectancy +0.397% (after costs +0.197%) (after costs+funding +0.042%)
+DOGEUSDT Overall SELL mid: avg hold 1.8d | expectancy +0.906% (after costs +0.706%) (after costs+funding +0.542%)
+```
+
+BTCUSDT's BUY-max branch pays an extra ~0.33 percentage points of funding
+on top of its already-negative after-costs figure (3.7-day average hold ×
+3 periods/day × 0.03%); DOGEUSDT's BUY-max branch, positive after flat
+costs, nearly erodes to breakeven once funding is added. This is
+consistent with the mechanism, not a finding under review — no threshold,
+gate, or `RULE_TABLE_VERSION` changes as a result.
+
+### Test coverage
+
+`CheckpointStatsTest` gained 4 new tests for
+`expectancyPctAfterCostsAndFunding()` (exact arithmetic off hand-picked
+constants, zero-when-nothing-scored, never-exceeds-after-costs, and a
+same-win/loss-different-`avgHoldingDays` test proving the cost genuinely
+scales with duration rather than being flat — the key differentiator from
+`TRANSACTION_COST_BPS`); its 5 pre-existing tests updated with a trailing
+`0.0` `avgHoldingDays` arg, unaffected by this story's addition.
+`BacktestHarnessTpSlTest` gained `daysHeld()` pin assertions on the
+horizon-expired-fallback test (expects `3`, the `daysForward` param) and
+the early-crossing per-checkpoint-bound test's MIN/MAX results (expects
+`1` and `2` respectively) — the exact distinction this story's duration
+tracking depends on. `BacktestHarnessTest`'s shared
+`assertCheckpointStatsAreSane` helper gained `avgHoldingDays >= 0` and
+`expectancyPctAfterCostsAndFunding() <= expectancyPctAfterCosts()`
+invariants, reused automatically across directional, per-indicator, and
+regime-split stats. `LiveDriftBaselineTest` needed only its `combine()`
+signature updated to compile, no new assertions, per the confirmed scope
+boundary.
+
+### Scope / no-op confirmation
+
+Purely additive: no `RULE_TABLE_VERSION` bump, no `SignalService`/
+`OrderService`/`PlaceOrderRequest` changes, no schema migration, no
+frontend changes, no change to `LiveSignalDriftService`/
+`LiveDriftBaseline`'s live-monitoring comparison (confirmed scope
+boundary above). Since this story shipped no production behavior change
+beyond a new backtest-report figure, no live-browser/`SignalServiceTest`
+end-to-end verification was needed beyond the existing test suite's own
+run — the same no-production-change precedent E8-F1-S2/S3/S5/S6/E8-F3-S4/
+E8-F1-S7 established.
+
+**`./mvnw verify`: 538 tests, 0 failures/errors, `BUILD SUCCESS`** (up from
+532 after E8-F1-S7). This closes out all 6 backlog stories filed in the
+same batch (E2-F1-S5, E8-F1-S6, E8-F1-S7, E8-F2-S3, E8-F3-S4, E8-F3-S5) —
+E8's backlog is now fully complete.

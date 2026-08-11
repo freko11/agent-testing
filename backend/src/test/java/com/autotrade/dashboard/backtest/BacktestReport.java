@@ -48,8 +48,9 @@ public record BacktestReport(String label, int totalCandles, int totalDecisionPo
         }
 
         out.println();
-        out.printf("BUY/SELL win rate + expectancy (avg win/loss size, deadband +/-%s%%, round-trip cost %sbps) at min/mid/max hold-term day:%n",
-                BacktestConfig.WIN_LOSS_DEADBAND_PCT, BacktestConfig.TRANSACTION_COST_BPS);
+        out.printf("BUY/SELL win rate + expectancy (avg win/loss size, deadband +/-%s%%, round-trip cost %sbps, funding %sbps/%dh) at min/mid/max hold-term day:%n",
+                BacktestConfig.WIN_LOSS_DEADBAND_PCT, BacktestConfig.TRANSACTION_COST_BPS,
+                BacktestConfig.FUNDING_RATE_BPS_PER_PERIOD, BacktestConfig.FUNDING_PERIOD_HOURS);
         for (SignalRuleId ruleId : DIRECTIONAL_RULES) {
             printDirectional(out, ruleId.name(), directionalStats.get(ruleId));
         }
@@ -97,9 +98,10 @@ public record BacktestReport(String label, int totalCandles, int totalDecisionPo
      * weights are calibrated from. Reuses {@link #printCheckpoint}'s single-line format. */
     private void printIndicatorExpectancy(PrintStream out) {
         out.println();
-        out.printf("Per-indicator expectancy (own directional read, %d-day reference horizon, deadband +/-%s%%, round-trip cost %sbps):%n",
+        out.printf("Per-indicator expectancy (own directional read, %d-day reference horizon, deadband +/-%s%%, round-trip cost %sbps, funding %sbps/%dh):%n",
                 BacktestConfig.HOLD_REFERENCE_HORIZON_DAYS, BacktestConfig.WIN_LOSS_DEADBAND_PCT,
-                BacktestConfig.TRANSACTION_COST_BPS);
+                BacktestConfig.TRANSACTION_COST_BPS, BacktestConfig.FUNDING_RATE_BPS_PER_PERIOD,
+                BacktestConfig.FUNDING_PERIOD_HOURS);
         for (IndicatorId indicatorId : IndicatorId.values()) {
             CheckpointStats stats = indicatorStats.get(indicatorId);
             out.printf("  %-22s (n=%d)%n", indicatorId, stats.win() + stats.loss() + stats.wash() + stats.notScored());
@@ -119,9 +121,11 @@ public record BacktestReport(String label, int totalCandles, int totalDecisionPo
     }
 
     private void printCheckpoint(PrintStream out, String checkpointLabel, CheckpointStats cp) {
-        out.printf("    %-3s %5.1f%% win (%d scored) | avg win %+6.2f%% | avg loss %+6.2f%% | expectancy %+6.3f%% (after costs %+6.3f%%)"
+        out.printf("    %-3s %5.1f%% win (%d scored) | avg win %+6.2f%% | avg loss %+6.2f%% | avg hold %4.1fd"
+                        + " | expectancy %+6.3f%% (after costs %+6.3f%%) (after costs+funding %+6.3f%%)"
                         + " | tpHit=%d slHit=%d horizonExpired=%d%n",
                 checkpointLabel, cp.winRate(), cp.scored(), cp.avgWinReturnPct(), cp.avgLossReturnPct(),
-                cp.expectancyPct(), cp.expectancyPctAfterCosts(), cp.tpHit(), cp.slHit(), cp.horizonExpired());
+                cp.avgHoldingDays(), cp.expectancyPct(), cp.expectancyPctAfterCosts(),
+                cp.expectancyPctAfterCostsAndFunding(), cp.tpHit(), cp.slHit(), cp.horizonExpired());
     }
 }

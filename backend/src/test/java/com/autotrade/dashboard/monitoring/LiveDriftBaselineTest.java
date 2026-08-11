@@ -94,9 +94,12 @@ class LiveDriftBaselineTest {
     private CheckpointStats combine(CheckpointStats a, CheckpointStats b) {
         int win = a.win() + b.win();
         int loss = a.loss() + b.loss();
+        int scored = win + loss + a.wash() + b.wash();
         double avgWin = win == 0 ? 0.0 : (a.avgWinReturnPct() * a.win() + b.avgWinReturnPct() * b.win()) / win;
         double avgLoss = loss == 0 ? 0.0 : (a.avgLossReturnPct() * a.loss() + b.avgLossReturnPct() * b.loss()) / loss;
+        double avgHoldingDays = scored == 0 ? 0.0
+                : (a.avgHoldingDays() * a.scored() + b.avgHoldingDays() * b.scored()) / scored;
         return new CheckpointStats(win, loss, a.wash() + b.wash(), a.notScored() + b.notScored(), avgWin, avgLoss,
-                a.tpHit() + b.tpHit(), a.slHit() + b.slHit(), a.horizonExpired() + b.horizonExpired());
+                a.tpHit() + b.tpHit(), a.slHit() + b.slHit(), a.horizonExpired() + b.horizonExpired(), avgHoldingDays);
     }
 }

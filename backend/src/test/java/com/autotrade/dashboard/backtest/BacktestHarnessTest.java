@@ -185,5 +185,8 @@ class BacktestHarnessTest {
                 label + ": tpHit+slHit+horizonExpired must partition scored()");
         assertTrue(cp.expectancyPctAfterCosts() <= cp.expectancyPct(),
                 label + ": after-cost expectancy must never exceed raw expectancy");
+        assertTrue(cp.avgHoldingDays() >= 0, label + ": avg holding days must never be negative");
+        assertTrue(cp.expectancyPctAfterCostsAndFunding() <= cp.expectancyPctAfterCosts(),
+                label + ": after-costs-and-funding expectancy must never exceed after-costs expectancy");
     }
 }

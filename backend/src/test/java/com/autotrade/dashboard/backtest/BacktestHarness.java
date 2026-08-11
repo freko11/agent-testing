@@ -360,10 +360,13 @@ public final class BacktestHarness {
     static CheckpointStats combineCheckpoint(CheckpointStats a, CheckpointStats b) {
         int win = a.win() + b.win();
         int loss = a.loss() + b.loss();
+        int scored = win + loss + a.wash() + b.wash();
         double avgWin = win == 0 ? 0.0 : (a.avgWinReturnPct() * a.win() + b.avgWinReturnPct() * b.win()) / win;
         double avgLoss = loss == 0 ? 0.0 : (a.avgLossReturnPct() * a.loss() + b.avgLossReturnPct() * b.loss()) / loss;
+        double avgHoldingDays = scored == 0 ? 0.0
+                : (a.avgHoldingDays() * a.scored() + b.avgHoldingDays() * b.scored()) / scored;
         return new CheckpointStats(win, loss, a.wash() + b.wash(), a.notScored() + b.notScored(), avgWin, avgLoss,
-                a.tpHit() + b.tpHit(), a.slHit() + b.slHit(), a.horizonExpired() + b.horizonExpired());
+                a.tpHit() + b.tpHit(), a.slHit() + b.slHit(), a.horizonExpired() + b.horizonExpired(), avgHoldingDays);
     }
 
     /**
@@ -382,6 +385,7 @@ public final class BacktestHarness {
         int notScored;
         BigDecimal winReturnSum = BigDecimal.ZERO;
         BigDecimal lossReturnSum = BigDecimal.ZERO;
+        long holdingDaysSum;
 
         IndicatorAccumulator() {
             for (DirectionalOutcome outcome : DirectionalOutcome.values()) {
@@ -400,6 +404,7 @@ public final class BacktestHarness {
             DirectionalScoreResult scoreResult = result.get();
             outcomeCounts.merge(scoreResult.outcome(), 1, Integer::sum);
             exitReasonCounts.merge(scoreResult.exitReason(), 1, Integer::sum);
+            holdingDaysSum += scoreResult.daysHeld();
             if (scoreResult.outcome() == DirectionalOutcome.WIN) {
                 winReturnSum = winReturnSum.add(scoreResult.signedReturnPct());
             } else if (scoreResult.outcome() == DirectionalOutcome.LOSS) {
@@ -410,11 +415,14 @@ public final class BacktestHarness {
         CheckpointStats toStats() {
             int win = outcomeCounts.get(DirectionalOutcome.WIN);
             int loss = outcomeCounts.get(DirectionalOutcome.LOSS);
+            int wash = outcomeCounts.get(DirectionalOutcome.WASH);
+            int scored = win + loss + wash;
             double avgWin = win == 0 ? 0.0 : winReturnSum.doubleValue() / win;
             double avgLoss = loss == 0 ? 0.0 : lossReturnSum.doubleValue() / loss;
-            return new CheckpointStats(win, loss, outcomeCounts.get(DirectionalOutcome.WASH), notScored, avgWin,
+            double avgHoldingDays = scored == 0 ? 0.0 : holdingDaysSum / (double) scored;
+            return new CheckpointStats(win, loss, wash, notScored, avgWin,
                     avgLoss, exitReasonCounts.get(ExitReason.TP_HIT), exitReasonCounts.get(ExitReason.SL_HIT),
-                    exitReasonCounts.get(ExitReason.HORIZON_EXPIRED));
+                    exitReasonCounts.get(ExitReason.HORIZON_EXPIRED), avgHoldingDays);
         }
     }
 
