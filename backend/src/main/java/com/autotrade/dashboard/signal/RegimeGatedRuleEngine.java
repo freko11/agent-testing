@@ -91,6 +91,16 @@ public final class RegimeGatedRuleEngine {
      * ADX/regime is a general trend-persistence mechanism that the evidence found works uniformly
      * across every crypto symbol tested, so it generalizes to other crypto symbols the same way the
      * rest of the rule table already does.
+     *
+     * <p><b>E8-F1-S7 checked this restriction against AAPL, this repo's first stock symbol — the
+     * crypto-only scope stays, and the evidence now actively argues against widening it.</b> On
+     * AAPL's held-out tail, SELL-side ranging expectancy beats trending at every checkpoint
+     * (e.g. max: ranging +1.518% after-cost vs. trending +0.800%, on a larger n too — 41 vs. 8) —
+     * the opposite of the uniform trending-beats-ranging pattern all three crypto symbols showed.
+     * One stock symbol contradicting the pattern isn't proof stocks always invert it, but it is
+     * exactly the kind of asset-class divergence this restriction exists to guard against, and it
+     * rules out ever widening {@code sellGateAppliesTo} to {@link AssetType#STOCK} off this
+     * evidence. See docs/CHANGELOG.md's E8-F1-S7 entry for the full figures.
      */
     public static boolean sellGateAppliesTo(AssetType assetType) {
         return assetType == AssetType.CRYPTO;

@@ -37,6 +37,18 @@ import java.util.Map;
  * genuine, non-degenerate confirmation: it beats the current global default (75) at every one of
  * MIN/MID/MAX on SOLUSDT's own held-out tail, with a comparable scored {@code n} (67 vs. 69). See
  * docs/CHANGELOG.md's E8-F1-S4 entry for the full per-symbol sweep and figures.
+ *
+ * <p><b>E8-F1-S7 evaluated AAPL, this repo's first stock symbol, against the same tune-then-
+ * validate methodology — no ship.</b> AAPL's tuning-window winner (76, beating the 75 default at
+ * every checkpoint with a larger n) fails held-out confirmation, but unlike BTCUSDT/DOGEUSDT's
+ * degenerate ("byte-identical candidates") failure mode, AAPL's held-out tail genuinely disagrees
+ * with its own tuning window: candidate 68 — the *worst* tuning-window candidate — is the clear
+ * held-out winner (e.g. max checkpoint +1.009% after-cost expectancy vs. 76's own held-out +0.304%
+ * and the 75-default's +0.279%), the sharpest tuning/held-out reversal seen anywhere in this
+ * backlog. Every stock ticker, including AAPL, keeps falling back to {@link
+ * SignalRuleEngine.RuleThresholds#DEFAULT} — the "zero stock evidence exists" gap this class
+ * previously described is now closed with *negative* evidence (a real stock sweep that didn't
+ * confirm), not merely an absent one. See docs/CHANGELOG.md's E8-F1-S7 entry for the full sweep.
  */
 public final class PerSymbolRuleThresholds {
 

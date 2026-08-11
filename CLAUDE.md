@@ -98,6 +98,19 @@ horizon — see its entry below for why MA-crossover's own similarly-
 positive-looking tuning result didn't survive the same held-out check.
 `WeightedVoteRuleEngine` itself stays unwired regardless — this only
 changes the constant, not `SignalService`/`OrderService`'s call path.
+E8-F1-S7, an eleventh E8 follow-up (back on F8.1), evaluates the per-symbol
+RSI override (E8-F1-S4) and the SELL-side regime gate (E8-F3-S3) against
+AAPL — this repo's first stock fixture, added specifically because both
+mechanisms were crypto-only for lack of any stock evidence. Also done, and
+also no-ship on both axes: AAPL's RSI-overbought tuning-window winner (76)
+reverses sharply on its own held-out tail (candidate 68 — the *worst*
+tuning-window candidate — wins there instead), and AAPL's SELL-side regime
+split actively contradicts the crypto-wide pattern the SELL gate already
+relies on (ranging beats trending on AAPL, not trending beats ranging) —
+see its entry below for the full figures. Neither `PerSymbolRuleThresholds`
+nor `RegimeGatedRuleEngine`'s crypto-only scoping changes; no
+`RULE_TABLE_VERSION` bump. Of the 6 backlog stories filed in the same
+batch as this one, only E8-F2-S3 (funding-rate carry cost) remains open.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -1341,6 +1354,60 @@ changes the constant, not `SignalService`/`OrderService`'s call path.
   precedent E8-F1-S2/S3/S5/S6/E8-F3-S4 established for their own no-ship
   findings — this story ships a real constant change but zero production
   call-path change. `./mvnw verify`: 530 tests, 0 failures, up from 527.
+- E8-F1-S7: evaluates the per-symbol `rsiOverbought` override (E8-F1-S4)
+  and the SELL-side regime gate (E8-F3-S3) against AAPL — this repo's
+  first **stock** fixture, added because both mechanisms were scoped to
+  crypto only for lack of any stock evidence anywhere in the backlog. New
+  `backend/src/test/resources/backtest/aapl-daily-history.csv` (1000 real
+  daily NASDAQ sessions, 2022-08-15 to 2026-08-10, fetched once from Yahoo
+  Finance's public `v8/finance/chart` JSON endpoint — Stooq's CSV endpoint,
+  the first choice, turned out to have gone behind an anti-bot challenge
+  and was ruled out live during design-gate scoping) sized to **row count**
+  (1000, matching the crypto fixtures' n and therefore their 70/30
+  tune/held-out statistical power) rather than calendar date range, since a
+  stock only trades ~252 days/year and matching the crypto fixtures'
+  ~2.75-year span would have yielded only ~690 candles — too close to a
+  700-candle tuning window to leave a meaningful held-out tail; AAPL's own
+  date range runs longer (~4 years) as a result. `FixtureSplits` gained
+  `AAPL`/`AAPL_TUNING`/`AAPL_HELD_OUT` plus its own `AAPL_SPLIT_INDEX`
+  constant (computed as 70% of AAPL's actual row count rather than reusing
+  the crypto fixtures' literal `SPLIT_INDEX`, so a future differently-sized
+  stock fixture can't silently inherit the wrong split point). Two new
+  tests: `StockPerSymbolRsiOverboughtCalibrationTest` (a fresh 68-76
+  tune-then-validate sweep against AAPL's own tuning/held-out split, the
+  same methodology `PerSymbolRsiOverboughtCalibrationTest` (E8-F1-S4) used
+  per crypto symbol — fresh because AAPL, unlike BTCUSDT/DOGEUSDT, had
+  never been swept before, so there was no existing candidate to merely
+  replay) and `StockRegimeOutOfSampleValidationTest` (a held-out-only
+  replay of the existing global `ADX_TRENDING_THRESHOLD`, mirroring
+  `RegimeOutOfSampleValidationTest` (E8-F4-S2)'s own validation-only shape,
+  since the threshold itself was never tuned to any fixture). Both come
+  back **no-ship**, and for reasons distinct from any prior E8-F1
+  no-ship: AAPL's RSI-overbought tuning-window winner (76 — beats the 75
+  default at every checkpoint on the tuning window, larger n too, 208 vs.
+  202) fails held-out confirmation not by a near-miss but by a sharp
+  reversal — held out, candidate 68 (the *worst* tuning-window candidate)
+  is the clear winner (max checkpoint +1.009% after-cost expectancy vs.
+  76's own held-out +0.304% and the 75-default's +0.279%), the sharpest
+  tuning/held-out disagreement anywhere in this backlog. The regime-gate
+  check is more pointed still: AAPL's held-out SELL-side split shows
+  ranging beating trending at every checkpoint (max: ranging +1.518%
+  after-cost vs. trending +0.800%, on a larger n, 41 vs. 8) — the *opposite*
+  of the uniform trending-beats-ranging pattern all three crypto symbols
+  showed and that `applySellGate`'s crypto-only wiring already relies on.
+  Neither `PerSymbolRuleThresholds.OVERRIDES` nor
+  `RegimeGatedRuleEngine.sellGateAppliesTo` changes — AAPL keeps falling
+  back to `RuleThresholds.DEFAULT` and stays outside the SELL gate's scope,
+  same as every stock ticker today — but both classes' Javadocs are
+  updated to record that the "zero stock evidence exists" gap they
+  previously described is now closed with *negative* evidence (a real
+  sweep that didn't confirm, and for the regime gate, one that actively
+  contradicts the crypto-wide finding) rather than an absent one. No
+  `RULE_TABLE_VERSION` bump, no production wiring change, so no live-
+  browser/`SignalServiceTest` end-to-end verification was needed beyond
+  the calibration tests' own run — the same no-production-change
+  precedent E8-F1-S2/S3/S5/S6/E8-F3-S4 established. `./mvnw verify`: 532
+  tests, 0 failures, up from 530.
 
 ## Build / lint / test
 

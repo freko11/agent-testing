@@ -7070,3 +7070,188 @@ method and horizon-parameterized `scoreIndicator` overload, the new
 extended `WeightedVoteRuleEngineTest`. No `SignalService`/`OrderService`/
 `PlaceOrderRequest`/`RULE_TABLE_VERSION` changes, no schema migration, no
 frontend changes.
+
+## E8-F1-S7 — evaluate the per-symbol RSI override and SELL-side regime gate against a stock fixture
+
+**Story**: both `PerSymbolRuleThresholds` (E8-F1-S4)'s per-symbol
+`rsiOverbought` override and `RegimeGatedRuleEngine.applySellGate`
+(E8-F3-S3)'s crypto-wide SELL gate are scoped to crypto only, and both
+classes' own Javadocs say so explicitly: "zero stock evidence exists
+anywhere in this backlog." This story was filed (alongside 5 other backlog
+stories, in the same batch as E8-F3-S4/E8-F3-S5) specifically to close that
+gap — add one real stock fixture and run both mechanisms' existing
+tune/held-out methodology against it, with a no-ship outcome on either axis
+explicitly accepted as valid per the story's own AC.
+
+### Design gate
+
+Scoped via the `Plan` agent before implementation. Two real open questions
+it had to resolve, since neither is answerable from the existing code
+alone:
+
+1. **Which stock, and how to source real daily OHLCV data for it in this
+   sandboxed session.** Picked AAPL (NASDAQ) — highly liquid, long trading
+   history, large-cap comparable in "well-known asset" stature to BTCUSDT,
+   with both strongly-trending and long ranging/choppy stretches in its
+   real history, the same regime variety the crypto fixtures were chosen
+   to exercise. Sourcing was verified *live* during the design gate, not
+   assumed: Stooq's CSV endpoint (`stooq.com/q/d/l/?s=...`), the initially
+   obvious free/scriptable option, turned out to now sit behind an
+   anti-bot proof-of-work challenge — confirmed with a real `curl` against
+   it, which returned an HTML/JS challenge page instead of CSV. Yahoo
+   Finance's `v8/finance/chart` JSON endpoint (`query1.finance.yahoo.com`)
+   was tried next and confirmed working with no auth needed — a real pull
+   of AAPL 2016-2022 data came back 200 with populated
+   `chart.result[0].timestamp[]`/`indicators.quote[0].{open,high,low,
+   close,volume}` arrays, real prices matching known AAPL history, zero
+   nulls in that sample window. This became the actual sourcing mechanism.
+2. **Row count vs. calendar date range for "comparable size" to the crypto
+   fixtures.** The existing BTCUSDT/DOGEUSDT/SOLUSDT fixtures are each
+   exactly 1000 daily candles spanning Nov 2023-Jul 2026 (~2.75 years) —
+   but crypto trades every day of the week, while a stock only trades
+   ~252 days/year. Matching the crypto fixtures' *date range* would yield
+   roughly 690 AAPL candles, too close to the existing 700-candle tuning-
+   window size to leave a meaningful ~300-candle held-out tail. Matching
+   *row count* instead (1000 real trading-session candles) preserves the
+   same 70/30 tune/held-out statistical-power proportions every E8-F1/F3/F4
+   calibration test already relies on — at the cost of AAPL's own date
+   range running longer (~4 years) than the crypto fixtures'. Row count
+   won, since the tune/held-out methodology's validity depends on sample
+   size, not calendar overlap with the other fixtures.
+
+### Implementation
+
+**New fixture**: `backend/src/test/resources/backtest/aapl-daily-history.csv`
+— 1000 rows, header `timestamp,open,high,low,close,volume` (identical
+format to the crypto fixtures, so `BacktestCandleCsvLoader` needed zero
+code changes), real AAPL daily sessions **2022-08-15 to 2026-08-10**.
+Built via a one-time, not-committed conversion script (same "throwaway
+probe, run once, deleted before committing" precedent E8-F1-S5/S6 already
+established for their own probe scripts): fetched the raw Yahoo JSON via
+`curl` with a `period1`/`period2` Unix-timestamp window sized to comfortably
+exceed 1000 trading sessions, then a small Python script converted each
+session's Yahoo timestamp (Unix seconds at that session's market-open
+instant, in `America/New_York` local time per the response's own
+`gmtoffset` field) to its exchange-local calendar trading date, emitted as
+`<date>T00:00:00Z` to match the existing fixtures' exact timestamp
+convention, filtering out any row with a null OHLC field (Yahoo can return
+nulls for halted/partial sessions — none were dropped from the actual pull
+used here, but the filter is defensive), then kept only the most recent
+1000 rows.
+
+**`FixtureSplits`** gained `AAPL`/`AAPL_TUNING`/`AAPL_HELD_OUT` plus its own
+`AAPL_SPLIT_INDEX` constant, computed as `round(AAPL.size() * 0.7)` rather
+than reusing the crypto fixtures' literal `SPLIT_INDEX` (700) — today they
+happen to be numerically identical since AAPL was also sourced to exactly
+1000 rows, but keeping them as separate constants means a future
+differently-sized stock fixture can't silently inherit the wrong split
+point. Class Javadoc updated to explain the row-count-vs-date-range
+tradeoff.
+
+**Two new calibration tests**, one per mechanism:
+
+- `StockPerSymbolRsiOverboughtCalibrationTest` — a **fresh** sweep, not a
+  replay. Re-reading the AC ("evaluated... using the same tune/held-out
+  methodology E8-F1-S4/E8-F4-S2 already established") against what E8-F1-S4
+  actually did: BTCUSDT/DOGEUSDT/SOLUSDT were each swept independently
+  against their own tuning window before being validated against their own
+  held-out tail. AAPL has never been swept before (unlike BTCUSDT/DOGEUSDT,
+  which already had `RsiOverboughtRecalibrationTest`'s prior pooled sweep
+  to validate against in E8-F1-S4), so there was no existing candidate to
+  merely replay — a fresh sweep is what "the same methodology" actually
+  means here. Same 68-76 candidate grid every RSI-overbought calibration
+  test in this backlog has used, `rsiOversold` fixed at 25 throughout
+  (E8-F1-S2's finding that it has no measurable BUY-side effect was never
+  asset-class-scoped), same ship bar as `PerSymbolRsiOverboughtCalibrationTest`
+  (a candidate must beat the current global default, 75, at every
+  MIN/MID/MAX checkpoint on both AAPL's own tuning window *and* AAPL's own
+  held-out tail, with comparable `n`), same structural sanity check that
+  `rsiOverbought` never moves the SELL side (confirmed true for AAPL too —
+  every candidate's `overallSell()` is byte-identical across the sweep).
+- `StockRegimeOutOfSampleValidationTest` — validation-only, no tuning
+  phase, mirroring `RegimeOutOfSampleValidationTest` (E8-F4-S2)'s own
+  shape: `RegimeClassifier.ADX_TRENDING_THRESHOLD` (25) was fixed a priori
+  as an industry rule-of-thumb and was never tuned against any fixture,
+  crypto or stock, so there's nothing to "validate" beyond replaying AAPL's
+  held-out tail through `BacktestHarness`'s existing `buyByRegime()`/
+  `sellByRegime()` split at the existing global threshold. A per-symbol
+  ADX sweep for AAPL (E8-F3-S4's own mechanism) was confirmed out of scope
+  for this story's AC during the design gate — that's a different,
+  not-requested mechanism.
+
+### Findings — no ship on either axis, but not for the same reason as any prior E8-F1 no-ship
+
+**RSI-overbought (`StockPerSymbolRsiOverboughtCalibrationTest`)**: AAPL's
+tuning-window winner is unambiguous — candidate 76 beats the 75 default at
+every one of MIN/MID/MAX (e.g. max +0.240% vs. +0.216% after-cost
+expectancy), with a *larger* scored `n` too (208 vs. 202), the same
+"real gain, not a smaller/noisier sample" shape E8-F1-S1's original finding
+had. But on AAPL's own held-out tail, 76 does *not* hold: at the min
+checkpoint alone 76 already falls slightly below the 75 baseline (+0.075%
+vs. +0.111%), failing the ship bar's "every checkpoint" requirement. More
+strikingly, the actual held-out winner is candidate **68** — the *single
+worst* candidate on the tuning window — which dominates every checkpoint on
+the held-out tail by a wide margin (min +0.470%, mid +1.004%, max +1.009%,
+vs. 76's own held-out max of only +0.304% and the 75-default's +0.279%).
+This is a sharper, more direct tuning/held-out reversal than
+BTCUSDT/DOGEUSDT's own E8-F1-S4 no-ship (where the failure mode was
+candidates 71-76 producing *byte-identical* held-out classification, i.e.
+no evidence either way) — here there's a clear, opposite-signed held-out
+preference. **No ship**: `PerSymbolRuleThresholds.OVERRIDES` stays
+unchanged (SOLUSDT only); AAPL keeps resolving to `RuleThresholds.DEFAULT`
+(25/75), same as every other unlisted symbol.
+
+**SELL-side regime gate (`StockRegimeOutOfSampleValidationTest`)**: AAPL's
+held-out regime split:
+
+```
+BUY  trending (n=60): min -0.321% | mid -0.759% | max -0.917% (after costs)
+BUY  ranging  (n=35): min +0.850% | mid +1.816% | max +2.330% (after costs)
+SELL trending (n=8) : min -0.673% | mid +0.432% | max +0.800% (after costs)
+SELL ranging  (n=41): min +0.529% | mid +1.305% | max +1.518% (after costs)
+```
+
+The SELL side is the one this story actually cares about (it's the one
+already wired for crypto), and AAPL's result is the **opposite** of the
+uniform trending-beats-ranging pattern all three crypto symbols showed in
+E8-F4-S2: ranging beats trending at every one of MIN/MID/MAX, on a larger
+sample too (n=41 ranging vs. n=8 trending — trending is also the smaller,
+more degenerate bucket here, which only reinforces the ranging-favoring
+read rather than calling it into question). One contradicting stock symbol
+isn't proof the pattern always inverts for stocks, but it's real evidence
+against ever widening `sellGateAppliesTo` from `AssetType.CRYPTO` to
+include stocks — exactly the outcome this story's AC treats as an equally
+valid ending. (AAPL's BUY-side split, not gated by anything in production,
+shows ranging beating trending too — consistent with BTCUSDT/DOGEUSDT's own
+BUY-side pattern from E8-F4-S2, continuing that mechanism's already-
+documented fixture-dependence; not new information, not acted on.) **No
+ship**: `RegimeGatedRuleEngine.sellGateAppliesTo` stays a plain
+`AssetType.CRYPTO` check.
+
+Both classes' Javadocs (`PerSymbolRuleThresholds`, `RegimeGatedRuleEngine`)
+gained a paragraph recording the AAPL finding, updating their previous
+"zero stock evidence exists" framing — that gap is now closed with
+*negative* evidence (a real sweep/validation that didn't confirm, and for
+the regime gate, one that actively contradicts the crypto-wide finding)
+rather than an absent one.
+
+### Scope / no-op confirmation
+
+No `RULE_TABLE_VERSION` bump (no threshold or gate actually changed for
+any symbol). No `SignalService`/`OrderService`/`PlaceOrderRequest` changes.
+No schema migration, no frontend changes. Since this story shipped no
+production behavior change, no live-browser/`SignalServiceTest` end-to-end
+verification was needed beyond the two new calibration tests' own run —
+the same no-production-change precedent E8-F1-S2/S3/S5/S6/E8-F3-S4
+established for their own no-ship findings.
+
+**`./mvnw verify`: 532 tests, 0 failures/errors, `BUILD SUCCESS`** (up from
+530 after E8-F3-S5). Backend, `src/test/resources` for the new fixture,
+`src/test/java` for `FixtureSplits`'s additions and the two new calibration
+test classes, `src/main/java` only for the two Javadoc-only updates to
+`PerSymbolRuleThresholds`/`RegimeGatedRuleEngine` (no executable code
+changed in either class).
+
+Of the 6 backlog stories filed alongside this one (E2-F1-S5, E8-F1-S6,
+E8-F1-S7, E8-F2-S3, E8-F3-S4, E8-F3-S5), only **E8-F2-S3** (funding-rate
+carry cost) remains open.
