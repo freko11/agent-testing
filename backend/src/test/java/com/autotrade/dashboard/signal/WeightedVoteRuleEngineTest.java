@@ -140,8 +140,9 @@ class WeightedVoteRuleEngineTest {
                 RSI_DOMINANT));
     }
 
-    /** With every weight floored to zero (the current real {@link IndicatorWeights#DEFAULT}
-     * calibration), a lone or 2-of-3 vote can never reach the weighted-majority bar — only the
+    /** With every weight floored to zero (an all-zero {@link IndicatorWeights}, not the current
+     * real {@link IndicatorWeights#DEFAULT} — see its Javadoc, {@code macdWeight} is nonzero since
+     * E8-F3-S5), a lone or 2-of-3 vote can never reach the weighted-majority bar — only the
      * raw-count UNANIMOUS branch still resolves a directional call. Guards against the {@code 0
      * >= 0} vacuous-comparison bug this case would hit without an explicit zero-total-weight
      * check. */
@@ -153,12 +154,28 @@ class WeightedVoteRuleEngineTest {
                 zeroWeights));
     }
 
+    /** {@code IndicatorWeights.DEFAULT}'s {@code rsiWeight} is still 0.000 (E8-F3-S5 never found a
+     * horizon where RSI's weight clears zero), so a lone RSI vote (MACD/MA neutral) under the real
+     * DEFAULT weights still resolves NO_STRONG_SIGNAL exactly as it did before that story shipped
+     * a nonzero {@code macdWeight} — this case doesn't exercise MACD at all, so it's unaffected by
+     * that change. */
     @Test
     void defaultEvaluate_usesDefaultWeights() {
-        // IndicatorWeights.DEFAULT currently floors every weight to zero (see its Javadoc), so
-        // the 5-arg convenience overload behaves like the zero-weight case above.
         assertEquals(SignalRuleId.NO_STRONG_SIGNAL,
                 WeightedVoteRuleEngine.evaluate(RSI_OVERSOLD, MACD_NEUTRAL, MA_NEUTRAL, VOLATILITY_NORMAL, VOLUME_TREND_NORMAL));
+    }
+
+    /** E8-F3-S5's shipped change: {@code IndicatorWeights.DEFAULT.macdWeight()} is now the only
+     * nonzero weight, so it alone equals {@code totalWeight} — a lone MACD vote (RSI/MA neutral)
+     * now clears the weighted-majority bar under the real DEFAULT weights, where it stayed
+     * NO_STRONG_SIGNAL before this story. */
+    @Test
+    void defaultEvaluate_loneMacdVote_promotesToBullishMajority() {
+        assertEquals(SignalRuleId.NO_STRONG_SIGNAL, SignalRuleEngine.evaluate(RSI_NEUTRAL, MACD_BULLISH, MA_NEUTRAL,
+                VOLATILITY_NORMAL, VOLUME_TREND_NORMAL), "sanity check: unweighted table calls this NO_STRONG_SIGNAL");
+
+        assertEquals(SignalRuleId.BULLISH_MAJORITY,
+                WeightedVoteRuleEngine.evaluate(RSI_NEUTRAL, MACD_BULLISH, MA_NEUTRAL, VOLATILITY_NORMAL, VOLUME_TREND_NORMAL));
     }
 
     /** {@link WeightedVoteRuleEngine#evaluateUnweighted} must match {@link

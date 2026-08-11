@@ -76,9 +76,23 @@ public final class WalkForwardScorer {
      */
     public static Optional<CrossingEvent> findFirstCrossing(List<Candle> forwardCandles, int maxDaysForward,
                                                               BigDecimal decisionClose, boolean isBuy) {
-        BigDecimal tpDistance = decisionClose.multiply(BacktestConfig.TAKE_PROFIT_PCT)
+        return findFirstCrossing(forwardCandles, maxDaysForward, decisionClose, isBuy,
+                BacktestConfig.TAKE_PROFIT_PCT, BacktestConfig.STOP_LOSS_PCT);
+    }
+
+    /**
+     * As the 4-arg overload above, but takes an explicit {@code takeProfitPct}/{@code
+     * stopLossPct} instead of always reading {@link BacktestConfig}'s fixed constants (E8-F3-S5) —
+     * lets {@code BacktestHarness.runIndicatorExpectancy} replay the per-indicator scan at an
+     * alternate horizon/TP-SL combination without touching the production diagnostic defaults the
+     * 4-arg overload (and every existing caller) still uses.
+     */
+    public static Optional<CrossingEvent> findFirstCrossing(List<Candle> forwardCandles, int maxDaysForward,
+                                                              BigDecimal decisionClose, boolean isBuy,
+                                                              BigDecimal takeProfitPct, BigDecimal stopLossPct) {
+        BigDecimal tpDistance = decisionClose.multiply(takeProfitPct)
                 .divide(BigDecimal.valueOf(100), 8, RoundingMode.HALF_UP);
-        BigDecimal slDistance = decisionClose.multiply(BacktestConfig.STOP_LOSS_PCT)
+        BigDecimal slDistance = decisionClose.multiply(stopLossPct)
                 .divide(BigDecimal.valueOf(100), 8, RoundingMode.HALF_UP);
         BigDecimal tpPrice = isBuy ? decisionClose.add(tpDistance) : decisionClose.subtract(tpDistance);
         BigDecimal slPrice = isBuy ? decisionClose.subtract(slDistance) : decisionClose.add(slDistance);
@@ -88,11 +102,11 @@ public final class WalkForwardScorer {
             Candle candle = forwardCandles.get(day - 1);
             boolean slHit = isBuy ? candle.low().compareTo(slPrice) <= 0 : candle.high().compareTo(slPrice) >= 0;
             if (slHit) {
-                return Optional.of(new CrossingEvent(day, ExitReason.SL_HIT, BacktestConfig.STOP_LOSS_PCT.negate()));
+                return Optional.of(new CrossingEvent(day, ExitReason.SL_HIT, stopLossPct.negate()));
             }
             boolean tpHit = isBuy ? candle.high().compareTo(tpPrice) >= 0 : candle.low().compareTo(tpPrice) <= 0;
             if (tpHit) {
-                return Optional.of(new CrossingEvent(day, ExitReason.TP_HIT, BacktestConfig.TAKE_PROFIT_PCT));
+                return Optional.of(new CrossingEvent(day, ExitReason.TP_HIT, takeProfitPct));
             }
         }
         return Optional.empty();

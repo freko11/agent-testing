@@ -267,15 +267,74 @@ public final class BacktestHarness {
      */
     private static void scoreIndicator(List<Candle> forward, BigDecimal decisionClose,
                                         boolean bullish, boolean bearish, IndicatorAccumulator acc) {
+        scoreIndicator(forward, decisionClose, bullish, bearish, acc, BacktestConfig.HOLD_REFERENCE_HORIZON_DAYS,
+                BacktestConfig.TAKE_PROFIT_PCT, BacktestConfig.STOP_LOSS_PCT);
+    }
+
+    /**
+     * As the 5-arg overload above, but takes an explicit horizon/TP-SL instead of always reading
+     * {@link BacktestConfig}'s fixed diagnostic constants (E8-F3-S5) — lets {@link
+     * #runIndicatorExpectancy} replay per-indicator scoring at a horizon other than the fixed
+     * 5-day one every other caller of the 5-arg overload still uses.
+     */
+    private static void scoreIndicator(List<Candle> forward, BigDecimal decisionClose,
+                                        boolean bullish, boolean bearish, IndicatorAccumulator acc,
+                                        int horizonDays, BigDecimal takeProfitPct, BigDecimal stopLossPct) {
         if (!bullish && !bearish) {
             return;
         }
         acc.totalCalls++;
         Optional<WalkForwardScorer.CrossingEvent> crossing = WalkForwardScorer.findFirstCrossing(forward,
-                BacktestConfig.HOLD_REFERENCE_HORIZON_DAYS, decisionClose, bullish);
-        Optional<DirectionalScoreResult> result = WalkForwardScorer.score(forward,
-                BacktestConfig.HOLD_REFERENCE_HORIZON_DAYS, decisionClose, bullish, crossing);
+                horizonDays, decisionClose, bullish, takeProfitPct, stopLossPct);
+        Optional<DirectionalScoreResult> result = WalkForwardScorer.score(forward, horizonDays, decisionClose, bullish, crossing);
         acc.record(result);
+    }
+
+    /**
+     * E8-F3-S5: replays each indicator's own bullish/bearish read (same {@link
+     * SignalRuleEngine#computeVotes} source of truth as {@link #run}'s per-indicator scoring) at an
+     * explicit {@code horizonDays}/{@code takeProfitPct}/{@code stopLossPct} instead of the fixed
+     * {@link BacktestConfig#HOLD_REFERENCE_HORIZON_DAYS}/{@link BacktestConfig#TAKE_PROFIT_PCT}/
+     * {@link BacktestConfig#STOP_LOSS_PCT} {@link #run} always uses — lets {@code
+     * IndicatorExpectancyAlternateHorizonCalibrationTest} check whether {@code
+     * WeightedVoteRuleEngine.IndicatorWeights.DEFAULT}'s all-zero calibration is an artifact of
+     * that one fixed short horizon, per that record's own Javadoc ("a future recalibration, e.g.
+     * against a longer horizon, produces a positive weight"). Deliberately narrower than {@link
+     * #run}: doesn't compute the combined rule table's matched-rule/call-count/hold-gate/regime
+     * bookkeeping, since none of that is horizon-dependent for this method's purpose and
+     * replicating it here would be unused work.
+     */
+    public static Map<IndicatorId, CheckpointStats> runIndicatorExpectancy(List<Candle> candles, int horizonDays,
+                                                                            BigDecimal takeProfitPct, BigDecimal stopLossPct) {
+        Map<IndicatorId, IndicatorAccumulator> indicatorAcc = new EnumMap<>(IndicatorId.class);
+        for (IndicatorId indicatorId : IndicatorId.values()) {
+            indicatorAcc.put(indicatorId, new IndicatorAccumulator());
+        }
+
+        for (int i = MIN_CANDLES - 1; i < candles.size(); i++) {
+            List<Candle> window = candles.subList(0, i + 1);
+
+            BigDecimal rsi = RsiCalculator.calculate(window, RsiCalculator.DEFAULT_PERIOD);
+            MacdResult macd = MacdCalculator.calculate(window, MacdCalculator.DEFAULT_FAST_PERIOD,
+                    MacdCalculator.DEFAULT_SLOW_PERIOD, MacdCalculator.DEFAULT_SIGNAL_PERIOD);
+            MovingAverageResult ma = MovingAverageCrossoverCalculator.calculate(window,
+                    MovingAverageCrossoverCalculator.DEFAULT_SHORT_PERIOD, MovingAverageCrossoverCalculator.DEFAULT_LONG_PERIOD);
+
+            BigDecimal decisionClose = candles.get(i).close();
+            List<Candle> forward = candles.subList(i + 1, candles.size());
+
+            IndicatorVotes votes = SignalRuleEngine.computeVotes(rsi, macd, ma, SignalRuleEngine.RuleThresholds.DEFAULT);
+            scoreIndicator(forward, decisionClose, votes.rsiBullish(), votes.rsiBearish(),
+                    indicatorAcc.get(IndicatorId.RSI), horizonDays, takeProfitPct, stopLossPct);
+            scoreIndicator(forward, decisionClose, votes.macdBullish(), votes.macdBearish(),
+                    indicatorAcc.get(IndicatorId.MACD), horizonDays, takeProfitPct, stopLossPct);
+            scoreIndicator(forward, decisionClose, votes.maBullish(), votes.maBearish(),
+                    indicatorAcc.get(IndicatorId.MA_CROSSOVER), horizonDays, takeProfitPct, stopLossPct);
+        }
+
+        Map<IndicatorId, CheckpointStats> indicatorStats = new EnumMap<>(IndicatorId.class);
+        indicatorAcc.forEach((indicatorId, acc) -> indicatorStats.put(indicatorId, acc.toStats()));
+        return indicatorStats;
     }
 
     private static Optional<HoldGateOutcome> scoreHoldGate(List<Candle> candles, int decisionIndex, BigDecimal decisionClose) {

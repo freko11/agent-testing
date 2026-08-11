@@ -6880,3 +6880,193 @@ the new `PerSymbolAdxTrendingThresholdCalibrationTest`, the new
 `RegimeGatedRuleEngineTest`/`BacktestHarnessTest`. No `SignalService`/
 `OrderService`/`PlaceOrderRequest` changes, no schema migration, no
 frontend changes.
+
+## E8-F3-S5 — `WeightedVoteRuleEngine.IndicatorWeights.DEFAULT` recalibration at an alternate horizon
+
+E8-F3-S5 (re-attempt `IndicatorWeights.DEFAULT`'s calibration at a horizon
+other than E8-F3-S1's original fixed 5-day one) is done. Tenth E8
+follow-up, back on F8.3 alongside E8-F3-S1/S2/S3/S4, picked from the same
+backlog batch as E8-F3-S4. The story exists because `IndicatorWeights
+.DEFAULT`'s own Javadoc, since E8-F3-S1, named "a future recalibration
+(e.g. against a longer horizon)" as the one untried lever that could
+produce a positive weight — E8-F3-S1's original finding (all three
+indicators' combined after-cost expectancy negative under a fixed
+5-day/TP5%/SL3% scoring setup) was confirmed to replicate out-of-sample by
+E8-F4-S1, but only ever at that one horizon. This story tries the lever
+that Javadoc named.
+
+**No design gate.** Unlike E8-F3-S4 (a new per-symbol resolution
+mechanism with a real risk of contaminating an already-shipped SELL gate),
+this story is a pure re-parameterization of an existing, already-reviewed
+scoring path — the same "test-only calibration test" shape as
+E8-F1-S2/S3/S5/S6, none of which needed a `Plan` agent pass either.
+
+**Mechanism: parameterize the horizon/TP-SL instead of hardcoding
+`BacktestConfig`'s constants.** `WalkForwardScorer.findFirstCrossing`
+gained an overload taking explicit `takeProfitPct`/`stopLossPct`
+parameters; the existing 4-arg overload now delegates to it with
+`BacktestConfig.TAKE_PROFIT_PCT`/`STOP_LOSS_PCT`, so every existing caller
+(the production rule table's own TP/SL-aware scoring, `LiveSignalDrift
+Service`) is byte-identical to before. `BacktestHarness.scoreIndicator`
+(private) similarly gained a horizon/TP-SL-accepting overload, with the
+existing 5-arg version delegating to it using `BacktestConfig
+.HOLD_REFERENCE_HORIZON_DAYS`/`TAKE_PROFIT_PCT`/`STOP_LOSS_PCT` — zero
+behavior change for `run`'s three existing per-indicator scoring call
+sites (RSI/MACD/MA-crossover).
+
+**New entry point: `BacktestHarness.runIndicatorExpectancy`.** Rather than
+adding an eighth overload to `run` itself (already at seven, each adding
+one more optional axis — regime threshold, sell-gate flag, rule
+thresholds, evaluator), this story's per-indicator-only need got its own
+narrower public method: `runIndicatorExpectancy(candles, horizonDays,
+takeProfitPct, stopLossPct)` replays the same decision-point loop (RSI/
+MACD/MA-crossover recomputed per growing window, `SignalRuleEngine
+.computeVotes` as the one source of truth for what counts as a bullish/
+bearish read) but skips the combined rule table's matched-rule/hold-term/
+regime/call-count bookkeeping entirely, since none of that is
+horizon-dependent for scoring a lone indicator's own read. Returns
+`Map<IndicatorId, CheckpointStats>` directly rather than a full
+`BacktestReport` — the caller only ever wanted the per-indicator numbers.
+
+**Candidate grid, both anchored to real values already in this codebase.**
+New `backtest.IndicatorExpectancyAlternateHorizonCalibrationTest` swept
+two candidates against the same full BTCUSDT/DOGEUSDT fixtures the
+original `IndicatorExpectancyCalibrationTest` (E8-F3-S1) used (this
+story's own tuning run, not `FixtureSplits`' 700-candle tuning window —
+matching the original calibration's own scope exactly, for a direct
+apples-to-apples comparison): 10 days (2x the 5-day baseline, TP10%/SL6%)
+and 15 days (TP15%/SL9%, `HoldTermRule.STRONG_LOW`'s own `maxDays` — the
+longest hold-term upper bound in the table, not picked arbitrarily). TP/SL
+scaled proportionally with the horizon rather than held at the baseline's
+5%/3%: holding TP/SL fixed while only lengthening the horizon would just
+mean more decision points fall back to horizon-expiry scoring instead of
+resolving via a genuine TP/SL crossing, testing a laxer bracket rather
+than a materially different one.
+
+**Tuning-run result: both candidates found a real positive weight, not
+just a smaller negative one.**
+
+```
+10 days (TP10%/SL6%): RSI -0.689 | MACD +0.289 | MA-crossover -0.136
+15 days (TP15%/SL9%): RSI -2.873 | MACD +0.714 | MA-crossover +0.162
+```
+
+MACD's combined after-cost expectancy is positive at both horizons and
+grows with the horizon (+0.289% at 10 days, +0.714% at 15 days); MA-
+crossover only turns positive at 15 days; RSI gets *more* negative as the
+horizon lengthens at every horizon tested, so it was never a shipping
+candidate on this axis regardless of what a held-out check might show.
+
+**Out-of-sample validation, per this story's confirmed ship bar** — a
+tuning-set positive result isn't shipped on its own; the 15-day candidate
+(the stronger of the two, and independently anchored to
+`HoldTermRule.STRONG_LOW`) was checked against the same held-out
+BTCUSDT/DOGEUSDT tails plus the untouched SOLUSDT fixture E8-F4-S1 used,
+at that same 15-day/TP15%/SL9% horizon:
+
+```
+RSI:          BTCUSDT[held-out] -0.293 | DOGEUSDT[held-out] -1.066 | SOLUSDT[untouched] +0.690 | COMBINED +0.075
+MACD:         BTCUSDT[held-out] +1.930 | DOGEUSDT[held-out] +0.132 | SOLUSDT[untouched] +0.746 | COMBINED +0.845
+MA_CROSSOVER: BTCUSDT[held-out] -0.274 | DOGEUSDT[held-out] +1.533 | SOLUSDT[untouched] -0.275 | COMBINED +0.038
+```
+
+- **MACD held up cleanly**: positive combined (+0.845%, actually larger
+  than the tuning-set figure) *and* positive on all three individual
+  surfaces independently — not an aggregate propped up by one outlier
+  fixture. This is the same "direction-of-effect on every surface, not
+  just in combination" bar `OutOfSampleValidationTest`'s own Javadoc
+  states for what counts as holding out of sample.
+- **MA-crossover did not hold up**, despite a positive combined figure.
+  +0.038% combined is barely above zero and is carried entirely by
+  DOGEUSDT's own outsized +1.533% — BTCUSDT (-0.274%) and SOLUSDT
+  (-0.275%) both independently disagree with the tuning-set finding. This
+  is the exact "one fixture masks a two-of-three-disagreeing result"
+  pattern every other E8-F1 per-symbol axis (RSI in E8-F1-S3, MACD
+  histogram magnitude in E8-F1-S5, MA-crossover separation in E8-F1-S6,
+  ADX threshold in E8-F3-S4) has already independently found doesn't
+  generalize — MA-crossover's own combined weight just happened to still
+  read positive here rather than negative, but the underlying disagreement
+  is the same shape.
+- RSI's held-out combined figure (+0.075%) doesn't matter for the ship
+  decision either way — its tuning-set weight never cleared zero at any
+  horizon tested, so there was nothing to validate for it here.
+
+**Shipped**: `IndicatorWeights.DEFAULT.macdWeight` 0.000 → 0.714 (the
+tuning-set combined figure — same "ship the tuning-set value, confirm it
+holds out-of-sample" methodology E8-F3-S1/E8-F4-S1 established, just
+applied at the new horizon). `rsiWeight`/`maCrossoverWeight` stay 0.000.
+`WeightedVoteRuleEngine.IndicatorWeights.DEFAULT`'s Javadoc rewritten to
+record both the original E8-F3-S1 all-zero finding and this recalibration
+in full, matching the level of detail `RegimeClassifier`/
+`PerSymbolAdxThresholds`'s own closed-finding Javadocs carry.
+
+**Practical effect on `evaluate` (still unwired, but its own behavior
+changed for whichever future story or test exercises it with `DEFAULT`)**:
+`totalWeight` is now 0.714, entirely from MACD. Since `clearsMajorityBar`
+compares a voting indicator's own weighted sum against `totalWeight *
+WEIGHTED_MAJORITY_FRACTION` (0.5), and MACD's own weight already equals
+100% of a nonzero `totalWeight`, any lone-or-majority vote that includes a
+bullish/bearish MACD read now trivially clears the bar — newly resolving
+BULLISH_MAJORITY/BEARISH_MAJORITY where the unweighted table (and the
+previous all-zero `DEFAULT`) would call NO_STRONG_SIGNAL. A lone RSI-only
+or MA-only vote (MACD neutral) still resolves NO_STRONG_SIGNAL, since
+their own weight is still 0. UNANIMOUS is unaffected either way — decided
+off the raw 3-of-3 vote count, not a weight comparison, by design since
+E8-F3-S1. `WeightedVoteRuleEngine` itself is **still not wired** — this
+story doesn't touch `SignalService`/`OrderService`, doesn't add a config
+flag, and doesn't bump `RULE_TABLE_VERSION` (that constant lives entirely
+outside `SignalRuleEngine`'s own rule table).
+
+**Test fallout, all found by `./mvnw verify` after the DEFAULT change, all
+fixed:**
+
+- `WeightedVoteRuleEngineTest.defaultEvaluate_usesDefaultWeights`'s own
+  case (a lone RSI vote, MACD/MA neutral) turned out to be unaffected by
+  the value change — RSI's own weight is still 0, so its assertion
+  (NO_STRONG_SIGNAL) still holds — but its comment ("DEFAULT currently
+  floors every weight to zero") had gone stale and was corrected.
+  `zeroTotalWeight_loneIndicator_staysNoStrongSignal`'s comment, which
+  described that same case as "the current real `IndicatorWeights
+  .DEFAULT` calibration," was corrected the same way — it actually
+  exercises an explicit all-zero `IndicatorWeights`, not `DEFAULT` itself,
+  a distinction that only started to matter once `DEFAULT` stopped being
+  all-zero.
+- New `defaultEvaluate_loneMacdVote_promotesToBullishMajority` proves the
+  new behavior directly: a lone MACD vote (RSI/MA neutral) that the
+  unweighted `SignalRuleEngine.evaluate` calls NO_STRONG_SIGNAL now
+  resolves BULLISH_MAJORITY under `WeightedVoteRuleEngine.evaluate`'s
+  5-arg (DEFAULT-weight) overload — the actual shipped behavior change,
+  pinned down rather than just implied by the Javadoc.
+- `WeightedVoteRuleEngineTest`'s other cases (`allThreeBullish_*`,
+  `twoOfThreeBullish_equalWeights_*`, `loneDominantIndicator_*`,
+  `loneWeakIndicator_*`) all use their own explicit non-default
+  `IndicatorWeights` (`EQUAL_WEIGHTS`/`RSI_DOMINANT`/`RSI_WEAK`), so none
+  of them touch `DEFAULT` and none needed changes.
+- `WeightedVoteBacktestTest`'s A/B comparison (`compareUnweightedVsWeighted
+  _btcUsdt`/`_dogeUsdt`) asserts only structural invariants (decision-point
+  counts matching between engines), not "weighted always resolves
+  NO_STRONG_SIGNAL" — no change needed, and its printed report now
+  actually shows some BULLISH_MAJORITY/BEARISH_MAJORITY calls on the
+  weighted side that weren't there before, a visible confirmation the
+  change is real.
+- `OutOfSampleValidationTest.tuningSetWeightFor` reads `IndicatorWeights
+  .DEFAULT` dynamically (not a hardcoded literal), so it needed no change
+  and automatically reports the new figure if that test is ever re-run.
+
+**No production behavior change** — same precedent E8-F1-S2/S3/S5/S6/
+E8-F3-S4 all established for their own no-ship findings, except this
+story genuinely did ship a constant change; it's just that the constant
+lives on a class nothing in the production call path ever invokes. No
+live-browser/`SignalServiceTest` verification was needed for the same
+reason those stories didn't need it.
+
+**`./mvnw verify`: 530 tests, 0 failures/errors, `BUILD SUCCESS`** (up from
+527 after E8-F3-S4). Backend only: `src/main/java` for
+`WalkForwardScorer`'s new TP/SL-parameterized overload and
+`WeightedVoteRuleEngine.IndicatorWeights.DEFAULT`'s value/Javadoc change;
+`src/test/java` for `BacktestHarness`'s new `runIndicatorExpectancy`
+method and horizon-parameterized `scoreIndicator` overload, the new
+`IndicatorExpectancyAlternateHorizonCalibrationTest`, and the corrected/
+extended `WeightedVoteRuleEngineTest`. No `SignalService`/`OrderService`/
+`PlaceOrderRequest`/`RULE_TABLE_VERSION` changes, no schema migration, no
+frontend changes.

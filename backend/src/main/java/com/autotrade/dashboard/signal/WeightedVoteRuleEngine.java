@@ -20,11 +20,11 @@ import java.math.BigDecimal;
  * this in (a config flag, an {@code OrderService} change, a {@code RULE_TABLE_VERSION} bump) is
  * explicitly out of scope here. {@link IndicatorWeights#DEFAULT} below was tuned on the same two
  * checked-in BTCUSDT/DOGEUSDT fixtures, the same overfitting caveat {@code ThresholdCalibrationTest}
- * (E8-F1-S1) already documents for threshold calibration — <b>E8-F4-S1's out-of-sample validation
- * confirmed this replicates</b>: combined across held-out BTCUSDT/DOGEUSDT tails plus a genuinely
- * untouched SOLUSDT fixture, every indicator's after-cost expectancy stayed negative, consistent
- * with the all-zero {@code DEFAULT} below (see {@code OutOfSampleValidationTest} and
- * docs/CHANGELOG.md's E8-F4-S1 entry).
+ * (E8-F1-S1) already documents for threshold calibration. E8-F4-S1's out-of-sample validation
+ * confirmed the original all-zero calibration (fixed 5-day horizon) replicated on held-out data;
+ * E8-F3-S5 then re-attempted the calibration at longer horizons and found MACD's weight does clear
+ * the bar there — see {@link IndicatorWeights#DEFAULT}'s own Javadoc for the full account of both
+ * passes and docs/CHANGELOG.md's E8-F3-S1/E8-F4-S1/E8-F3-S5 entries for the printed reports.
  *
  * <p>Reuses {@link SignalRuleEngine#computeVotes} for "what counts as a bullish/bearish read" (one
  * source of truth, not a second copy) and keeps its three safety gates and its conflict/dissent
@@ -35,34 +35,60 @@ public final class WeightedVoteRuleEngine {
 
     /**
      * Per-indicator weight = {@code max(0, expectancyPctAfterCosts)} from {@code
-     * BacktestHarness}'s new per-indicator scoring (E8-F3-S1), combined call-count-weighted
-     * across the checked-in BTCUSDT and DOGEUSDT fixtures (the same combination {@code
-     * BacktestHarness.combine} already uses for UNANIMOUS+MAJORITY roll-ups, applied here across
-     * fixtures instead of across rules). A negative-expectancy indicator floors to zero weight —
-     * silenced, but never made to vote against its own direction — rather than going negative,
-     * so a consistently-wrong indicator can only lose influence, never actively invert the vote.
+     * BacktestHarness}'s per-indicator scoring, combined call-count-weighted across the checked-in
+     * BTCUSDT and DOGEUSDT fixtures (the same combination {@code BacktestHarness.combine} already
+     * uses for UNANIMOUS+MAJORITY roll-ups, applied here across fixtures instead of across rules).
+     * A negative-expectancy indicator floors to zero weight — silenced, but never made to vote
+     * against its own direction — rather than going negative, so a consistently-wrong indicator
+     * can only lose influence, never actively invert the vote.
      *
-     * <p><b>Computed finding (E8-F3-S1):</b> under the fixed 5-day {@code
-     * HOLD_REFERENCE_HORIZON_DAYS}/5%-TP/3%-SL scoring this weight is derived from, all three
-     * indicators' combined after-cost expectancy came back negative on the two checked-in
-     * fixtures (RSI -0.728%, MACD -0.039%, MA-crossover -0.131% — stop-loss hits substantially
-     * outnumber take-profit hits for every indicator at this short a horizon), so every weight
-     * here floors to zero. This is a real, computed result, not a placeholder: with {@code
-     * DEFAULT}, {@link #evaluate} can only ever resolve UNANIMOUS (still reachable unconditionally
-     * off the raw 3-of-3 vote count) or NO_STRONG_SIGNAL — the "lone dominant indicator" and
-     * "2-of-3 majority" promotion paths this class adds are real and independently proven by
-     * {@code WeightedVoteRuleEngineTest} using non-default weights, but are dormant under this
-     * specific calibration until a future recalibration (e.g. against a longer horizon) produces a
-     * positive weight for at least one indicator — E8-F4-S1's out-of-sample pass ({@code
-     * OutOfSampleValidationTest}) confirmed this all-zero calibration replicates on held-out and
-     * genuinely untouched data, so it isn't a small-n fluke. See {@code
-     * IndicatorExpectancyCalibrationTest} for the run that produced these numbers and
-     * docs/CHANGELOG.md's E8-F3-S1 entry for the printed per-indicator report they were read from.
+     * <p><b>E8-F3-S1's original finding</b> — under the fixed 5-day {@code
+     * HOLD_REFERENCE_HORIZON_DAYS}/5%-TP/3%-SL scoring — was all three indicators' combined
+     * after-cost expectancy coming back negative (RSI -0.728%, MACD -0.039%, MA-crossover -0.131%
+     * — stop-loss hits substantially outnumbered take-profit hits for every indicator at this
+     * short a horizon), an all-zero result E8-F4-S1's out-of-sample pass ({@code
+     * OutOfSampleValidationTest}) confirmed replicates on held-out and genuinely untouched data.
+     * That Javadoc named "a future recalibration (e.g. against a longer horizon)" as the one
+     * untried lever — E8-F3-S5 tried it.
+     *
+     * <p><b>E8-F3-S5's re-attempt:</b> {@code IndicatorExpectancyAlternateHorizonCalibrationTest}
+     * re-ran the same tuning fixtures at two longer, TP/SL-proportionally-scaled horizons: 10 days
+     * (TP10%/SL6%) and 15 days (TP15%/SL9%, anchored to {@code HoldTermRule.STRONG_LOW}'s own
+     * {@code maxDays} rather than picked arbitrarily). MACD's combined after-cost expectancy came
+     * back positive at both (+0.289% at 10 days, +0.714% at 15 days); MA-crossover only at 15 days
+     * (+0.162%); RSI stayed negative at every horizon tested, so it was never a shipping candidate
+     * here. Per this story's confirmed ship bar, the 15-day candidate's positive results were
+     * checked against the same held-out BTCUSDT/DOGEUSDT tails plus the untouched SOLUSDT fixture
+     * E8-F4-S1 used, at that same 15-day/TP15%/SL9% horizon:
+     * <ul>
+     *   <li><b>MACD held up cleanly</b> — combined held-out after-cost expectancy +0.845%, and
+     *   positive on <i>all three</i> individual surfaces independently (BTCUSDT +1.930%, DOGEUSDT
+     *   +0.132%, SOLUSDT +0.746%), not just in aggregate. Shipped: {@code macdWeight} 0.000 →
+     *   0.714 (the tuning-set combined figure, same "ship the tuning-set value, confirm it holds
+     *   out-of-sample" methodology E8-F3-S1/E8-F4-S1 established).</li>
+     *   <li><b>MA-crossover did not hold up</b> — its barely-positive combined held-out figure
+     *   (+0.038%) is carried entirely by DOGEUSDT (+1.533%); BTCUSDT (-0.274%) and SOLUSDT
+     *   (-0.275%) are both negative. The same "one fixture masks a two-of-three-disagreeing
+     *   result" pattern every other E8-F1 per-symbol axis (RSI, MACD-histogram-magnitude,
+     *   MA-crossover-separation) already found doesn't generalize. Stays at 0.000, no ship.</li>
+     * </ul>
+     * With {@code DEFAULT}, {@link #evaluate}'s totalWeight is now 0.714 (entirely from MACD): a
+     * lone-or-majority vote that includes a bullish/bearish MACD read always clears the weighted-
+     * majority bar (MACD's own weight already equals all of a nonzero totalWeight, so {@code
+     * weightedSum >= totalWeight * WEIGHTED_MAJORITY_FRACTION} holds trivially whenever MACD
+     * voted), newly resolving BULLISH_MAJORITY/BEARISH_MAJORITY where the unweighted table would
+     * call NO_STRONG_SIGNAL — the intended "proportionally more influence" behavior this story
+     * exists to add. A lone RSI-only or MA-only vote (MACD neutral) still resolves NO_STRONG_SIGNAL
+     * (their own weight is still 0). UNANIMOUS is unaffected either way (decided off the raw 3-of-3
+     * count, not weight). See {@code IndicatorExpectancyAlternateHorizonCalibrationTest} for the
+     * run that produced these numbers and docs/CHANGELOG.md's E8-F3-S5 entry for the full printed
+     * report. Not re-validated at a third horizon — a future recalibration story, same open-ended
+     * caveat this Javadoc already carried before E8-F3-S5 closed the first one out.
      */
     public record IndicatorWeights(BigDecimal rsiWeight, BigDecimal macdWeight, BigDecimal maCrossoverWeight) {
 
         public static final IndicatorWeights DEFAULT = new IndicatorWeights(
-                new BigDecimal("0.000"), new BigDecimal("0.000"), new BigDecimal("0.000"));
+                new BigDecimal("0.000"), new BigDecimal("0.714"), new BigDecimal("0.000"));
     }
 
     /**

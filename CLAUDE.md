@@ -86,6 +86,18 @@ shipped no threshold change: unlike E8-F1-S4's RSI sweep, no symbol here
 even produces a confirmable tuning-window winner — see its entry below for
 why BTCUSDT's tuning-window winners reverse on its own held-out tail while
 DOGEUSDT/SOLUSDT's tuning windows never produce a winner to begin with.
+E8-F3-S5, a tenth E8 follow-up (back on F8.3, alongside E8-F3-S1/S2/S3/S4),
+re-attempts `WeightedVoteRuleEngine.IndicatorWeights.DEFAULT`'s calibration
+at longer horizons than E8-F3-S1's original fixed 5-day one, per that
+record's own Javadoc note naming a longer horizon as the one untried lever
+behind its all-zero result. Also done, and this time it did ship a value
+change (unlike E8-F1-S2/S3/S5/S6/E8-F3-S4's own no-ship precedent): MACD's
+weight moved from 0.000 to 0.714, confirmed positive on both the tuning
+set and all three held-out/untouched surfaces independently at a 15-day
+horizon — see its entry below for why MA-crossover's own similarly-
+positive-looking tuning result didn't survive the same held-out check.
+`WeightedVoteRuleEngine` itself stays unwired regardless — this only
+changes the constant, not `SignalService`/`OrderService`'s call path.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -1265,6 +1277,70 @@ DOGEUSDT/SOLUSDT's tuning windows never produce a winner to begin with.
   end-to-end verification was needed beyond the calibration test's own
   run — the same no-production-change precedent E8-F1-S2/S3/S5/S6
   established. `./mvnw verify`: 527 tests, 0 failures, up from 506.
+- E8-F3-S5: re-attempts `WeightedVoteRuleEngine.IndicatorWeights.DEFAULT`'s
+  calibration at a longer horizon, the one untried lever
+  `IndicatorWeights.DEFAULT`'s own Javadoc named after E8-F3-S1's original
+  fixed-5-day/TP5%/SL3% calibration came back all-zero (confirmed
+  out-of-sample by E8-F4-S1). New `WalkForwardScorer.findFirstCrossing`
+  overload takes an explicit `takeProfitPct`/`stopLossPct` instead of
+  always reading `BacktestConfig`'s fixed constants; new
+  `BacktestHarness.runIndicatorExpectancy(candles, horizonDays,
+  takeProfitPct, stopLossPct)` replays per-indicator scoring at that
+  explicit horizon, reusing `SignalRuleEngine.computeVotes` as the same
+  single source of truth for "what counts as a bullish/bearish read" every
+  other per-indicator scoring path already uses — deliberately narrower
+  than `run`'s full walk-forward loop, since the combined rule table's
+  matched-rule/hold-gate/regime bookkeeping isn't horizon-dependent for
+  this purpose. New `backtest.IndicatorExpectancyAlternateHorizonCalibrationTest`
+  swept two candidates against the same full BTCUSDT/DOGEUSDT tuning
+  fixtures the original E8-F3-S1 calibration used: 10 days (2x baseline,
+  TP10%/SL6%) and 15 days (TP15%/SL9%, anchored to `HoldTermRule
+  .STRONG_LOW`'s own `maxDays` rather than picked arbitrarily) — TP/SL
+  scaled proportionally with the horizon rather than held at the 5-day
+  baseline's 5%/3%, since a fixed short TP/SL at a longer horizon would
+  just mean more decision points fall back to horizon-expiry scoring
+  instead of resolving via a genuine crossing. Both candidates found MACD
+  positive (10d: +0.289%, 15d: +0.714% combined after-cost expectancy);
+  15d also found MA-crossover positive (+0.162%); RSI stayed negative at
+  every horizon, never a shipping candidate here. Per the confirmed ship
+  bar, the 15-day winners were checked against the same held-out
+  BTCUSDT/DOGEUSDT tails plus the untouched SOLUSDT fixture E8-F4-S1 used:
+  **MACD held up cleanly** — combined +0.845% after costs, and positive on
+  all three individual surfaces independently (BTCUSDT +1.930%, DOGEUSDT
+  +0.132%, SOLUSDT +0.746%), not just in aggregate. **MA-crossover did
+  not** — its barely-positive combined figure (+0.038%) is carried
+  entirely by DOGEUSDT (+1.533%); BTCUSDT (-0.274%) and SOLUSDT (-0.275%)
+  are both negative, the same "one fixture masks a two-of-three-
+  disagreeing result" pattern every other E8-F1 per-symbol axis already
+  found doesn't generalize. Shipped: `IndicatorWeights.DEFAULT.macdWeight`
+  0.000 → 0.714 (the tuning-set combined figure, same "ship the tuning-set
+  value, confirm it holds out-of-sample" methodology E8-F3-S1/E8-F4-S1
+  established); `rsiWeight`/`maCrossoverWeight` stay 0.000.
+  `WeightedVoteRuleEngine` stays unwired — `SignalService`/`OrderService`
+  still call `SignalRuleEngine.evaluate` directly — but `evaluate`'s own
+  behavior changes for future callers/tests: with MACD now the only
+  nonzero weight, a lone-or-majority vote that includes a bullish/bearish
+  MACD read always clears the weighted-majority bar (MACD's weight already
+  equals all of a nonzero `totalWeight`), newly resolving
+  BULLISH_MAJORITY/BEARISH_MAJORITY where the unweighted table would call
+  NO_STRONG_SIGNAL; a lone RSI-only or MA-only vote still resolves
+  NO_STRONG_SIGNAL (their own weight is still zero); UNANIMOUS is
+  unaffected (decided off the raw 3-of-3 count, not weight). No
+  `RULE_TABLE_VERSION` bump — this constant lives entirely outside
+  `SignalRuleEngine`'s table. New test coverage:
+  `defaultEvaluate_loneMacdVote_promotesToBullishMajority` (proves the new
+  DEFAULT-weight behavior against the unweighted table's own
+  NO_STRONG_SIGNAL on the same input) plus an updated
+  `defaultEvaluate_usesDefaultWeights` docstring (its own case only
+  exercises a lone RSI vote, so it's unaffected by the MACD-weight
+  change — the stale "DEFAULT floors every weight to zero" comment it and
+  `zeroTotalWeight_loneIndicator_staysNoStrongSignal` carried was
+  corrected). Since `WeightedVoteRuleEngine` is never called by
+  `SignalService`/`OrderService`, no live-browser/`SignalServiceTest`
+  end-to-end verification was needed, the same no-production-change
+  precedent E8-F1-S2/S3/S5/S6/E8-F3-S4 established for their own no-ship
+  findings — this story ships a real constant change but zero production
+  call-path change. `./mvnw verify`: 530 tests, 0 failures, up from 527.
 
 ## Build / lint / test
 
@@ -1307,7 +1383,11 @@ DOGEUSDT/SOLUSDT's tuning windows never produce a winner to begin with.
   `WeightedVoteRuleEngine` (E8-F3-S1) is an alternative, deliberately
   **unwired** weighted-vote scoring layer — reuses
   `SignalRuleEngine.computeVotes`/`IndicatorVotes`, not called by
-  `SignalService`/`OrderService`. `IndicatorId` (RSI/MACD/MA_CROSSOVER) keys
+  `SignalService`/`OrderService`. `IndicatorWeights.DEFAULT` (E8-F3-S5)
+  gives MACD a nonzero weight (0.714, derived at a 15-day/TP15%/SL9%
+  horizon after E8-F3-S1's original 5-day calibration came back all-zero);
+  RSI/MA-crossover stay at 0.000 — a real constant change, but the class
+  itself is still unwired. `IndicatorId` (RSI/MACD/MA_CROSSOVER) keys
   per-indicator data for both. `RegimeGatedRuleEngine` (E8-F3-S2) has both a
   both-directions `applyGate` (still **unwired** — the combined BUY+SELL
   mechanism never cleared the wiring bar) and a SELL-only `applySellGate`
