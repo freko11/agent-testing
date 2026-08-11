@@ -213,8 +213,9 @@ acceptance criteria so "done" isn't a judgment call.
 validated, execution-realistic, and monitored" — enhancements identified reviewing
 E2's existing rule engine (`SignalRuleEngine`) and backtest harness
 (`BacktestHarness`, E2-F4-S1/S2) against professional quant practice. Backlog added
-after E2 shipped, same pattern as E4-F3-S3's post-launch addition to E4 — not yet
-started.*
+after E2 shipped, same pattern as E4-F3-S3's post-launch addition to E4 — now
+complete; see CLAUDE.md's Status section for the full set of follow-up stories
+filed and closed after the original 8 below.*
 
 **F8.1 Threshold calibration**
 | ID | Story | Acceptance Criteria | Pts |
