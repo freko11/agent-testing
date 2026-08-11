@@ -108,6 +108,32 @@ import java.math.BigDecimal;
  * remains the one axis still untried. See {@code MacdHistogramMagnitudeCalibrationTest}'s class
  * Javadoc and docs/CHANGELOG.md's E8-F1-S5 entry for the full per-symbol sweep and figures.
  *
+ * <p><b>E8-F1-S6 tried the one axis E8-F1-S5 named as the remaining untried mechanism: {@link
+ * #MA_MIN_SEPARATION_PCT_OF_PRICE}.</b> A probe of {@code MovingAverageCrossoverCalculator}'s new
+ * {@code separationPctOfPrice} against each fixture's own tuning window found real values ranging
+ * up to roughly 13.66% (BTCUSDT), 36.19% (DOGEUSDT), and 23.94% (SOLUSDT), with medians of
+ * 3.20%/6.97%/6.54% respectively — considerably coarser than E8-F1-S5's MACD-histogram medians
+ * (0.54%/1.03%/1.09%), as expected for a 10-vs-30-period SMA gap. {@code
+ * MaCrossoverSeparationCalibrationTest} swept a 0%-10% grid the same independent-per-symbol way
+ * E8-F1-S4/S5 did. Result: no candidate clears the ship bar, for the same asset-dependent reason
+ * as every prior axis. On their own held-out tails, BTCUSDT's BUY side is best around 1.00%
+ * separation (after-cost expectancy improves at all three checkpoints over the no-filter
+ * baseline, comparable n) and DOGEUSDT's is best around 2.00% (same all-three-checkpoints
+ * improvement) — but SOLUSDT's BUY side is best with <i>no</i> filter at all: every nonzero
+ * candidate in the swept range makes it worse at every checkpoint, directly conflicting with what
+ * BTCUSDT/DOGEUSDT each want. Net: nothing ships; {@link #MA_MIN_SEPARATION_PCT_OF_PRICE} stays 0
+ * (today's any-crossover-counts behavior, unchanged), {@link #RULE_TABLE_VERSION} stays v4. A
+ * secondary, out-of-scope finding worth flagging (same pattern as E8-F1-S5's own secondary MACD
+ * finding): a ~2.00% separation threshold improved SELL-side after-cost expectancy uniformly
+ * across all three symbols at every checkpoint on their own held-out tails — but this story was
+ * chartered to fix the BUY-side mismatch specifically, and a SELL-only gain wasn't independently
+ * validated as robust enough to ship on its own here. This closes out the list of axes E8-F1-S2/
+ * S3/S5 named as untried (RSI bounds, MACD magnitude, MA-crossover magnitude); a future fix, if
+ * pursued, would need a mechanism none of E8-F1-S2 through S6 tested (e.g. per-symbol MA/MACD
+ * thresholds, mirroring E8-F1-S4's per-symbol RSI approach, or accepting the fixture-dependence as
+ * inherent at a daily-candle horizon). See {@code MaCrossoverSeparationCalibrationTest}'s class
+ * Javadoc and docs/CHANGELOG.md's E8-F1-S6 entry for the full per-symbol sweep and figures.
+ *
  * <p><b>E8-F3-S3 wired in {@link RegimeGatedRuleEngine#applySellGate}</b> — not this class's own
  * threshold axes, but a real, evidence-backed change to what a matched rule can resolve to. E8-F4-S2
  * found the regime filter's out-of-sample SELL-side evidence clean and uniform across all three
@@ -138,19 +164,26 @@ public final class SignalRuleEngine {
      * passes) until a calibration ships a nonzero value. */
     public static final BigDecimal MACD_MIN_HISTOGRAM_MAGNITUDE_PCT = new BigDecimal("0");
 
+    /** E8-F1-S6: minimum {@code MovingAverageResult#separationPctOfPrice} for an MA crossover to
+     * count as a bullish/bearish vote, mirroring {@link #MACD_MIN_HISTOGRAM_MAGNITUDE_PCT}'s gate
+     * on the MACD vote. Default 0 reproduces the pre-existing any-crossover-counts behavior exactly
+     * (a magnitude &gt;= 0 always passes) until a calibration ships a nonzero value. */
+    public static final BigDecimal MA_MIN_SEPARATION_PCT_OF_PRICE = new BigDecimal("0");
+
     /**
-     * The four calibration-candidate thresholds bundled together (E8-F1-S1), so
+     * The calibration-candidate thresholds bundled together (E8-F1-S1, extended by E8-F1-S5/S6), so
      * {@code ThresholdCalibrationTest} can sweep candidate values through {@link #evaluate}
      * without reflectively mutating these production {@code static final} constants.
      * {@link #DEFAULT} is what every production caller uses via the 5-arg {@link #evaluate}
      * overload.
      */
     public record RuleThresholds(BigDecimal rsiOversold, BigDecimal rsiOverbought, BigDecimal volatilityExtreme,
-                                  BigDecimal volumeDriedUp, BigDecimal macdMinHistogramMagnitudePct) {
+                                  BigDecimal volumeDriedUp, BigDecimal macdMinHistogramMagnitudePct,
+                                  BigDecimal maMinSeparationPctOfPrice) {
 
         public static final RuleThresholds DEFAULT = new RuleThresholds(RSI_OVERSOLD_THRESHOLD,
                 RSI_OVERBOUGHT_THRESHOLD, VOLATILITY_EXTREME_THRESHOLD, VOLUME_DRIED_UP_THRESHOLD,
-                MACD_MIN_HISTOGRAM_MAGNITUDE_PCT);
+                MACD_MIN_HISTOGRAM_MAGNITUDE_PCT, MA_MIN_SEPARATION_PCT_OF_PRICE);
     }
 
     /**
@@ -178,8 +211,9 @@ public final class SignalRuleEngine {
         boolean macdClearsMagnitude = macd.histogramPctOfPrice().compareTo(thresholds.macdMinHistogramMagnitudePct()) >= 0;
         boolean macdBullish = macd.histogram().signum() > 0 && macdClearsMagnitude;
         boolean macdBearish = macd.histogram().signum() < 0 && macdClearsMagnitude;
-        boolean maBullish = movingAverage.relation() == MovingAverageRelation.SHORT_ABOVE_LONG;
-        boolean maBearish = movingAverage.relation() == MovingAverageRelation.SHORT_BELOW_LONG;
+        boolean maClearsMagnitude = movingAverage.separationPctOfPrice().compareTo(thresholds.maMinSeparationPctOfPrice()) >= 0;
+        boolean maBullish = movingAverage.relation() == MovingAverageRelation.SHORT_ABOVE_LONG && maClearsMagnitude;
+        boolean maBearish = movingAverage.relation() == MovingAverageRelation.SHORT_BELOW_LONG && maClearsMagnitude;
         return new IndicatorVotes(rsiBullish, rsiBearish, macdBullish, macdBearish, maBullish, maBearish);
     }
 

@@ -146,7 +146,8 @@ class PerSymbolRsiOverboughtCalibrationTest {
 
     private RuleThresholds thresholdsFor(BigDecimal overbought) {
         return new RuleThresholds(SignalRuleEngine.RSI_OVERSOLD_THRESHOLD, overbought,
-                DEFAULT.volatilityExtreme(), DEFAULT.volumeDriedUp(), DEFAULT.macdMinHistogramMagnitudePct());
+                DEFAULT.volatilityExtreme(), DEFAULT.volumeDriedUp(), DEFAULT.macdMinHistogramMagnitudePct(),
+                DEFAULT.maMinSeparationPctOfPrice());
     }
 
     private void runAndPrint(String symbolLabel, List<Candle> candles, String thresholdLabel, RuleThresholds thresholds) {

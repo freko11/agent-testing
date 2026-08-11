@@ -45,7 +45,12 @@ public final class MovingAverageCrossoverCalculator {
             relation = MovingAverageRelation.EQUAL;
         }
 
-        return new MovingAverageResult(shortPeriod, shortMa, longPeriod, longMa, relation);
+        BigDecimal lastClose = candles.get(candles.size() - 1).close();
+        BigDecimal separationPctOfPrice = shortMa.subtract(longMa).abs()
+                .divide(lastClose, MC).multiply(BigDecimal.valueOf(100))
+                .setScale(4, RoundingMode.HALF_UP);
+
+        return new MovingAverageResult(shortPeriod, shortMa, longPeriod, longMa, relation, separationPctOfPrice);
     }
 
     /** Simple moving average of {@code valueOf(candle)} over the trailing {@code period} candles. */

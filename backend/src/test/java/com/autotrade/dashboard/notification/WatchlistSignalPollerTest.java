@@ -79,7 +79,7 @@ class WatchlistSignalPollerTest {
                 new BigDecimal("100"), Broker.BINANCE);
         MacdResult macd = new MacdResult(new BigDecimal("1"), new BigDecimal("1"), new BigDecimal("0"), new BigDecimal("0"));
         MovingAverageResult ma = new MovingAverageResult(10, new BigDecimal("100"), 30, new BigDecimal("100"),
-                MovingAverageRelation.SHORT_ABOVE_LONG);
+                MovingAverageRelation.SHORT_ABOVE_LONG, BigDecimal.ZERO);
         IndicatorResponse indicators = new IndicatorResponse(TickerSummary.from(ticker), Broker.BINANCE,
                 Instant.parse("2026-07-29T00:00:00Z"), new BigDecimal("100"), new BigDecimal("50"), macd, ma,
                 new BigDecimal("2"), new BigDecimal("1000"), new BigDecimal("1"));

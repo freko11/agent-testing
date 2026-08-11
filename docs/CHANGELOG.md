@@ -6448,3 +6448,186 @@ No frontend changes: `SignalResponse`'s shape is unchanged, only which
 `SignalRuleId` a crypto SELL call can resolve to for inputs that already
 existed. No schema migration. `graphify update .` run after
 implementation, per this repo's CLAUDE.md graphify rule.
+
+## E8-F1-S6 — MA-crossover-magnitude calibration axis (no ship)
+
+**Why this story exists.** E8-F1-S5's own class Javadoc named MA-crossover
+thresholding as "the one axis still untried" after RSI bounds (E8-F1-S2/S3)
+and MACD histogram magnitude (E8-F1-S5) each failed to fix E8-F4-S1's
+BUY-side out-of-sample mismatch uniformly across all three symbols. This
+story tries that last named axis, mirroring E8-F1-S5's methodology almost
+line for line — same per-symbol tune/held-out design, same all-surfaces
+ship bar, same "ship the mechanism, not necessarily a value" fallback.
+
+**New `MovingAverageResult.separationPctOfPrice`.**
+`MovingAverageCrossoverCalculator`'s short/long SMA gap is in raw price
+units — dollars for BTCUSDT, fractions of a cent for DOGEUSDT — so a single
+global raw-magnitude threshold would be meaningless across symbols of very
+different price scales, the identical problem E8-F1-S5 solved for the MACD
+histogram. Normalized the same way, against the candle series' last close
+(`|shortMa - longMa| / lastClose * 100`, scale 4 HALF_UP) — deliberately
+against `lastClose`, not `longMa`, for direct consistency with
+`MacdResult.histogramPctOfPrice`'s own normalization basis, per the
+pre-confirmed design decision. Computed inline in
+`MovingAverageCrossoverCalculator.calculate` as a new 6th
+`MovingAverageResult` field, the same "add a field to the indicator
+result, don't thread a price parameter through every rule-engine call
+site" pattern E8-F1-S5 established for `MacdResult`.
+
+**New `SignalRuleEngine.RuleThresholds.maMinSeparationPctOfPrice`**
+(default `0`, via a new `MA_MIN_SEPARATION_PCT_OF_PRICE` constant).
+`computeVotes`'s MA-crossover read changed from a bare
+`relation() == SHORT_ABOVE_LONG`/`SHORT_BELOW_LONG` check to additionally
+requiring `separationPctOfPrice >= maMinSeparationPctOfPrice` — with the
+default `0`, this is unconditionally true (a percentage magnitude is
+always `>= 0`), so production behavior is byte-identical to before this
+story until a nonzero value ships.
+
+**Every existing `MovingAverageResult`/`RuleThresholds` construction site
+updated for the new trailing argument** — 23 call sites across 15 files
+(test fixtures in `SignalServiceTest`, `SignalRuleEngineTest`,
+`SignalControllerTest`, `OrderServiceTest`, `WatchlistSignalPollerTest`,
+`IndicatorControllerTest`, `WeightedVoteRuleEngineTest`, the calibration
+tests `ThresholdCalibrationTest`, `RsiOversoldRecalibrationTest`,
+`RsiOverboughtRecalibrationTest`, `PerSymbolRsiOverboughtCalibrationTest`,
+`OutOfSampleValidationTest`, `MacdHistogramMagnitudeCalibrationTest`, plus
+the two production sites in `MovingAverageCrossoverCalculator.java`/
+`SignalRuleEngine.java`) — passing `BigDecimal.ZERO` for test fixtures,
+always behavior-preserving under the default `>= 0` gate. **One real gap
+found the hard way**: an initial `grep -rn "new MovingAverageResult(\|new
+RuleThresholds("` sweep found 22 of the 23 sites — it missed
+`PerSymbolRuleThresholds.java`'s single `RuleThresholds` construction,
+written as the fully-qualified `new SignalRuleEngine.RuleThresholds(...)`
+(E8-F1-S4's own file, which lives outside the `SignalRuleEngine` class
+itself and so doesn't get the benefit of the unqualified inner-class name).
+Caught immediately by `./mvnw compile` failing with a constructor-arity
+mismatch before any test was run — exactly the kind of gap a compile step
+is supposed to catch, not a silent behavior change, but worth noting for
+future stories touching this same record: grep for both the plain and
+fully-qualified forms up front.
+
+**Probe run, sized the same way E8-F1-S5's own MACD probe was.** A
+throwaway `@Test` (written, run once via `./mvnw test
+-Dtest=MaSeparationProbeTest`, deleted before committing — never part of
+the shipped suite) computed real `separationPctOfPrice` values across each
+of BTCUSDT/DOGEUSDT/SOLUSDT's own `FixtureSplits` tuning windows (671
+decision points each, at the default 10/30-period SMA):
+
+| Symbol | min | median | max |
+|---|---|---|---|
+| BTCUSDT | 0.0050% | 3.2013% | 13.6597% |
+| DOGEUSDT | 0.0008% | 6.9712% | 36.1889% |
+| SOLUSDT | 0.0044% | 6.5372% | 23.9405% |
+
+Considerably coarser than E8-F1-S5's MACD-histogram medians
+(0.54%/1.03%/1.09%) — expected, since a 10-vs-30-period SMA gap is a
+coarser/slower signal than a 12/26/9 MACD histogram at the same daily-candle
+horizon. Sized `CANDIDATE_SEPARATION_VALUES = {0.00, 1.00, 2.00, 3.00,
+4.00, 5.00, 7.00, 10.00}` (percent) from this: 0.00 is the current-default
+no-filter baseline, and the grid spans up through comfortably past every
+symbol's own median (10.00 is roughly 1.4x DOGEUSDT's median, the largest
+of the three).
+
+**New `backtest.MaCrossoverSeparationCalibrationTest`**, `src/test/java`-
+only, structured identically to `MacdHistogramMagnitudeCalibrationTest`
+(same `SymbolFixture` record, same `sweepEachSymbolOnItsOwnTuningWindow`/
+`validateEachSymbolOnItsOwnHeldOutTail` test methods, same
+`assertStructurallySane`/`assertExpectancySignsAreSane` structural-only
+assertions, same compact per-checkpoint printer) — reusing `FixtureSplits`'
+existing 70/30 split verbatim, no new fixture.
+
+**Finding: no candidate clears the all-surfaces ship bar.** On the
+held-out tails (BUY side, `expectancyPctAfterCosts()` at min/mid/max):
+
+- **BTCUSDT** (`0.00%` baseline: -0.425%/-0.314%/-0.427%, n=80/78/78): best
+  at `1.00%` (-0.202%/-0.139%/-0.316%, n=64/62/62) — beats baseline at
+  every checkpoint, comparable n. Degrades steadily past that (`2.00%`:
+  -0.448%/-0.761%/-0.982%, n=50/48/48; worse than baseline by `3.00%`).
+- **DOGEUSDT** (`0.00%` baseline: +0.205%/+0.945%/+1.226%, n=47): `1.00%`
+  fails at MIN (+0.179% vs. baseline's +0.205%) despite MID/MAX gains;
+  best at `2.00%` (+0.596%/+1.416%/+1.648%, n=33) — beats baseline at
+  every checkpoint. Degrades past that (`3.00%`: +0.365%/+0.917%/+1.108%,
+  still positive but below the `2.00%` peak).
+  - **SOLUSDT** (`0.00%` baseline: -0.447%/-0.489%/-0.522%, n=69): *every*
+  nonzero candidate makes it worse at every checkpoint, monotonically —
+  `1.00%`: -0.683%/-0.699%/-0.736% (n=62); `2.00%`: -0.976%/-1.295%/-1.282%
+  (n=45); down to `7.00%`: -1.946%/-2.867%/-2.834% (n=5). SOLUSDT's BUY
+  side is unambiguously best with no MA-crossover magnitude filter at all.
+
+No single value in the swept range beats the `0.00%` baseline at every
+checkpoint on all three symbols' own held-out tails simultaneously —
+BTCUSDT wants `~1.00%`, DOGEUSDT wants `~2.00%`, SOLUSDT wants `0.00%`
+strictly. The same asset-dependent, no-single-value-wins-everywhere
+conflict every prior E8-F1 axis hit (`rsiOverbought` in E8-F1-S3, MACD
+magnitude in E8-F1-S5), now confirmed on a fourth, structurally distinct
+axis. Four for four: this backlog thread has now tried every mechanism it
+named as a candidate fix (both RSI bounds, MACD magnitude, MA-crossover
+magnitude) and hit the identical shape of result each time, which is
+itself accumulating evidence that the BUY-side mismatch's root cause is
+per-asset behavioral divergence rather than a mistunable global parameter
+on any single-value axis.
+
+**Secondary finding, flagged but not acted on** — same pattern as
+E8-F1-S5's own secondary MACD finding. A `~2.00%` separation threshold
+improved SELL-side after-cost expectancy uniformly across all three
+symbols at every checkpoint on their own held-out tails: BTCUSDT SELL
+`2.00%` gives +1.046%/+1.191%/+1.213% vs. `0.00%` baseline
++0.736%/+0.963%/+0.999%; DOGEUSDT SELL `2.00%` gives
++0.504%/+1.265%/+1.612% vs. baseline +0.230%/+1.042%/+1.206%; SOLUSDT SELL
+`2.00%` gives +1.002%/+1.246%/+1.506% vs. baseline +0.357%/+0.647%/+0.844%.
+This story was chartered to fix the BUY-side mismatch specifically, per
+E8-F1-S5's own framing, and a SELL-only gain wasn't independently
+validated as robust enough (own ship bar, own held-out confirmation) to
+ship unilaterally here — left as a flagged finding for a future,
+SELL-side-scoped story, the same treatment E8-F1-S5 gave its own
+equivalent MACD finding.
+
+**Decision: no ship.** `MA_MIN_SEPARATION_PCT_OF_PRICE` stays `0`,
+`RULE_TABLE_VERSION` stays v4 — consistent with E8-F1-S2/S3/S5's
+precedent of shipping the investigation's infrastructure (the new
+field/mechanism) without shipping a nonzero value, since the field itself
+was the AC's deliverable regardless of calibration outcome.
+`SignalRuleEngine`'s class Javadoc gained a new paragraph (inserted after
+E8-F1-S5's, before E8-F3-S3's, preserving chronological order) recording
+this closed finding. This closes out the full list of axes E8-F1-S2/S3/S5
+named as untried — both RSI bounds, MACD magnitude, and now MA-crossover
+magnitude have all been tried and all hit the same asset-dependent wall.
+A future fix, if pursued, would need a mechanism none of E8-F1-S2 through
+S6 tested (e.g. per-symbol MA/MACD thresholds mirroring E8-F1-S4's
+per-symbol RSI approach, or accepting the fixture-dependence as inherent
+to technical-indicator-based signals at a daily-candle horizon).
+
+**No live-browser verification fallback needed.** Docker wasn't available
+in this session (same recurring blocker prior E8/E6 stories hit), but
+unlike E8-F1-S4/E8-F3-S3 (which shipped real behavior changes and so added
+real-`SignalService` `SignalServiceTest` cases as a live-verification
+stand-in), this story ships no production behavior change at all — the
+new field stays at its inert `0` default, byte-identical to pre-story
+behavior. The calibration test's own `./mvnw test` run against real
+fixture data is the evidence under review, the same no-extra-verification
+precedent E8-F1-S2/S3/S5 already established for their own no-ship
+outcomes.
+
+**`simplify` skill run before commit**: no findings — the diff follows
+this codebase's established pattern exactly (a new normalized indicator
+field computed inline, a new gated `RuleThresholds` field, a new
+calibration test structured identically to its immediate predecessor); no
+premature abstraction introduced, no dead code left behind (the probe test
+was deleted, not commented out or left unused).
+
+**`./mvnw verify`: 506 tests, 0 failures/errors, `BUILD SUCCESS`** (up from
+504 — 2 new: `MaCrossoverSeparationCalibrationTest`'s
+`sweepEachSymbolOnItsOwnTuningWindow`/`validateEachSymbolOnItsOwnHeldOutTail`).
+
+Backend only: `src/main/java` for `MovingAverageResult`
+(`separationPctOfPrice` field), `MovingAverageCrossoverCalculator`
+(computation), `SignalRuleEngine` (`maMinSeparationPctOfPrice` field +
+gated `computeVotes` logic + Javadoc), and `PerSymbolRuleThresholds` (the
+one production `RuleThresholds` construction site besides `DEFAULT`
+itself); `src/test/java` for the new `MaCrossoverSeparationCalibrationTest`
+plus every existing test file that constructed a `MovingAverageResult`/
+`RuleThresholds` directly (fixture-only updates, zero behavior change). No
+`OrderService`/`PlaceOrderRequest`/`WeightedVoteRuleEngine`/
+`RegimeGatedRuleEngine` changes, no schema migration, no frontend changes.
+`graphify update .` run after implementation, per this repo's CLAUDE.md
+graphify rule.

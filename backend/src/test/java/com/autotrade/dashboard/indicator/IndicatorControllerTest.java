@@ -42,7 +42,7 @@ class IndicatorControllerTest {
         MacdResult macd = new MacdResult(new BigDecimal("2.11694333"), new BigDecimal("2.13097767"),
                 new BigDecimal("-0.01403434"), new BigDecimal("0.0124"));
         MovingAverageResult ma = new MovingAverageResult(10, new BigDecimal("111.92000000"), 30,
-                new BigDecimal("108.94000000"), MovingAverageRelation.SHORT_ABOVE_LONG);
+                new BigDecimal("108.94000000"), MovingAverageRelation.SHORT_ABOVE_LONG, BigDecimal.ZERO);
         IndicatorResponse response = IndicatorResponse.from(ticker, Broker.ALPACA,
                 new com.autotrade.dashboard.marketdata.Candle(Instant.parse("2026-02-09T00:00:00Z"),
                         new BigDecimal("113.10"), new BigDecimal("113.10"), new BigDecimal("113.10"),

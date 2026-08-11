@@ -14,26 +14,26 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * E8-F1-S5: a BUY-side calibration attempt on a non-RSI axis, following up on E8-F1-S2/S3's
- * finding that neither RSI bound, adjusted alone, fixes E8-F4-S1's still-open BUY-side
- * out-of-sample mismatch. Those two stories named MACD/MA-crossover thresholds as the one
- * untried mechanism short of E8-F1-S4's per-symbol RSI override; this story tries MACD only —
- * MA-crossover thresholding is an explicit out-of-scope follow-up, only warranted if this one
- * doesn't resolve the mismatch, mirroring the rsiOversold-then-rsiOverbought split across
- * E8-F1-S2/S3.
+ * E8-F1-S6: a BUY-side calibration attempt on the one axis E8-F1-S5 named as the remaining
+ * untried mechanism short of E8-F1-S4's per-symbol RSI override — MA-crossover thresholding.
+ * E8-F1-S2/S3 (RSI bounds) and E8-F1-S5 (MACD histogram magnitude) each failed to fix the
+ * BUY-side out-of-sample mismatch E8-F4-S1 flagged, uniformly across all three symbols; this
+ * story tries the last named axis.
  *
- * <p>{@link SignalRuleEngine.RuleThresholds#macdMinHistogramMagnitudePct} is new production
- * surface this story adds (default 0, reproducing today's any-nonzero-crossover behavior
- * exactly): a probe run of {@code MacdCalculator} against all three fixtures'
- * {@link FixtureSplits#SPLIT_INDEX}-candle tuning windows found real {@code histogramPctOfPrice}
- * values ranging from a few thousandths of a percent up to roughly 2.6% (BTCUSDT), 6.0%
- * (DOGEUSDT), and 4.9% (SOLUSDT) at the extremes, with medians of 0.54%/1.03%/1.09% respectively
- * — informing {@link #CANDIDATE_MAGNITUDE_VALUES} below, which spans from "no filter" up through
- * comfortably past each symbol's own median.
+ * <p>{@link SignalRuleEngine.RuleThresholds#maMinSeparationPctOfPrice} is new production surface
+ * this story adds (default 0, reproducing today's any-crossover-counts behavior exactly): a probe
+ * run of {@code MovingAverageCrossoverCalculator} against all three fixtures'
+ * {@link FixtureSplits#SPLIT_INDEX}-candle tuning windows found real {@code separationPctOfPrice}
+ * values ranging from a few thousandths of a percent up to roughly 13.66% (BTCUSDT), 36.19%
+ * (DOGEUSDT), and 23.94% (SOLUSDT) at the extremes, with medians of 3.20%/6.97%/6.54%
+ * respectively — considerably larger than E8-F1-S5's MACD-histogram medians (0.54%/1.03%/1.09%),
+ * consistent with a 10-vs-30-period SMA gap being a coarser signal than a MACD histogram at the
+ * same horizon. This informs {@link #CANDIDATE_SEPARATION_VALUES} below, which spans from "no
+ * filter" up through comfortably past each symbol's own median.
  *
  * <p>Same independent-per-symbol tune/held-out design {@code PerSymbolRsiOverboughtCalibrationTest}
- * (E8-F1-S4) established, reusing its exact {@link FixtureSplits} 70/30 split rather than a new
- * one:
+ * (E8-F1-S4) and {@code MacdHistogramMagnitudeCalibrationTest} (E8-F1-S5) established, reusing
+ * {@link FixtureSplits}'s exact 70/30 split rather than a new one:
  * <ol>
  *   <li>{@link #sweepEachSymbolOnItsOwnTuningWindow()} sweeps the candidate grid against each of
  *   BTCUSDT/DOGEUSDT/SOLUSDT's own first {@link FixtureSplits#SPLIT_INDEX} candles only.</li>
@@ -41,28 +41,28 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   against that same symbol's own held-out tail (candles 700-1000).</li>
  * </ol>
  *
- * <p><b>Ship bar:</b> unlike E8-F1-S4 (which shipped independent per-symbol overrides via {@code
- * PerSymbolRuleThresholds}), this story's AC adds a single new field to the global {@code
- * RuleThresholds} record, not a per-symbol mechanism — so the bar is the same all-surfaces bar
- * {@code RsiOverboughtRecalibrationTest} (E8-F1-S3) used: a candidate only ships if its BUY-side
- * ({@code overallBuy().expectancyPctAfterCosts()}) beats the {@code magnitude=0} baseline at
- * every one of MIN/MID/MAX, with a comparably large scored {@code n}, on <b>all three</b>
- * symbols' own held-out tails simultaneously. The SELL side is checked too (same as every prior
- * E8-F1 recalibration test) — a BUY-side fix that quietly breaks SELL would not be a net
- * improvement. See docs/CHANGELOG.md's E8-F1-S5 entry for the actual result and decision.
+ * <p><b>Ship bar:</b> the same all-surfaces bar {@code RsiOverboughtRecalibrationTest} (E8-F1-S3)
+ * and {@code MacdHistogramMagnitudeCalibrationTest} (E8-F1-S5) used — a candidate only ships if
+ * its BUY-side ({@code overallBuy().expectancyPctAfterCosts()}) beats the {@code magnitude=0}
+ * baseline at every one of MIN/MID/MAX, with a comparably large scored {@code n}, on <b>all
+ * three</b> symbols' own held-out tails simultaneously. The SELL side is checked too (same as
+ * every prior E8-F1 recalibration test) — a BUY-side fix that quietly breaks SELL would not be a
+ * net improvement, and (per E8-F1-S5's own precedent) a SELL-only gain is noted but not acted on,
+ * since this story is chartered for the BUY-side mismatch specifically. See docs/CHANGELOG.md's
+ * E8-F1-S6 entry for the actual result and decision.
  *
  * <p>Assertions here are structural only, mirroring every other E8 calibration test — the printed
  * report is the evidence under review. Read the printed output (rerun via
- * {@code ./mvnw test -Dtest=MacdHistogramMagnitudeCalibrationTest}) for the actual figures.
+ * {@code ./mvnw test -Dtest=MaCrossoverSeparationCalibrationTest}) for the actual figures.
  */
-class MacdHistogramMagnitudeCalibrationTest {
+class MaCrossoverSeparationCalibrationTest {
 
-    /** Spans "no filter" (current production behavior) up through roughly one standard swing past
-     * each symbol's own tuning-window median (0.54%/1.03%/1.09%) established by this story's probe
-     * run — see class Javadoc. */
-    private static final List<BigDecimal> CANDIDATE_MAGNITUDE_VALUES = List.of(
-            new BigDecimal("0.00"), new BigDecimal("0.10"), new BigDecimal("0.25"), new BigDecimal("0.50"),
-            new BigDecimal("0.75"), new BigDecimal("1.00"), new BigDecimal("1.50"), new BigDecimal("2.00"));
+    /** Spans "no filter" (current production behavior) up through comfortably past each symbol's
+     * own tuning-window median (3.20%/6.97%/6.54%) established by this story's probe run — see
+     * class Javadoc. */
+    private static final List<BigDecimal> CANDIDATE_SEPARATION_VALUES = List.of(
+            new BigDecimal("0.00"), new BigDecimal("1.00"), new BigDecimal("2.00"), new BigDecimal("3.00"),
+            new BigDecimal("4.00"), new BigDecimal("5.00"), new BigDecimal("7.00"), new BigDecimal("10.00"));
 
     private static final RuleThresholds DEFAULT = RuleThresholds.DEFAULT;
 
@@ -80,15 +80,15 @@ class MacdHistogramMagnitudeCalibrationTest {
     @Test
     void sweepEachSymbolOnItsOwnTuningWindow() {
         System.out.println();
-        System.out.println("########## E8-F1-S5: macdMinHistogramMagnitudePct swept per symbol, TUNING WINDOW ONLY (first "
+        System.out.println("########## E8-F1-S6: maMinSeparationPctOfPrice swept per symbol, TUNING WINDOW ONLY (first "
                 + FixtureSplits.SPLIT_INDEX + " candles each) ##########");
 
         for (SymbolFixture symbol : SYMBOLS) {
             System.out.println();
             System.out.println("---- " + symbol.name() + " [tuning] ----");
-            for (BigDecimal magnitude : CANDIDATE_MAGNITUDE_VALUES) {
-                RuleThresholds candidate = thresholdsFor(magnitude);
-                runAndPrint(symbol.name() + " [tuning]", symbol.tuning(), candidateLabel(magnitude), candidate);
+            for (BigDecimal separation : CANDIDATE_SEPARATION_VALUES) {
+                RuleThresholds candidate = thresholdsFor(separation);
+                runAndPrint(symbol.name() + " [tuning]", symbol.tuning(), candidateLabel(separation), candidate);
             }
         }
     }
@@ -96,26 +96,26 @@ class MacdHistogramMagnitudeCalibrationTest {
     @Test
     void validateEachSymbolOnItsOwnHeldOutTail() {
         System.out.println();
-        System.out.println("########## E8-F1-S5: every macdMinHistogramMagnitudePct candidate vs. that SAME symbol's own held-out tail ##########");
+        System.out.println("########## E8-F1-S6: every maMinSeparationPctOfPrice candidate vs. that SAME symbol's own held-out tail ##########");
 
         for (SymbolFixture symbol : SYMBOLS) {
             System.out.println();
             System.out.println("---- " + symbol.name() + " [held-out tail] ----");
-            for (BigDecimal magnitude : CANDIDATE_MAGNITUDE_VALUES) {
-                RuleThresholds candidate = thresholdsFor(magnitude);
-                runAndPrint(symbol.name() + " [held-out tail]", symbol.heldOut(), candidateLabel(magnitude), candidate);
+            for (BigDecimal separation : CANDIDATE_SEPARATION_VALUES) {
+                RuleThresholds candidate = thresholdsFor(separation);
+                runAndPrint(symbol.name() + " [held-out tail]", symbol.heldOut(), candidateLabel(separation), candidate);
             }
         }
     }
 
-    private String candidateLabel(BigDecimal magnitude) {
-        String suffix = magnitude.compareTo(BigDecimal.ZERO) == 0 ? " (current default, no filter)" : "";
-        return "macd>=" + magnitude + "%" + suffix;
+    private String candidateLabel(BigDecimal separation) {
+        String suffix = separation.compareTo(BigDecimal.ZERO) == 0 ? " (current default, no filter)" : "";
+        return "ma>=" + separation + "%" + suffix;
     }
 
-    private RuleThresholds thresholdsFor(BigDecimal magnitude) {
+    private RuleThresholds thresholdsFor(BigDecimal separation) {
         return new RuleThresholds(DEFAULT.rsiOversold(), DEFAULT.rsiOverbought(), DEFAULT.volatilityExtreme(),
-                DEFAULT.volumeDriedUp(), magnitude, DEFAULT.maMinSeparationPctOfPrice());
+                DEFAULT.volumeDriedUp(), DEFAULT.macdMinHistogramMagnitudePct(), separation);
     }
 
     private void runAndPrint(String symbolLabel, List<Candle> candles, String thresholdLabel, RuleThresholds thresholds) {

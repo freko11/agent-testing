@@ -132,7 +132,7 @@ class OrderServiceTest {
         IndicatorSnapshot snapshot = new IndicatorSnapshot(ticker, Instant.parse("2026-07-29T00:00:00Z"), price, Broker.BINANCE);
         MacdResult macd = new MacdResult(new BigDecimal("2.0"), new BigDecimal("1.0"), new BigDecimal("1.0"), new BigDecimal("0"));
         MovingAverageResult ma = new MovingAverageResult(10, new BigDecimal("111.0"), 30,
-                new BigDecimal("108.0"), MovingAverageRelation.SHORT_ABOVE_LONG);
+                new BigDecimal("108.0"), MovingAverageRelation.SHORT_ABOVE_LONG, BigDecimal.ZERO);
         IndicatorResponse indicators = new IndicatorResponse(TickerSummary.from(ticker), Broker.BINANCE,
                 Instant.parse("2026-07-29T00:00:00Z"), price, new BigDecimal("25"), macd, ma,
                 new BigDecimal("2.0"), new BigDecimal("1000000.0000"), new BigDecimal("1.0000"));
@@ -406,7 +406,7 @@ class OrderServiceTest {
                 new BigDecimal("200"), Broker.ALPACA);
         MacdResult macd = new MacdResult(new BigDecimal("-2.0"), new BigDecimal("-1.0"), new BigDecimal("-1.0"), new BigDecimal("0"));
         MovingAverageResult ma = new MovingAverageResult(10, new BigDecimal("108.0"), 30,
-                new BigDecimal("111.0"), MovingAverageRelation.SHORT_BELOW_LONG);
+                new BigDecimal("111.0"), MovingAverageRelation.SHORT_BELOW_LONG, BigDecimal.ZERO);
         IndicatorResponse indicators = new IndicatorResponse(TickerSummary.from(ticker), Broker.ALPACA,
                 Instant.parse("2026-07-29T00:00:00Z"), new BigDecimal("200"), new BigDecimal("75"), macd, ma,
                 new BigDecimal("2.0"), new BigDecimal("1000000.0000"), new BigDecimal("1.0000"));

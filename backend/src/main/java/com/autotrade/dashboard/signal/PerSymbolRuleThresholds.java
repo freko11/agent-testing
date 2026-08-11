@@ -46,7 +46,8 @@ public final class PerSymbolRuleThresholds {
                     new BigDecimal("70"),
                     SignalRuleEngine.RuleThresholds.DEFAULT.volatilityExtreme(),
                     SignalRuleEngine.RuleThresholds.DEFAULT.volumeDriedUp(),
-                    SignalRuleEngine.RuleThresholds.DEFAULT.macdMinHistogramMagnitudePct()));
+                    SignalRuleEngine.RuleThresholds.DEFAULT.macdMinHistogramMagnitudePct(),
+                    SignalRuleEngine.RuleThresholds.DEFAULT.maMinSeparationPctOfPrice()));
 
     private PerSymbolRuleThresholds() {
     }

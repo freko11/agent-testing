@@ -166,6 +166,6 @@ class SignalRuleEngineTest {
     }
 
     private static MovingAverageResult ma(MovingAverageRelation relation) {
-        return new MovingAverageResult(10, new BigDecimal("100"), 30, new BigDecimal("100"), relation);
+        return new MovingAverageResult(10, new BigDecimal("100"), 30, new BigDecimal("100"), relation, BigDecimal.ZERO);
     }
 }

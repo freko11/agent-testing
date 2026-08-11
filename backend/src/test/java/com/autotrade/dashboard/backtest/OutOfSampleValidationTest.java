@@ -83,7 +83,7 @@ class OutOfSampleValidationTest {
     private static final RuleThresholds CURRENT_V2 = RuleThresholds.DEFAULT; // 25/75, shipped by E8-F1-S1
     private static final RuleThresholds PRE_TUNING_V1 = new RuleThresholds(
             new BigDecimal("30"), new BigDecimal("70"), CURRENT_V2.volatilityExtreme(), CURRENT_V2.volumeDriedUp(),
-            CURRENT_V2.macdMinHistogramMagnitudePct());
+            CURRENT_V2.macdMinHistogramMagnitudePct(), CURRENT_V2.maMinSeparationPctOfPrice());
 
     private static final List<SignalRuleId> DIRECTIONAL_RULES = List.of(SignalRuleId.BULLISH_UNANIMOUS,
             SignalRuleId.BULLISH_MAJORITY, SignalRuleId.BEARISH_UNANIMOUS, SignalRuleId.BEARISH_MAJORITY);

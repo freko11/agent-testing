@@ -65,7 +65,13 @@ out-of-sample evidence was clean and uniform across all three symbols even
 though the combined BUY+SELL engine stayed unwired. Also done; unlike
 E8-F1-S4/S5 it did ship a real behavior change (`RULE_TABLE_VERSION`
 v3→v4) — see its entry below for the crypto-only scoping decision and the
-recomputed `LiveDriftBaseline` SELL figures.
+recomputed `LiveDriftBaseline` SELL figures. E8-F1-S6, an eighth E8
+follow-up (back on F8.1, alongside E8-F1-S2 through S5), tries the last
+axis those stories left untried — MA-crossover magnitude thresholding —
+and is also done; like S2/S3/S5 it shipped no threshold change, see its
+entry below for the per-symbol sweep and why SOLUSDT's own held-out tail
+preferred no filter at all while BTCUSDT/DOGEUSDT each wanted a nonzero
+one, the same asset-dependent conflict every prior E8-F1 axis hit.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -1099,6 +1105,66 @@ recomputed `LiveDriftBaseline` SELL figures.
   504 tests, 0 failures, up from 493 — no frontend changes (`SignalResponse`'s
   shape is unchanged — only which `SignalRuleId` a crypto SELL call can
   resolve to, for inputs that already existed).
+- E8-F1-S6: MA-crossover-magnitude calibration axis, the last mechanism
+  E8-F1-S5 named as untried after RSI bounds (E8-F1-S2/S3) and MACD
+  histogram magnitude (E8-F1-S5) each failed to fix the BUY-side
+  out-of-sample mismatch uniformly across all three symbols.
+  `MovingAverageResult` gains a new `separationPctOfPrice` field
+  (`|shortMa - longMa| / lastClose * 100`, scale-4 HALF_UP), computed in
+  `MovingAverageCrossoverCalculator.calculate` — normalized against the
+  candle series' last close, the same normalization basis E8-F1-S5's
+  `MacdResult.histogramPctOfPrice` established, for direct cross-symbol
+  comparability with that precedent. `SignalRuleEngine.RuleThresholds`
+  gains a matching trailing `maMinSeparationPctOfPrice` field (default 0
+  via a new `MA_MIN_SEPARATION_PCT_OF_PRICE` constant, reproducing today's
+  any-crossover-counts behavior exactly); `computeVotes`'s `maBullish`/
+  `maBearish` reads are gated by it the same way `macdMinHistogramMagnitudePct`
+  already gates the MACD vote. Every existing `MovingAverageResult`/
+  `RuleThresholds` construction site across the codebase (23 call sites,
+  15 files, including a fully-qualified `new SignalRuleEngine.RuleThresholds(...)`
+  site in `PerSymbolRuleThresholds` that a plain `new RuleThresholds(`
+  grep missed on the first pass and had to be caught by a compile error)
+  updated for the new trailing argument — `BigDecimal.ZERO` for test
+  fixtures, always behavior-preserving under the default `>= 0` gate. A
+  throwaway probe (written, run once, deleted before committing, same
+  precedent as E8-F1-S5's own MACD probe) found real `separationPctOfPrice`
+  values across each fixture's own tuning window ranging up to roughly
+  13.66% (BTCUSDT), 36.19% (DOGEUSDT), and 23.94% (SOLUSDT), with medians
+  of 3.20%/6.97%/6.54% respectively — considerably coarser than E8-F1-S5's
+  MACD-histogram medians (0.54%/1.03%/1.09%), sizing a `{0.00, 1.00, 2.00,
+  3.00, 4.00, 5.00, 7.00, 10.00}` percent candidate grid for the new
+  `backtest.MaCrossoverSeparationCalibrationTest`, which swept
+  BTCUSDT/DOGEUSDT/SOLUSDT independently against their own
+  `FixtureSplits` 70/30 tune/held-out windows, the same per-symbol design
+  E8-F1-S4/S5 established. Result: no ship. On their own held-out tails,
+  BTCUSDT's BUY side is best around 1.00% separation (beats the no-filter
+  baseline's after-cost expectancy at all three checkpoints, n=64 vs. 80)
+  and DOGEUSDT's is best around 2.00% (same all-three-checkpoints
+  improvement, n=33 vs. 47) — but SOLUSDT's BUY side is best with *no*
+  filter at all: every nonzero candidate in the swept range makes it worse
+  at every checkpoint, directly conflicting with what BTCUSDT/DOGEUSDT each
+  want. No single value clears the all-three-symbols-simultaneously ship
+  bar, the same asset-dependent, no-single-value-wins-everywhere pattern
+  every prior E8-F1 axis hit. `MA_MIN_SEPARATION_PCT_OF_PRICE` stays 0,
+  `RULE_TABLE_VERSION` stays v4 — `SignalRuleEngine`'s class Javadoc gained
+  a new paragraph documenting this closed finding, following the same
+  E8-F1-S2/S3/S5-style no-ship treatment (ship the investigation
+  infrastructure, not a value). Secondary finding, flagged but not acted
+  on (same pattern as E8-F1-S5's own secondary MACD finding): a ~2.00%
+  separation threshold improved SELL-side after-cost expectancy uniformly
+  across all three symbols at every checkpoint on their own held-out
+  tails, but this story was chartered for the BUY-side mismatch
+  specifically. This closes out the list of axes E8-F1-S2/S3/S5 named as
+  untried; a future fix would need a mechanism none of E8-F1-S2 through S6
+  tried (e.g. per-symbol MA/MACD thresholds, mirroring E8-F1-S4's
+  per-symbol RSI approach). Docker wasn't available in this session (same
+  recurring blocker prior E8/E6 stories hit); since this story shipped no
+  production behavior change (the new field stays at its inert default),
+  no live-browser/`SignalServiceTest` end-to-end verification was needed
+  beyond the calibration test's own `./mvnw test` run — the same
+  no-production-change precedent E8-F1-S2/S3/S5 already established (only
+  E8-F1-S4/E8-F3-S3, which shipped real behavior changes, needed that
+  fallback). `./mvnw verify`: 506 tests, 0 failures, up from 504.
 
 ## Build / lint / test
 

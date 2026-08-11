@@ -1,1747 +1,1752 @@
 {
   "backend/mvnw": {
-    "mtime": 1784991199.0,
+    "mtime": 1786422895.4906235,
     "ast_hash": "ab50dd89da7da2346b28003352eeeeeb",
     "semantic_hash": "ab50dd89da7da2346b28003352eeeeeb"
   },
   "backend/pom.xml": {
-    "mtime": 1785037881.825734,
+    "mtime": 1786422895.4916284,
     "ast_hash": "b60898c35972f307f12f3352af832565",
     "semantic_hash": "b60898c35972f307f12f3352af832565"
   },
   "backend/src/main/java/com/autotrade/dashboard/BackendApplication.java": {
-    "mtime": 1784991199.0,
-    "ast_hash": "77538dc9a752c883fd609a9392b46cd2",
+    "mtime": 1786422895.4936357,
+    "ast_hash": "661fb2a0acead245e3301d4dde466f07",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/broker/AlpacaTradingCredentialBootstrap.java": {
-    "mtime": 1785293105.376259,
-    "ast_hash": "965cbcdaef33c141e0fe2952902cecc6",
+    "mtime": 1786422895.5031796,
+    "ast_hash": "5989f499c888867f4b738dc441234f86",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/broker/BinanceTradingCredentialBootstrap.java": {
-    "mtime": 1785308358.0878823,
-    "ast_hash": "3f3e0ab92cd644e50c5536d374c479d2",
+    "mtime": 1786422895.504174,
+    "ast_hash": "7e1a85f485ffb6f3c42569593ab9ad25",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/broker/Broker.java": {
-    "mtime": 1785001280.6971195,
+    "mtime": 1786422895.505179,
     "ast_hash": "0bc2e2b9c6d23ebc8aa775abf6bbf74c",
     "semantic_hash": "0bc2e2b9c6d23ebc8aa775abf6bbf74c"
   },
   "backend/src/main/java/com/autotrade/dashboard/broker/BrokerCredential.java": {
-    "mtime": 1785204117.8445323,
+    "mtime": 1786422895.505179,
     "ast_hash": "610c8c87d6107cdf41eea5790bdc33f7",
     "semantic_hash": "610c8c87d6107cdf41eea5790bdc33f7"
   },
   "backend/src/main/java/com/autotrade/dashboard/broker/BrokerCredentialRepository.java": {
-    "mtime": 1785001280.699119,
+    "mtime": 1786422895.506183,
     "ast_hash": "6a83bfe160ff2a1ee159bf819898e187",
     "semantic_hash": "6a83bfe160ff2a1ee159bf819898e187"
   },
   "backend/src/main/java/com/autotrade/dashboard/broker/BrokerCredentialService.java": {
-    "mtime": 1785293093.262531,
-    "ast_hash": "d554dd2a489a3b8c3e5f6f1e4e7d6b43",
+    "mtime": 1786422895.506183,
+    "ast_hash": "2b71968a44aa17344f3c464289075981",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/broker/CredentialEncryptionService.java": {
-    "mtime": 1785686465.2974412,
-    "ast_hash": "38348b7dc24620946d7e8b791d0530a9",
+    "mtime": 1786422895.5071743,
+    "ast_hash": "965714ed167c548f888415136b7d1417",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/brokeradapter/AlpacaTradingAdapter.java": {
-    "mtime": 1785685346.4092555,
-    "ast_hash": "6a56441ce0ecc054f1858064e03c8c03",
+    "mtime": 1786422895.5081735,
+    "ast_hash": "022cdcac4f087a0e3157b49264d6b64a",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/brokeradapter/AlpacaTradingProperties.java": {
-    "mtime": 1785293109.8419218,
-    "ast_hash": "238399a404f9e04c08ccf74fa45a4d4c",
+    "mtime": 1786422895.509181,
+    "ast_hash": "d7d2457344b41d392d8358fb5f17a815",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/brokeradapter/BinanceFuturesAdapterConfig.java": {
-    "mtime": 1785308731.6117425,
-    "ast_hash": "3875330a04b3aa69c1c9150e7332ce81",
+    "mtime": 1786422895.5101733,
+    "ast_hash": "c167cb9a51da85c7acb60fe2e764f6f0",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/brokeradapter/BinanceFuturesTradingAdapter.java": {
-    "mtime": 1785913984.304579,
-    "ast_hash": "07fa069184ce0e60f87d254e41cc12fb",
+    "mtime": 1786422895.5101733,
+    "ast_hash": "4f44f1125b539d0ba4204d911051f25e",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/brokeradapter/BinanceFuturesTradingProperties.java": {
-    "mtime": 1785308151.2703388,
-    "ast_hash": "82b1288cd61804dfa86ce7812920deac",
+    "mtime": 1786422895.5111735,
+    "ast_hash": "f53ebd2c695b5286f218da2a8434ab18",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/brokeradapter/BrokerAccountStatus.java": {
-    "mtime": 1785229744.7708633,
-    "ast_hash": "d2b6641678a7147567c29a08355e2f3a",
+    "mtime": 1786422895.5111735,
+    "ast_hash": "f74d5b7144064cb0f4e3197dc7b30807",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/brokeradapter/BrokerAdapter.java": {
-    "mtime": 1785308059.6913428,
-    "ast_hash": "7d80c440781e2875b84776d70b89350d",
+    "mtime": 1786422895.512181,
+    "ast_hash": "e30d1a23af2d987d7e7e1cc4d8759f94",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/brokeradapter/BrokerAdapterAmbiguousOrderException.java": {
-    "mtime": 1785290497.4965744,
-    "ast_hash": "9dd3ea597f3edd235974404e1bbbc1fa",
+    "mtime": 1786422895.512181,
+    "ast_hash": "e7656da46bcfc599d52d528ba43cf59d",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/brokeradapter/BrokerAdapterConfig.java": {
-    "mtime": 1785308727.5254345,
-    "ast_hash": "5fff30d22f349ae86070c9db8ac24576",
+    "mtime": 1786422895.5131738,
+    "ast_hash": "ca3e2c4bafdc9ebd837f38b5a9a8fc6a",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/brokeradapter/BrokerAdapterException.java": {
-    "mtime": 1785290550.5681658,
-    "ast_hash": "2410a4fbf182a703b0ad7c46117faed6",
+    "mtime": 1786422895.5131738,
+    "ast_hash": "0826ff0811a5537fd52b122b82d9d89a",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/brokeradapter/BrokerAdapterRateLimitedException.java": {
-    "mtime": 1785289759.7562814,
-    "ast_hash": "02cc87953c07faadc6af2ec95e6be3e1",
+    "mtime": 1786422895.5141795,
+    "ast_hash": "40e44f4d185baf0ed80cababa72ca913",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/brokeradapter/BrokerAdapterRetryPolicy.java": {
-    "mtime": 1785289766.2052085,
-    "ast_hash": "e2551b9c2daab6e6ff476ccef9096dae",
+    "mtime": 1786422895.5141795,
+    "ast_hash": "973bd5d1688dc82c20867d5908af3a58",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/brokeradapter/BrokerAdapterRouter.java": {
-    "mtime": 1785326288.4928427,
-    "ast_hash": "62a6bd1514a825bbddffe4b4627d4811",
+    "mtime": 1786422895.5151782,
+    "ast_hash": "81d97357e75da6afe166529731c46256",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/brokeradapter/BrokerAdapterTransientException.java": {
-    "mtime": 1785289756.2796252,
-    "ast_hash": "26cbdda387fb03984608029f4af2983c",
+    "mtime": 1786422895.5151782,
+    "ast_hash": "1fc74cf1fccfc3102f5c1fbf49cfcb82",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/brokeradapter/BrokerAdapterUnavailableException.java": {
-    "mtime": 1785290491.3571124,
-    "ast_hash": "564cc728661ef1e49f226e516bef4a37",
+    "mtime": 1786422895.5161836,
+    "ast_hash": "ebad0122a985dc1405c911d4471395f5",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/brokeradapter/BrokerOrderRequest.java": {
-    "mtime": 1785229725.8895886,
-    "ast_hash": "d660ce436eea24b084ed5293015f20e5",
+    "mtime": 1786422895.5171778,
+    "ast_hash": "8ab5e6f9ae85bab3a50a06cd253df12c",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/brokeradapter/BrokerOrderResult.java": {
-    "mtime": 1785315785.928584,
-    "ast_hash": "efcc5bbb944557604958d35b1c468cdb",
+    "mtime": 1786422895.5181746,
+    "ast_hash": "b6fab6d981fb9ee7c42ec6bcce77916b",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/brokeradapter/BrokerPosition.java": {
-    "mtime": 1785229735.233805,
-    "ast_hash": "d00aac824f06b4cf2524195302a99083",
+    "mtime": 1786422895.5181746,
+    "ast_hash": "fa1fc28eb8550c87caa3c3b6f4f0c710",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/brokeradapter/RetryingBrokerAdapter.java": {
-    "mtime": 1785685215.1847224,
-    "ast_hash": "afbe35173fefffa98b6fcc828fec63c1",
+    "mtime": 1786422895.5191736,
+    "ast_hash": "efaebcf18e87a94a87b0e54381b9c599",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/common/ClockConfig.java": {
-    "mtime": 1785293079.533209,
-    "ast_hash": "bfed4732e73d0ed0ca7c6e5d442f24b5",
+    "mtime": 1786422895.5201747,
+    "ast_hash": "ecb21ef57979d0dce2f975dffd7e4446",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/common/SchedulingConfig.java": {
-    "mtime": 1785411330.5813878,
-    "ast_hash": "f095b4878b31ec7f933c3d25aebf43bb",
+    "mtime": 1786422895.5217683,
+    "ast_hash": "f70b686f3af5aed54ee5f6ff7ec7d975",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/common/TradingMode.java": {
-    "mtime": 1785001280.70012,
+    "mtime": 1786422895.5217683,
     "ast_hash": "c6ac5e180ac46daae13461eaf06d44ea",
     "semantic_hash": "c6ac5e180ac46daae13461eaf06d44ea"
   },
   "backend/src/main/java/com/autotrade/dashboard/indicator/ChartDataResponse.java": {
-    "mtime": 1785849554.0265348,
-    "ast_hash": "bf8ef9e519bb54337aacab6ff531f561",
+    "mtime": 1786422895.5237775,
+    "ast_hash": "1743b1ef9748ebf12f9b497c670ffc55",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/indicator/ChartIndicatorPoint.java": {
-    "mtime": 1785226757.6117156,
-    "ast_hash": "d1ea94bc38fc6c63a904ec28fc54c81e",
+    "mtime": 1786422895.5237775,
+    "ast_hash": "e58996db7421656455761c2086a3bcc6",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/indicator/IndicatorController.java": {
-    "mtime": 1785226797.3826463,
-    "ast_hash": "6ddc16926df1ea5cfe8158a846d9409e",
+    "mtime": 1786422895.5247772,
+    "ast_hash": "20a9d6de5943b67fe60495d9a96a5933",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/indicator/IndicatorResponse.java": {
-    "mtime": 1785208123.6713889,
-    "ast_hash": "412c4392c6222167429fdaaf244b045f",
+    "mtime": 1786422895.5247772,
+    "ast_hash": "1780f7bbee98cc5b95a01a52cbf3c745",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/indicator/IndicatorService.java": {
-    "mtime": 1786357053.528826,
-    "ast_hash": "a47e1139c96f999dfcd057b4c63489fe",
+    "mtime": 1786422895.5260384,
+    "ast_hash": "9b641f25307a6ae35607408afe8cebc4",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/indicator/IndicatorSnapshot.java": {
-    "mtime": 1785209718.392872,
+    "mtime": 1786422895.5270503,
     "ast_hash": "720436b377da2d49490cd0e125cf5f34",
     "semantic_hash": "720436b377da2d49490cd0e125cf5f34"
   },
   "backend/src/main/java/com/autotrade/dashboard/indicator/IndicatorSnapshotRepository.java": {
-    "mtime": 1785001280.7011218,
+    "mtime": 1786422895.5270503,
     "ast_hash": "5f170d94c4cd4eb7a123dc4c1cd1058f",
     "semantic_hash": "5f170d94c4cd4eb7a123dc4c1cd1058f"
   },
   "backend/src/main/java/com/autotrade/dashboard/indicator/InsufficientPriceHistoryException.java": {
-    "mtime": 1785207035.0596714,
-    "ast_hash": "96250e74b92ae464f48d4a3db21df1c3",
+    "mtime": 1786422895.5280497,
+    "ast_hash": "f01bf3ea2b8ecd42ce5e3d8b00845529",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/indicator/InvalidIndicatorRequestException.java": {
-    "mtime": 1785207036.4064765,
-    "ast_hash": "374cc2bfe18629ded081aa2a9ebebc5b",
+    "mtime": 1786422895.5280497,
+    "ast_hash": "5477dc547e4e8e03654f46fc8f772246",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/indicator/MacdCalculator.java": {
-    "mtime": 1786253059.3174694,
-    "ast_hash": "f18fbdf5ea2e9875f233090de66657db",
+    "mtime": 1786422895.5295186,
+    "ast_hash": "32b01e1ae3cd6dd3a2507f1e7f1eecd1",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/indicator/MacdResult.java": {
-    "mtime": 1786253054.5956948,
-    "ast_hash": "584af4aa1da5d5482bd796188861d144",
+    "mtime": 1786422895.5305269,
+    "ast_hash": "cf0f4dbd257134a18c1567c1bc48931f",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/indicator/MovingAverageCrossoverCalculator.java": {
-    "mtime": 1785208090.6643302,
-    "ast_hash": "bed67c3fccc94f66695eb3157c7827ec",
+    "mtime": 1786423032.065679,
+    "ast_hash": "bf16aa37854427a1cf7765b9d9e57acf",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/indicator/MovingAverageRelation.java": {
-    "mtime": 1785206973.11999,
-    "ast_hash": "4ce50811d5396da8f71c409ccb3ac0d3",
+    "mtime": 1786422895.531523,
+    "ast_hash": "5b250e47fa74e245417054203bf87be1",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/indicator/MovingAverageResult.java": {
-    "mtime": 1785206974.0797265,
-    "ast_hash": "ad5a5271f0bfaabfdf1213b336d26002",
+    "mtime": 1786423024.4157557,
+    "ast_hash": "79acd09705261a60b1f120c67fa5c105",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/indicator/RsiCalculator.java": {
-    "mtime": 1785206953.3186789,
-    "ast_hash": "7d9a913fc026229656f3336bb10453a5",
+    "mtime": 1786422895.5325322,
+    "ast_hash": "42c99c983fcd68507642c54b333508db",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/indicator/VolatilityCalculator.java": {
-    "mtime": 1785208077.4331312,
-    "ast_hash": "90376da4cbfb034bb4edd8947043eafa",
+    "mtime": 1786422895.53353,
+    "ast_hash": "8e594ab7048dda4b14b10d3793d6b7f1",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/indicator/VolumeTrendCalculator.java": {
-    "mtime": 1785208099.9971802,
-    "ast_hash": "52467a629f1be96839ad155674e83baa",
+    "mtime": 1786422895.53353,
+    "ast_hash": "8e82eee637d2a9980aaf58089f559d22",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/marketdata/AlpacaMarketDataClient.java": {
-    "mtime": 1785203236.5029597,
-    "ast_hash": "a8a8b2df6b06c09c362c16753239fec1",
+    "mtime": 1786422895.534533,
+    "ast_hash": "baeb1a939a862851990a1cf06e60d6ef",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/marketdata/AlpacaMarketDataProperties.java": {
-    "mtime": 1785203203.6308582,
-    "ast_hash": "82a6d638df4d0896187913621c614ce6",
+    "mtime": 1786422895.534533,
+    "ast_hash": "6af7dcc4d9b6c1cb65f009aba51a2662",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/marketdata/ApiErrorResponse.java": {
-    "mtime": 1785203267.3891413,
-    "ast_hash": "30b70fbb4265375ed1187c5e74e6d679",
+    "mtime": 1786422895.535524,
+    "ast_hash": "f5ce324d282a3e87f0469bfbeac1b0fd",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/marketdata/BinanceMarketDataClient.java": {
-    "mtime": 1785203244.8206432,
-    "ast_hash": "95b7b165fa06f6f915032f73337f3275",
+    "mtime": 1786422895.5365233,
+    "ast_hash": "609ead2fe2e0e810442150a581feb11a",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/marketdata/BinanceMarketDataProperties.java": {
-    "mtime": 1785203204.8468623,
-    "ast_hash": "0aa945bbe538fb4d460801470be761d2",
+    "mtime": 1786422895.5365233,
+    "ast_hash": "7e90aaef0854ecba9217ff4cf924e430",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/marketdata/Candle.java": {
-    "mtime": 1785203199.2598343,
-    "ast_hash": "2498bd05c53f065eb06211e87f7e85ab",
+    "mtime": 1786422895.537527,
+    "ast_hash": "b1fee766715ee53923e595ccedfcb4c2",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/marketdata/InvalidPriceHistoryRequestException.java": {
-    "mtime": 1785203223.5801635,
-    "ast_hash": "d61aa4ecf6f7fe4906ec52bc10cbdcd6",
+    "mtime": 1786422895.537527,
+    "ast_hash": "60f84b127bc06d0ee2be9388dd3a8e4a",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/marketdata/MarketClosedException.java": {
-    "mtime": 1785205143.2915144,
-    "ast_hash": "e5b51c1520385e04cf4b2303033039e8",
+    "mtime": 1786422895.5385237,
+    "ast_hash": "5600ce2f14435969cd40e60d858547c1",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/marketdata/MarketDataClient.java": {
-    "mtime": 1785203202.1891193,
-    "ast_hash": "b8c14e0a740578531f115b7bb55a2f42",
+    "mtime": 1786422895.5385237,
+    "ast_hash": "c7ea3132cd47c2875c302952eff3a449",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/marketdata/MarketDataClientConfig.java": {
-    "mtime": 1785293086.258255,
-    "ast_hash": "6f808adb8c043c8ef3b6eb3edf11d200",
+    "mtime": 1786422895.539534,
+    "ast_hash": "5aeb86f14e5999b9acf825a2db4efd3e",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/marketdata/MarketDataController.java": {
-    "mtime": 1785203263.3769603,
-    "ast_hash": "36262b37d68101a3e0514bce9b88f077",
+    "mtime": 1786422895.539534,
+    "ast_hash": "515eed7676e06c05c6688db942710ebd",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/marketdata/MarketDataExceptionHandler.java": {
-    "mtime": 1785685429.7358253,
-    "ast_hash": "867750ac7fd17bf8e18717d3680daa05",
+    "mtime": 1786422895.5405302,
+    "ast_hash": "29edab1483092def9ad6784b17195c92",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/marketdata/MarketDataRateLimitedException.java": {
-    "mtime": 1785203220.2295125,
-    "ast_hash": "1a96ac1246fd76d0ab79cc61e5be773f",
+    "mtime": 1786422895.5405302,
+    "ast_hash": "1499817430f86db7af94db08a007fc80",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/marketdata/MarketDataService.java": {
-    "mtime": 1785205163.146801,
-    "ast_hash": "c1918a5e76401e0fd7ccb387cfe7b4c4",
+    "mtime": 1786422895.5415294,
+    "ast_hash": "54a54b6dbbcf3e99500418820f8d434d",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/marketdata/MarketDataUnavailableException.java": {
-    "mtime": 1785203222.4578495,
-    "ast_hash": "260fcb7875c55630e09ae6254675bbd3",
+    "mtime": 1786422895.5415294,
+    "ast_hash": "c9a8e6694c975e3acd2ecf3382925da8",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/marketdata/MarketHoursService.java": {
-    "mtime": 1786258151.157212,
-    "ast_hash": "a1d7143622275e89c0b4dec412aa8378",
+    "mtime": 1786422895.5430207,
+    "ast_hash": "40df03d3b77153c3c217a14070762fd1",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/marketdata/NoPriceDataException.java": {
-    "mtime": 1785203218.0019226,
-    "ast_hash": "35880eb6146762d88e278907dcd6cc00",
+    "mtime": 1786422895.54403,
+    "ast_hash": "21081038f872243afc28321e648adb25",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/marketdata/PriceHistoryResponse.java": {
-    "mtime": 1785203252.015915,
-    "ast_hash": "a06fd2ef126c23a151550568a24013c5",
+    "mtime": 1786422895.5450299,
+    "ast_hash": "62750e45fc7c653b8ff3c0860683ff80",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/marketdata/PriceHistoryResult.java": {
-    "mtime": 1785203249.49575,
-    "ast_hash": "e86b981696981132bf812bf96b191696",
+    "mtime": 1786422895.5450299,
+    "ast_hash": "2f462c8a17d94a312002484cad715e12",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/marketdata/RetryHelper.java": {
-    "mtime": 1785685388.146688,
-    "ast_hash": "91672fe6c55659435b276967d1122421",
+    "mtime": 1786422895.5460246,
+    "ast_hash": "161aa5d115f45cb693536ff2ba800373",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/marketdata/TickerSummary.java": {
-    "mtime": 1785207057.901026,
-    "ast_hash": "02d885ef9e7978636d67b03f8814c161",
+    "mtime": 1786422895.5460246,
+    "ast_hash": "3dcb13284b7ad95ef84df5d618cdb485",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/notification/InvalidNotificationRequestException.java": {
-    "mtime": 1785411392.1424432,
-    "ast_hash": "95f16ac827e78c49f3c03f4eb486fbf4",
+    "mtime": 1786422895.5550356,
+    "ast_hash": "c23f99463fc66f9a79367218a4da740d",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/notification/Notification.java": {
-    "mtime": 1785411226.2475739,
-    "ast_hash": "c5a39faeec2d65336eefec9a1ad7b88e",
+    "mtime": 1786422895.5550356,
+    "ast_hash": "3e56c4ecea466887608b8fd19e5a81c5",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/notification/NotificationController.java": {
-    "mtime": 1785411412.802063,
-    "ast_hash": "e0d43d739e2dc5cd92f425ac76a275b7",
+    "mtime": 1786422895.556031,
+    "ast_hash": "987c96d04ef618963298d322ac11b9fd",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/notification/NotificationExceptionHandler.java": {
-    "mtime": 1785685481.0128837,
-    "ast_hash": "bfab9e2a069be7b96655ac5d2da0df43",
+    "mtime": 1786422895.556031,
+    "ast_hash": "dfdca610527e5f2ebe510ad8adb67bfd",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/notification/NotificationRepository.java": {
-    "mtime": 1785411264.1576355,
-    "ast_hash": "09d7909e9b50693f9177a18ff743c09a",
+    "mtime": 1786422895.5570326,
+    "ast_hash": "b672581cbb00a1e3ba3ada58dacdf672",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/notification/NotificationResponse.java": {
-    "mtime": 1785411357.2316265,
-    "ast_hash": "d529e94822019aef7cc5e812c6a325ea",
+    "mtime": 1786422895.558031,
+    "ast_hash": "9e14588eb93e3992a7680b9b71a6fcd4",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/notification/NotificationService.java": {
-    "mtime": 1785411276.2411115,
-    "ast_hash": "2cdbc04555084c0d4f101aa2becc2538",
+    "mtime": 1786422895.558031,
+    "ast_hash": "1000e7e26ae51aee9ea0541cc1854d94",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/notification/NotificationType.java": {
-    "mtime": 1785411207.7911985,
-    "ast_hash": "f596d0573a076ee31907ae6647c319cc",
+    "mtime": 1786422895.5590327,
+    "ast_hash": "89fe39076cde8f9071d7bdbf92220b10",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/notification/WatchlistSignalPoller.java": {
-    "mtime": 1785412089.762108,
-    "ast_hash": "eba2fea399de900b55edccb7f73fa171",
+    "mtime": 1786422895.5590327,
+    "ast_hash": "ca5e3a4178e7623532e9187a2364662c",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/order/BrokerCredentialNotConfiguredException.java": {
-    "mtime": 1785326311.1166728,
-    "ast_hash": "09b9e4c2cae0bc30fb3a9d02ae514c81",
+    "mtime": 1786422895.5607965,
+    "ast_hash": "08dc15236cfc86a470a44c435983dfc3",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/order/EntryOrderType.java": {
-    "mtime": 1785001280.702128,
+    "mtime": 1786422895.5620406,
     "ast_hash": "2ec4d7c8f7bba0709805cd009477204f",
     "semantic_hash": "2ec4d7c8f7bba0709805cd009477204f"
   },
   "backend/src/main/java/com/autotrade/dashboard/order/InvalidTradeRequestException.java": {
-    "mtime": 1785326308.8689256,
-    "ast_hash": "90b9d42ea364cbbf2140823db076b3fd",
+    "mtime": 1786422895.5620406,
+    "ast_hash": "00391939fd3aac83d65c8e52c0e04c2e",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/order/Order.java": {
-    "mtime": 1785204129.0629292,
+    "mtime": 1786422895.5630536,
     "ast_hash": "c75d0b2d2e74dc2a9cf5c56f36122b40",
     "semantic_hash": "c75d0b2d2e74dc2a9cf5c56f36122b40"
   },
   "backend/src/main/java/com/autotrade/dashboard/order/OrderController.java": {
-    "mtime": 1785326388.089078,
-    "ast_hash": "00c5f8aee9461bd1669d31b000d3c045",
+    "mtime": 1786422895.564965,
+    "ast_hash": "2d78a18a38e224b0d6c0aab2e749f3ec",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/order/OrderCsvExporter.java": {
-    "mtime": 1785339991.003986,
-    "ast_hash": "f7b8f0feec0c5520613254fd9be9a75a",
+    "mtime": 1786422895.5659711,
+    "ast_hash": "42beba23d11cbda04887f9f0bbccf8ca",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/order/OrderExceptionHandler.java": {
-    "mtime": 1785685446.6724987,
-    "ast_hash": "9aee71f79fd96ef7d49c88a89f9121a3",
+    "mtime": 1786422895.5659711,
+    "ast_hash": "739222f85ec4829e62835af4100c9f47",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/order/OrderNotFoundException.java": {
-    "mtime": 1785338125.5818112,
-    "ast_hash": "b4b741c316a4278aafdb6db3840d8271",
+    "mtime": 1786422895.5669775,
+    "ast_hash": "645e9046f1aa9ba4f8d4679b2e6db175",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/order/OrderQueryController.java": {
-    "mtime": 1786166407.6790771,
-    "ast_hash": "071821cabe5b0cac300c91dc79772920",
+    "mtime": 1786422895.5679698,
+    "ast_hash": "f25175d7c8764f1431f8d9acbe5f0092",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/order/OrderRefreshUnavailableException.java": {
-    "mtime": 1785338131.075479,
-    "ast_hash": "c052318c774ff7add251b3538e0e8e66",
+    "mtime": 1786422895.5679698,
+    "ast_hash": "6cec8e50938f8a9de1b84e9c2adcb251",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/order/OrderRepository.java": {
-    "mtime": 1785682751.558638,
+    "mtime": 1786422895.5689743,
     "ast_hash": "ffcbd6b6b918df627b50c1458b436843",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/order/OrderResponse.java": {
-    "mtime": 1785338121.9100957,
-    "ast_hash": "d5089fc5ba35f2f3943e6a78c9a6a29d",
+    "mtime": 1786422895.5689743,
+    "ast_hash": "25b9998556d3d5de375b1dc5d8592eb7",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/order/OrderService.java": {
-    "mtime": 1786166394.1964154,
-    "ast_hash": "d10ccfb95cb0bcb029f217a88887bfcc",
+    "mtime": 1786422895.5699763,
+    "ast_hash": "c040307fe5dd037d2b770c999b5ecb21",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/order/OrderSide.java": {
-    "mtime": 1785001280.7041323,
+    "mtime": 1786422895.5714877,
     "ast_hash": "dafd5b202c4c99301729dacdd7265794",
     "semantic_hash": "dafd5b202c4c99301729dacdd7265794"
   },
   "backend/src/main/java/com/autotrade/dashboard/order/OrderStatus.java": {
-    "mtime": 1785326255.4745698,
+    "mtime": 1786422895.5714877,
     "ast_hash": "d51443dc36b8a3aedc65c5f005ccb536",
     "semantic_hash": "d51443dc36b8a3aedc65c5f005ccb536"
   },
   "backend/src/main/java/com/autotrade/dashboard/order/PlaceOrderRequest.java": {
-    "mtime": 1785326314.6367593,
-    "ast_hash": "2f46bc9f284f352ad1b51893ae10db03",
+    "mtime": 1786422895.5724986,
+    "ast_hash": "766112b96b19c1c13556cf981afd5f0e",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/order/SignalNotActionableException.java": {
-    "mtime": 1785326307.1083574,
-    "ast_hash": "bee0a3dd5377c789f4a356131f6790cc",
+    "mtime": 1786422895.5724986,
+    "ast_hash": "265ed6ad8c931488450de22184baa175",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/order/TradeOrderResponse.java": {
-    "mtime": 1785326318.8981385,
-    "ast_hash": "b6f6f008bd42921f24661dda56d42764",
+    "mtime": 1786422895.5734923,
+    "ast_hash": "f7224b744f21357a3d6920ac5a1a64d8",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/security/AuthController.java": {
-    "mtime": 1785037961.5299983,
-    "ast_hash": "a3f1421faa50635963acdd317fc7435d",
+    "mtime": 1786422895.5824986,
+    "ast_hash": "cbd41efb48547879c4a6dae15193e59f",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/security/SecurityConfig.java": {
-    "mtime": 1785686377.151376,
-    "ast_hash": "a92c29bf497e2683638b99a6929230dd",
+    "mtime": 1786422895.5824986,
+    "ast_hash": "e1138e4b75c4676616a5470c75c7d16d",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/signal/HoldTerm.java": {
-    "mtime": 1785221915.5514328,
-    "ast_hash": "b6ff799614f18666c751164ff252cf47",
+    "mtime": 1786422895.5835025,
+    "ast_hash": "3bfcd6fe1e50540346a6da64da860e73",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/signal/HoldTermCalculator.java": {
-    "mtime": 1785221925.020028,
-    "ast_hash": "e294d0906bda3503dc5a0a9c7bbaff46",
+    "mtime": 1786422895.5835025,
+    "ast_hash": "917c3790ef8dc541a3264cab790ad330",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/signal/HoldTermRule.java": {
-    "mtime": 1785221911.117674,
-    "ast_hash": "075185cd1417c8d6e153bb547b6cf5d5",
+    "mtime": 1786422895.5845006,
+    "ast_hash": "4f82c0598bf9b186ffba82c75aeb2b80",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/signal/SignalCall.java": {
-    "mtime": 1785209619.5008404,
-    "ast_hash": "9a71fe3cebe03e606e1b405ef77472f0",
+    "mtime": 1786422895.5885003,
+    "ast_hash": "d7cdf7f01e0e09684a71a89a936c3b67",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/signal/SignalCallEntry.java": {
-    "mtime": 1785222108.679418,
-    "ast_hash": "535ca34c962a6d90aec0f737b1abd063",
+    "mtime": 1786422895.5885003,
+    "ast_hash": "6af89d98e599fe62194d66fd73cec37f",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/signal/SignalCallEntryRepository.java": {
-    "mtime": 1785683670.9313138,
-    "ast_hash": "d58444b8028fd95a4e81faa181ca433a",
+    "mtime": 1786422895.5894926,
+    "ast_hash": "1ba21797594c60cfaf1b89b021796f03",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/signal/SignalController.java": {
-    "mtime": 1785209697.5322504,
-    "ast_hash": "de931c7044f9540639894e11ca40502c",
+    "mtime": 1786422895.5894926,
+    "ast_hash": "8e0c280c01c7560bba665c0e5db4d355",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/signal/SignalResponse.java": {
-    "mtime": 1785221929.2188246,
-    "ast_hash": "0ef84473abcc351ce51af18c721ad4a1",
+    "mtime": 1786422895.5904922,
+    "ast_hash": "a54af745a95e88746970c6fb7a199fb2",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/signal/SignalRuleEngine.java": {
-    "mtime": 1786357084.999618,
-    "ast_hash": "e9c7e30dc102c6d48d3cc9f6731b4e7a",
+    "mtime": 1786423422.2469292,
+    "ast_hash": "867d9f1a998b7ca627ee31f472e7db7f",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/signal/SignalRuleId.java": {
-    "mtime": 1785209630.4024053,
-    "ast_hash": "1e33abb014b232f407bc6d5bd7d3d38e",
+    "mtime": 1786422895.5913353,
+    "ast_hash": "7a1653a13359e2b617c73a0ff264ff05",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/signal/SignalService.java": {
-    "mtime": 1786357069.8578506,
+    "mtime": 1786422895.5926957,
     "ast_hash": "93c54b3d61c380853720e54be84cdd5f",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/signal/TrendStrength.java": {
-    "mtime": 1785221897.3933053,
-    "ast_hash": "de5975090d9d7a0eb5df1c47fcb4ad43",
+    "mtime": 1786422895.5926957,
+    "ast_hash": "5fe365cf6893b81438ac4c2ca52909bf",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/signal/VolatilityBand.java": {
-    "mtime": 1785221901.4487116,
-    "ast_hash": "efe2d580792931a5367d99d95ded7b56",
+    "mtime": 1786422895.5937102,
+    "ast_hash": "7e66f9dea22f99f7a583d5c4ddd7f2f8",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/ticker/AssetType.java": {
-    "mtime": 1785001280.7061262,
+    "mtime": 1786422895.595702,
     "ast_hash": "edbc47bcf31626f276201b39ad285905",
     "semantic_hash": "edbc47bcf31626f276201b39ad285905"
   },
   "backend/src/main/java/com/autotrade/dashboard/ticker/Ticker.java": {
-    "mtime": 1785204095.8361464,
+    "mtime": 1786422895.595702,
     "ast_hash": "d55e7bcd35a1d167f478f9b1152a6e3e",
     "semantic_hash": "d55e7bcd35a1d167f478f9b1152a6e3e"
   },
   "backend/src/main/java/com/autotrade/dashboard/ticker/TickerAssetTypeConflictException.java": {
-    "mtime": 1785203178.235321,
-    "ast_hash": "d7ba4f5c2fd26a9ab2961de39bd0a540",
+    "mtime": 1786422895.5967078,
+    "ast_hash": "fe4e0f7f0ae6835458eb179b4ed4146c",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/ticker/TickerController.java": {
-    "mtime": 1785203192.7277167,
-    "ast_hash": "efe88978c0c2d5d7e0e03d7a4a67a904",
+    "mtime": 1786422895.597708,
+    "ast_hash": "79bbd8023a5211db509f0248088a1af1",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/ticker/TickerNotRegisteredException.java": {
-    "mtime": 1785203174.7667413,
-    "ast_hash": "d9c103ca10a76a1b381334f72abf151a",
+    "mtime": 1786422895.597708,
+    "ast_hash": "421f238f08159e6620d5fd04f3ad21ff",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/ticker/TickerRepository.java": {
-    "mtime": 1785203170.0075274,
+    "mtime": 1786422895.598701,
     "ast_hash": "dd407c0041dba690f956343d2031be8b",
     "semantic_hash": "dd407c0041dba690f956343d2031be8b"
   },
   "backend/src/main/java/com/autotrade/dashboard/ticker/TickerService.java": {
-    "mtime": 1785203185.6347978,
-    "ast_hash": "fad22e048018ddfd8cce5e68ca90f816",
+    "mtime": 1786422895.598701,
+    "ast_hash": "c3650aaeb930aeb343ac30d6c54377f2",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/tradingmode/TradingModeChangeRequest.java": {
-    "mtime": 1785413864.4605467,
-    "ast_hash": "f1409a74d9df5456e2d76d6730b88250",
+    "mtime": 1786422895.602492,
+    "ast_hash": "75539e85af4c6fae7570768f79ff3e08",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/tradingmode/TradingModeController.java": {
-    "mtime": 1785664116.2838984,
-    "ast_hash": "bd3cb37a0ce1989f8c98c7f7579c4708",
+    "mtime": 1786422895.602492,
+    "ast_hash": "a2136df6654abe1b2fa2c535539497e4",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/tradingmode/TradingModeEvent.java": {
-    "mtime": 1785414449.0058038,
-    "ast_hash": "0ae95e4cc9d306178a6dd34efa916ccf",
+    "mtime": 1786422895.603484,
+    "ast_hash": "6f4ff42956ceb338cf97e4e145bc42da",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/tradingmode/TradingModeEventRepository.java": {
-    "mtime": 1785413854.1985257,
-    "ast_hash": "acf293fe0eb81d00e718ac510340e8c3",
+    "mtime": 1786422895.603484,
+    "ast_hash": "88d53682aa2aa77a7ad919218f171868",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/tradingmode/TradingModeExceptionHandler.java": {
-    "mtime": 1785685471.3531363,
-    "ast_hash": "285e5a2e6f43417bc945a91373047476",
+    "mtime": 1786422895.604495,
+    "ast_hash": "247a1d42d1364352bf93919c79a21e6d",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/tradingmode/TradingModeResponse.java": {
-    "mtime": 1785664091.6869307,
-    "ast_hash": "d6105bfdc53bd091ec2cd1c123a0d71e",
+    "mtime": 1786422895.604495,
+    "ast_hash": "ed174ebea2768d5b0351791443d75da1",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/tradingmode/TradingModeService.java": {
-    "mtime": 1785664106.844762,
-    "ast_hash": "22863e84ec189cb00a8bb450d9cc3fe1",
+    "mtime": 1786422895.6054935,
+    "ast_hash": "99b60fd9dc72ebe879a461f88e754e61",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/watchlist/WatchlistController.java": {
-    "mtime": 1785228108.612751,
-    "ast_hash": "0a1f5f1e4c1596f7a751d723982f5440",
+    "mtime": 1786422895.606491,
+    "ast_hash": "b3de9447c5e9f037a3f91b729d1c97e9",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/watchlist/WatchlistEntry.java": {
-    "mtime": 1785228056.9953485,
-    "ast_hash": "d152d9e550b2028d3621d088604c6a7f",
+    "mtime": 1786422895.606491,
+    "ast_hash": "a0df26390c743443a5d9c91f7ed1ae26",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/watchlist/WatchlistEntryRepository.java": {
-    "mtime": 1785412068.9167259,
-    "ast_hash": "5adfd343187f39f060a77c13d1cc3989",
+    "mtime": 1786422895.6074915,
+    "ast_hash": "63cbb0766f211d83924f30e1a9138c84",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/watchlist/WatchlistService.java": {
-    "mtime": 1785412079.4569254,
-    "ast_hash": "315781dae179fcd8c56d89e79afccb85",
+    "mtime": 1786422895.6074915,
+    "ast_hash": "a6baeb69d500753bb2066914b93ee639",
     "semantic_hash": ""
   },
   "backend/src/main/resources/db/migration/V10__add_trading_mode_events.sql": {
-    "mtime": 1785414441.5517054,
-    "ast_hash": "9de02bfcda31912f7c4d221ef61449e4",
+    "mtime": 1786422895.6124952,
+    "ast_hash": "01794310362a1e38c34d62f129571c8f",
     "semantic_hash": ""
   },
   "backend/src/main/resources/db/migration/V1__init_core_schema.sql": {
-    "mtime": 1785001280.7101285,
+    "mtime": 1786422895.615495,
     "ast_hash": "bd9dc194780fce7a7e42d040141e4d5d",
     "semantic_hash": "bd9dc194780fce7a7e42d040141e4d5d"
   },
   "backend/src/main/resources/db/migration/V2__add_supporting_indexes.sql": {
-    "mtime": 1785001280.7111275,
+    "mtime": 1786422895.615495,
     "ast_hash": "ad34c8bdcae313631867d4bb1b075025",
     "semantic_hash": "ad34c8bdcae313631867d4bb1b075025"
   },
   "backend/src/main/resources/db/migration/V3__rename_legacy_encryption_key_version.sql": {
-    "mtime": 1785038514.0694282,
-    "ast_hash": "4835e3d107b9c10c1826d9b705e10b2b",
+    "mtime": 1786422895.6164834,
+    "ast_hash": "e74be29a6745532c08bbd110945b6668",
     "semantic_hash": ""
   },
   "backend/src/main/resources/db/migration/V4__add_signal_calls.sql": {
-    "mtime": 1785209709.239511,
-    "ast_hash": "e7b6c5c79a93bb1521ec88948b493ffd",
+    "mtime": 1786422895.6164834,
+    "ast_hash": "54d678669034aa3b0301c518995d36fd",
     "semantic_hash": ""
   },
   "backend/src/main/resources/db/migration/V5__add_hold_term_to_signal_calls.sql": {
-    "mtime": 1785221954.2636147,
-    "ast_hash": "6d0ba803511d422a84a70172d32acccf",
+    "mtime": 1786422895.617484,
+    "ast_hash": "79103c32e3709e521290cb6944fdf95f",
     "semantic_hash": ""
   },
   "backend/src/main/resources/db/migration/V6__add_watchlist.sql": {
-    "mtime": 1785228043.021335,
-    "ast_hash": "006f27f6615f6f53e31334f8d0e0389c",
+    "mtime": 1786422895.617484,
+    "ast_hash": "af7c01fdc247ea720ffc83730312325d",
     "semantic_hash": ""
   },
   "backend/src/main/resources/db/migration/V7__widen_orders_status_check_partially_protected.sql": {
-    "mtime": 1785315780.7112725,
-    "ast_hash": "0239e4071192bb08020efe83e17617da",
+    "mtime": 1786422895.6184835,
+    "ast_hash": "49467db21a68905a96c554be1ed0f34a",
     "semantic_hash": ""
   },
   "backend/src/main/resources/db/migration/V8__widen_orders_status_check_submission_unknown.sql": {
-    "mtime": 1785326261.1311884,
-    "ast_hash": "249af54a0a5f2adfc38d54558c69ea63",
+    "mtime": 1786422895.6184835,
+    "ast_hash": "92943a8e7bb56bea8dcce51a724f04d2",
     "semantic_hash": ""
   },
   "backend/src/main/resources/db/migration/V9__add_notifications.sql": {
-    "mtime": 1785411182.8135679,
-    "ast_hash": "f462bf2aae9b2f30f748f91c6cc1b087",
+    "mtime": 1786422895.619495,
+    "ast_hash": "c12501066ebbd4d681f2c3a171986b6e",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/BackendApplicationTests.java": {
-    "mtime": 1784991199.0,
-    "ast_hash": "b6aed92b2fb81af7baf102fa2ddce70d",
+    "mtime": 1786422895.6214952,
+    "ast_hash": "889167de40b43b6c46a01b9127fc1e28",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/CoreDataModelIntegrationTest.java": {
-    "mtime": 1785339971.8917706,
+    "mtime": 1786422895.6224892,
     "ast_hash": "b0c0f68d085db942a66108901791ad73",
     "semantic_hash": "b0c0f68d085db942a66108901791ad73"
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/BacktestCandleCsvLoader.java": {
-    "mtime": 1785223540.6846588,
-    "ast_hash": "bdb49b096f294fd7a1d51b678382d2ab",
+    "mtime": 1786422895.6234043,
+    "ast_hash": "116755603aeb189793f0c070b1f4994e",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/BacktestDecisionPoint.java": {
-    "mtime": 1785947385.3533888,
-    "ast_hash": "955102ffd673eff9c1a41cef32f93a1a",
+    "mtime": 1786422895.6244204,
+    "ast_hash": "90110d068c0b24bf904a10e1c90e51ba",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/BacktestHarness.java": {
-    "mtime": 1786357105.5235445,
+    "mtime": 1786422895.6264093,
     "ast_hash": "b10342ee101b44856d9f0d2dd88a93f5",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/BacktestHarnessTest.java": {
-    "mtime": 1786357252.6705444,
-    "ast_hash": "b141a3c353a09476fb1fbca02bedd3b6",
+    "mtime": 1786422895.6274087,
+    "ast_hash": "7ff16c5d4c5d331922f463bb49a53b87",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/BacktestReport.java": {
-    "mtime": 1785947448.7493436,
-    "ast_hash": "ae928cfb07f3635a7399f170958650cd",
+    "mtime": 1786422895.6284087,
+    "ast_hash": "2ffec9c01e8bfddb98d7b6b0c15e8546",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/HoldGateOutcome.java": {
-    "mtime": 1785223527.0145056,
-    "ast_hash": "b1922bbcefe69a69deb393635ba2a4fc",
+    "mtime": 1786422895.6304178,
+    "ast_hash": "e37f968d5a8322292a74dd6046931477",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/HoldGateStats.java": {
-    "mtime": 1785223554.4901698,
-    "ast_hash": "1256e71b9882db15dee582262ac8bd3a",
+    "mtime": 1786422895.6314087,
+    "ast_hash": "0e417cbac5ac29c3ae52644fb0b8685e",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/broker/AlpacaTradingCredentialBootstrapTest.java": {
-    "mtime": 1785293525.4556863,
-    "ast_hash": "428f28875dd66fda3542716a9be3d4ec",
+    "mtime": 1786422895.6419873,
+    "ast_hash": "3fdf5f55364a41c7d30a61a4a8070c64",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/broker/BinanceTradingCredentialBootstrapTest.java": {
-    "mtime": 1785308412.0331926,
-    "ast_hash": "5bcac325e570c1962d2be930ac51f62e",
+    "mtime": 1786422895.6429815,
+    "ast_hash": "bcb20f581d8610bf4f5f6f79b54e65e4",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/broker/BrokerCredentialServiceFindTest.java": {
-    "mtime": 1785293514.587406,
-    "ast_hash": "7b32d39d0b9213f81683148e875d6095",
+    "mtime": 1786422895.6439798,
+    "ast_hash": "70db747c50ad703c19c1aa20cbd29ed3",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/broker/BrokerCredentialServiceRotationTest.java": {
-    "mtime": 1785037649.2613707,
-    "ast_hash": "0df4f6699d080c0b31cab76cbd86545a",
+    "mtime": 1786422895.644991,
+    "ast_hash": "b5653a30c807c5b5fa57d911dafa736c",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/broker/CredentialEncryptionServiceTest.java": {
-    "mtime": 1785686383.5798323,
-    "ast_hash": "50b28d39f617e0677dc585dbfe8f29ff",
+    "mtime": 1786422895.644991,
+    "ast_hash": "a46a045a0c72938c40bca179730c03f9",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/brokeradapter/AlpacaTradingAdapterContractTest.java": {
-    "mtime": 1785293486.6041968,
-    "ast_hash": "ad0ef9688ee4aac29f94c08b6ed30686",
+    "mtime": 1786422895.6459897,
+    "ast_hash": "ff6d00cc6a8f3a01d0040e761e465853",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/brokeradapter/AlpacaTradingAdapterTest.java": {
-    "mtime": 1785308115.9846103,
-    "ast_hash": "8c89bd65a7e3e3174047c0d742172aaf",
+    "mtime": 1786422895.6469803,
+    "ast_hash": "4a9da129602d7540d5a4e7735d625c34",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/brokeradapter/BinanceFuturesTradingAdapterContractTest.java": {
-    "mtime": 1785316052.1059022,
-    "ast_hash": "11a458c12c15b3610f45bb712baba650",
+    "mtime": 1786422895.6479802,
+    "ast_hash": "90b3f382e38fd7e4f1a2a9da113326e7",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/brokeradapter/BinanceFuturesTradingAdapterTest.java": {
-    "mtime": 1785914024.9757304,
-    "ast_hash": "5295feb8d33594e80d0f9a9b9dba4eb0",
+    "mtime": 1786422895.64898,
+    "ast_hash": "243ef5250a362f94b80b7fc83693ab8f",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/brokeradapter/BrokerAdapterContractTest.java": {
-    "mtime": 1785308103.1158347,
-    "ast_hash": "3a742f6d0348e022a373589c35e04df8",
+    "mtime": 1786422895.6499798,
+    "ast_hash": "e898e5d174d3aa0139c2c210635063b7",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/brokeradapter/BrokerAdapterRouterTest.java": {
-    "mtime": 1785326451.9918792,
-    "ast_hash": "6a1d7385d631e53576885baf747e5368",
+    "mtime": 1786422895.6499798,
+    "ast_hash": "487020ef6304a8e86d80cabb920c452b",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/brokeradapter/FakeAlpacaTradingServer.java": {
-    "mtime": 1785293593.4905076,
-    "ast_hash": "2433b4cf79bc296a062df492aa8b950a",
+    "mtime": 1786422895.6509802,
+    "ast_hash": "4868737f3e6be727731ea10028c680bd",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/brokeradapter/FakeBinanceFuturesTradingServer.java": {
-    "mtime": 1785913991.888137,
-    "ast_hash": "808fd293e6513e96f74af3bf5c165ad4",
+    "mtime": 1786422895.6509802,
+    "ast_hash": "4d53923ffa750d875857345fb8f6bffc",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/brokeradapter/MockBrokerAdapter.java": {
-    "mtime": 1785308090.7234347,
-    "ast_hash": "e5f1a5ace91db7ac2d2f2db79d67597b",
+    "mtime": 1786422895.6519873,
+    "ast_hash": "e19fcc89ec25f3b8802eb17bcc42fb39",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/brokeradapter/MockBrokerAdapterContractTest.java": {
-    "mtime": 1785229869.669088,
-    "ast_hash": "afe5d38d333c14bd1dcb2ec88cdd1109",
+    "mtime": 1786422895.6519873,
+    "ast_hash": "01f272b7df6a9cbeff4293a6118a44f4",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/brokeradapter/MockBrokerAdapterTest.java": {
-    "mtime": 1785308128.642252,
-    "ast_hash": "1348da245848bc2f73cfde4d6e360324",
+    "mtime": 1786422895.6529806,
+    "ast_hash": "5b05d7d5a8308051dabfc7ebce2c5716",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/brokeradapter/RetryingAlpacaTradingAdapterContractTest.java": {
-    "mtime": 1785293496.5070522,
-    "ast_hash": "3bff9c1dd4fbe6119b46098ceb2815a3",
+    "mtime": 1786422895.6529806,
+    "ast_hash": "8dbb309898d8629f5a096cf93d04eb26",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/brokeradapter/RetryingBinanceFuturesTradingAdapterContractTest.java": {
-    "mtime": 1785316069.4568875,
-    "ast_hash": "5dd919772f9277915cced926f62667a5",
+    "mtime": 1786422895.6539912,
+    "ast_hash": "8d68383171440b28bf1476b70438dfe3",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/brokeradapter/RetryingBrokerAdapterOutageTest.java": {
-    "mtime": 1785290695.5833213,
-    "ast_hash": "9476cd3058592387f25ea63247d5ced9",
+    "mtime": 1786422895.6539912,
+    "ast_hash": "7a51a696d134c71981171d8c40ce4a72",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/brokeradapter/RetryingBrokerAdapterTest.java": {
-    "mtime": 1785290598.1779518,
-    "ast_hash": "5ced9b44fadb7cbb2d20406cff22a486",
+    "mtime": 1786422895.6549797,
+    "ast_hash": "22d6d3c78c4cfc889f399e607708b9e4",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/brokeradapter/RetryingMockBrokerAdapterContractTest.java": {
-    "mtime": 1785289886.8786435,
-    "ast_hash": "59b2cff3ee83acc6af9f1d4c86c64838",
+    "mtime": 1786422895.6560647,
+    "ast_hash": "af7f55cb1a5bc842c18e3bc27515956f",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/e2e/E2ECandleFixtures.java": {
-    "mtime": 1785291927.3586295,
-    "ast_hash": "4f607120f016e4ae12ceaaee55f46a99",
+    "mtime": 1786422895.6570697,
+    "ast_hash": "4047b62fc910225d8c8a963eecbeb5cc",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/e2e/TickerSignalOrderE2ETest.java": {
-    "mtime": 1785291954.0381565,
-    "ast_hash": "1b3fd5782b6917b4e55ba3bc52ec0e93",
+    "mtime": 1786422895.6570697,
+    "ast_hash": "f4ad9f8ae387f1224c619ef5d2ccf4c7",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/indicator/IndicatorControllerTest.java": {
-    "mtime": 1786253147.1104887,
-    "ast_hash": "d779131d4df38bf72f8d754c2722d98c",
+    "mtime": 1786423083.3796477,
+    "ast_hash": "bf82e2625d39c798402663c69a9b0e48",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/indicator/IndicatorServiceTest.java": {
-    "mtime": 1785849609.5993981,
-    "ast_hash": "5b312feaca5d89e673bee6394050d41e",
+    "mtime": 1786422895.660075,
+    "ast_hash": "8012dca0b5a73d9d8e390bcd88f494ef",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/indicator/IndicatorTestFixtures.java": {
-    "mtime": 1785208214.7991374,
-    "ast_hash": "db3e7f56b2337eb8fdc6ae5b692fd4fd",
+    "mtime": 1786422895.660075,
+    "ast_hash": "0f0ffac10730402773566df1e0c1d187",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/indicator/MacdCalculatorTest.java": {
-    "mtime": 1785207022.223852,
-    "ast_hash": "faae4fffc2810ed1b6f83cbead8d8810",
+    "mtime": 1786422895.6610694,
+    "ast_hash": "8c4d9c59fede1032c36117942a016b8d",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/indicator/MovingAverageCrossoverCalculatorTest.java": {
-    "mtime": 1785207026.9562216,
-    "ast_hash": "5e0a3957d247e0471b4f8913fa6cd9a2",
+    "mtime": 1786422895.6610694,
+    "ast_hash": "0809d458a30e6fbf87a1b7fec02b321a",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/indicator/RsiCalculatorTest.java": {
-    "mtime": 1785207016.0212038,
-    "ast_hash": "47029f1676d267588eb031d3b228cb5e",
+    "mtime": 1786422895.6620693,
+    "ast_hash": "3d1d9e81a5eb2c2c427b868e7108f5d3",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/indicator/VolatilityCalculatorTest.java": {
-    "mtime": 1785208224.078651,
-    "ast_hash": "1ae3f04daba90583474de79dd6d3a222",
+    "mtime": 1786422895.6630752,
+    "ast_hash": "dd1e364b36bece7d0e6710b6435f7d89",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/indicator/VolumeTrendCalculatorTest.java": {
-    "mtime": 1785208232.7630985,
-    "ast_hash": "b0f57204d5c6ff5e7ae4f1ad8487fec0",
+    "mtime": 1786422895.6630752,
+    "ast_hash": "90ebdc63e8f709a35d679b77d473658e",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/marketdata/AlpacaMarketDataClientTest.java": {
-    "mtime": 1785203339.0489993,
-    "ast_hash": "463fc11867571a9d787793949468cffb",
+    "mtime": 1786422895.6640687,
+    "ast_hash": "f93d5ace005b95bdf862e6d0a1b81046",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/marketdata/BinanceMarketDataClientTest.java": {
-    "mtime": 1785203682.701752,
-    "ast_hash": "315176d2dcb983ea38d9fda49fa3d2b0",
+    "mtime": 1786422895.6640687,
+    "ast_hash": "6f267ae48739cac9adf523ede81597b2",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/marketdata/MarketDataControllerTest.java": {
-    "mtime": 1785205190.3731654,
-    "ast_hash": "46f61b937e2404e23aaeaf6cb778cbc9",
+    "mtime": 1786422895.6650772,
+    "ast_hash": "9dedae6e9a07345655a31c3f299a7827",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/marketdata/MarketDataServiceTest.java": {
-    "mtime": 1785205185.399737,
-    "ast_hash": "70d287d8b4ff9483e491cae8314c4a1a",
+    "mtime": 1786422895.6660697,
+    "ast_hash": "0f737f8c5c1325ad13824908b5a82233",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/marketdata/MarketHoursServiceTest.java": {
-    "mtime": 1786258164.036102,
-    "ast_hash": "76974f5bd33b39b405c9fd440f5195d3",
+    "mtime": 1786422895.6668556,
+    "ast_hash": "f141c8400a822d8ee70fe7742064aec8",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/notification/NotificationControllerTest.java": {
-    "mtime": 1785411551.6907876,
-    "ast_hash": "ebc816af4a6d656685efeb74ce4c0f53",
+    "mtime": 1786422895.6708672,
+    "ast_hash": "a4753d3206040121952bf72e024450c5",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/notification/NotificationServiceTest.java": {
-    "mtime": 1785411493.1897385,
-    "ast_hash": "bce92c2c87cd8d2e486b3584435f35a4",
+    "mtime": 1786422895.6708672,
+    "ast_hash": "c11579c945b44394568c224561b9fb9d",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/notification/WatchlistSignalPollerTest.java": {
-    "mtime": 1786253153.9402914,
-    "ast_hash": "777f6f594ec13789a8e20ca4b3fb9930",
+    "mtime": 1786423101.3031209,
+    "ast_hash": "57415c15278914fe869d7f99e1f81cd5",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/order/OrderControllerTest.java": {
-    "mtime": 1785681752.8087902,
-    "ast_hash": "2c2e08b523901f5680aad8858412d88a",
+    "mtime": 1786422895.6748588,
+    "ast_hash": "500428cbdf0a7daec654891c57c66f9e",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/order/OrderCsvExporterTest.java": {
-    "mtime": 1786357475.6622775,
+    "mtime": 1786422895.6758556,
     "ast_hash": "1368df2b8bd52f3196bbb2c6ccbb8c73",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/order/OrderQueryControllerTest.java": {
-    "mtime": 1786166559.9580028,
-    "ast_hash": "698380c76e335f61bf6d86ed29a97373",
+    "mtime": 1786422895.676855,
+    "ast_hash": "76a508dabed88d4639f1bf43a86840f1",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/order/OrderServiceTest.java": {
-    "mtime": 1786253165.7125793,
-    "ast_hash": "ee956f90709c9df8003c248745afabf6",
+    "mtime": 1786423099.7388742,
+    "ast_hash": "40934bd1d79f8f159691b58a2f05dfa5",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/security/SecurityConfigTest.java": {
-    "mtime": 1785038206.0813541,
-    "ast_hash": "46e366200e6640976c39393396f2bd00",
+    "mtime": 1786422895.6818542,
+    "ast_hash": "536c15ff7f290ba540ae9a606f20be12",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/signal/HoldTermCalculatorTest.java": {
-    "mtime": 1785222016.8625076,
-    "ast_hash": "315f5bff8f879629d46bb22f3423133a",
+    "mtime": 1786422895.6828656,
+    "ast_hash": "8dfe7a66763621e0f132111cbd0ce600",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/signal/SignalControllerTest.java": {
-    "mtime": 1786253172.6847844,
-    "ast_hash": "191fc6722a168bb3646e5b05ae0207c6",
+    "mtime": 1786423093.1258216,
+    "ast_hash": "f30e8f68bc53ceeb8f21864e1d184ab1",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/signal/SignalRuleEngineTest.java": {
-    "mtime": 1786253182.6056857,
-    "ast_hash": "9e4de7788d8175b5620c5e57975033d0",
+    "mtime": 1786423095.3013804,
+    "ast_hash": "60bb4e8475a3e9e7bc76a64ef5ba836c",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/signal/SignalServiceTest.java": {
-    "mtime": 1786357220.4867337,
-    "ast_hash": "a23c63676aa7c31c2fa3d6a066cdc0e6",
+    "mtime": 1786423137.57476,
+    "ast_hash": "f0ed99bc6f8479be306cf5700bd99b3d",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/ticker/TickerControllerTest.java": {
-    "mtime": 1785203665.3615289,
-    "ast_hash": "7aa6ff80dbef2de0c0be7d87c3ba22c9",
+    "mtime": 1786422895.6889367,
+    "ast_hash": "35e97dd13599bfd12835141654cdea27",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/ticker/TickerServiceTest.java": {
-    "mtime": 1785203393.8092654,
-    "ast_hash": "e330cac33112466ea4af56a122908501",
+    "mtime": 1786422895.6889367,
+    "ast_hash": "abdb60a5faef844d20dad299194a1f20",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/tradingmode/TradingModeControllerTest.java": {
-    "mtime": 1785664138.6112003,
-    "ast_hash": "fca28bfc653875282832c25a398d479f",
+    "mtime": 1786422895.6903663,
+    "ast_hash": "43f996324453fb5a33e93460522015fb",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/tradingmode/TradingModeServiceTest.java": {
-    "mtime": 1785664170.4931107,
-    "ast_hash": "3ad8d13735096817fbffa2f34ea4b6f9",
+    "mtime": 1786422895.6903663,
+    "ast_hash": "757e010aeddeeec880cd75576680e3bf",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/watchlist/WatchlistControllerTest.java": {
-    "mtime": 1785228147.0922372,
-    "ast_hash": "cc09243cf9676f92833371daf9dfa436",
+    "mtime": 1786422895.6913717,
+    "ast_hash": "353e69dd524b28632663f3feecfa33af",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/watchlist/WatchlistServiceTest.java": {
-    "mtime": 1785412158.8187308,
-    "ast_hash": "93c0bd4fdc50fdead23d6e654a46a670",
+    "mtime": 1786422895.6923766,
+    "ast_hash": "bfe35588bf3cf901967141d813e648cf",
     "semantic_hash": ""
   },
   "backend/src/test/resources/marketdata/alpaca-bars-sample.json": {
-    "mtime": 1785203318.517009,
-    "ast_hash": "86e07c8d558c8c4a107419f7f38a1a90",
+    "mtime": 1786422895.6973708,
+    "ast_hash": "ec6049903f51631e6162a0810bb80251",
     "semantic_hash": ""
   },
   "backend/src/test/resources/marketdata/binance-klines-sample.json": {
-    "mtime": 1785203321.4519768,
-    "ast_hash": "f1b4eff9c20d483dcb8c1c9256ae9137",
+    "mtime": 1786422895.6973708,
+    "ast_hash": "a90eaa7475dee8f54001cf820ad6d687",
     "semantic_hash": ""
   },
   "frontend/.oxlintrc.json": {
-    "mtime": 1784990960.693604,
-    "ast_hash": "029f4905006c1fffd96bc863e2d98d3e",
+    "mtime": 1786422895.706371,
+    "ast_hash": "1f0703525c59e961c2b7f20e78aa1cd4",
     "semantic_hash": ""
   },
   "frontend/package.json": {
-    "mtime": 1785227258.6422164,
-    "ast_hash": "4c6ffc56c787224eb5585b6a28f451a2",
+    "mtime": 1786422895.709075,
+    "ast_hash": "7be451b4719e9815442abdb98ebccfac",
     "semantic_hash": ""
   },
   "frontend/src/App.tsx": {
-    "mtime": 1785038310.7222757,
-    "ast_hash": "f27466b7899f9854bf141bc5813c64f9",
+    "mtime": 1786422895.71107,
+    "ast_hash": "89c3e23566a6c26ba6356b2cbf25b12e",
     "semantic_hash": ""
   },
   "frontend/src/auth/AuthContext.tsx": {
-    "mtime": 1785038294.1961982,
-    "ast_hash": "49a454fbd2e1b22fd2edf8e244098b37",
+    "mtime": 1786422895.7149022,
+    "ast_hash": "fe1698a6d57c15d35f623cdcacb159ce",
     "semantic_hash": ""
   },
   "frontend/src/auth/RequireAuth.tsx": {
-    "mtime": 1785038297.7183135,
-    "ast_hash": "d089d90d99b56ea9a92a8c472aa99b21",
+    "mtime": 1786422895.7149022,
+    "ast_hash": "c4cf25b587024458c40159b2661ebf31",
     "semantic_hash": ""
   },
   "frontend/src/auth/api.ts": {
-    "mtime": 1785038287.0644083,
-    "ast_hash": "4ae1033c7265fe67f38e1e6552d53cc8",
+    "mtime": 1786422895.7158906,
+    "ast_hash": "246eac8bc4805133aa6fb038321faff9",
     "semantic_hash": ""
   },
   "frontend/src/chart/PriceChart.tsx": {
-    "mtime": 1785920391.7900262,
-    "ast_hash": "3499e029ef5beb75f89f42c87a076c21",
+    "mtime": 1786422895.7158906,
+    "ast_hash": "649d94a212d89d5318ca35c69188a1e2",
     "semantic_hash": ""
   },
   "frontend/src/chart/api.ts": {
-    "mtime": 1785849627.9609878,
-    "ast_hash": "6fe8ceff5d326812d94e639d85d0f977",
+    "mtime": 1786422895.7168906,
+    "ast_hash": "ce5f20d49f2b145ac41d7cdff6e058ca",
     "semantic_hash": ""
   },
   "frontend/src/chart/mergeIndicators.test.ts": {
-    "mtime": 1785227270.5274942,
-    "ast_hash": "1bd1c5163356faffa28d28326822be06",
+    "mtime": 1786422895.7168906,
+    "ast_hash": "f969034f8390f1aad471ed18fe5a31d9",
     "semantic_hash": ""
   },
   "frontend/src/chart/mergeIndicators.ts": {
-    "mtime": 1785227151.0495188,
-    "ast_hash": "bfc2e99815ac9625c8735dc7bdd15e72",
+    "mtime": 1786422895.7178962,
+    "ast_hash": "97d44f1f42801f98ff798e8eb030c890",
     "semantic_hash": ""
   },
   "frontend/src/chart/palette.ts": {
-    "mtime": 1785920373.7982345,
-    "ast_hash": "95c814e7e07255ae45ea1da3ca52dbb5",
+    "mtime": 1786422895.7188911,
+    "ast_hash": "196adbac75d1876af9308eca56c962d8",
     "semantic_hash": ""
   },
   "frontend/src/main.tsx": {
-    "mtime": 1785920173.8696723,
-    "ast_hash": "a34f90f9ca48223ad9d1d20f47926e95",
+    "mtime": 1786422895.722891,
+    "ast_hash": "01b00ba2b8db393b752252c85f466c0c",
     "semantic_hash": ""
   },
   "frontend/src/marketdata/api.ts": {
-    "mtime": 1785846847.9908948,
-    "ast_hash": "746c957142fb98487be1723b540dab37",
+    "mtime": 1786422895.7238905,
+    "ast_hash": "f815e6d2b66c1420616652a947ba315f",
     "semantic_hash": ""
   },
   "frontend/src/notification/NotificationPanel.tsx": {
-    "mtime": 1785411799.6180947,
-    "ast_hash": "e33b07e1ad55046b7c1173b4615a63d2",
+    "mtime": 1786422895.7248962,
+    "ast_hash": "36e29f15506fc1752a1824df9a230b7b",
     "semantic_hash": ""
   },
   "frontend/src/notification/api.ts": {
-    "mtime": 1785411786.1180627,
-    "ast_hash": "0ccb5a6a98f7382a1dc4bea4c4be440d",
+    "mtime": 1786422895.7248962,
+    "ast_hash": "73ee985a4bf36edc96d6c7ee312eb879",
     "semantic_hash": ""
   },
   "frontend/src/order/OrderExport.tsx": {
-    "mtime": 1785340231.4305472,
-    "ast_hash": "25441847c4e4334459a4e8e7a7d26c50",
+    "mtime": 1786422895.725891,
+    "ast_hash": "151eaaab00f96d6f913cf5eaba4fab3b",
     "semantic_hash": ""
   },
   "frontend/src/order/OrderHistory.tsx": {
-    "mtime": 1786166775.7544992,
-    "ast_hash": "13287dbcf664042a36372d7217022f71",
+    "mtime": 1786422895.7358942,
+    "ast_hash": "11870abb194fdc36489840eb3af94efd",
     "semantic_hash": ""
   },
   "frontend/src/order/api.ts": {
-    "mtime": 1785340223.175474,
-    "ast_hash": "96c140f8016a6d83ffac7672fd15d2b6",
+    "mtime": 1786422895.7358942,
+    "ast_hash": "3d7417bd7a3b58305d297e582581c189",
     "semantic_hash": ""
   },
   "frontend/src/pages/DashboardPage.tsx": {
-    "mtime": 1786166834.2210214,
-    "ast_hash": "6097bac2213bb47440faee1fd345b29d",
+    "mtime": 1786422895.7388954,
+    "ast_hash": "16117cf286b86ec7f9fc6162882ae15b",
     "semantic_hash": ""
   },
   "frontend/src/pages/LoginPage.tsx": {
-    "mtime": 1785920409.9803388,
-    "ast_hash": "c1cc7fece5154602d65cc0ebe455b95e",
+    "mtime": 1786422895.7399006,
+    "ast_hash": "d3b44da5a70d9c2b9187472ddffe1d26",
     "semantic_hash": ""
   },
   "frontend/src/signal/TickerMetrics.tsx": {
-    "mtime": 1785916880.626052,
-    "ast_hash": "27214ecdbb67cad0d006b1dc9c6f24ff",
+    "mtime": 1786422895.7409017,
+    "ast_hash": "1f5d0e317b428e8368b00597333aff82",
     "semantic_hash": ""
   },
   "frontend/src/signal/api.ts": {
-    "mtime": 1785228252.7362928,
-    "ast_hash": "49057ab1a5cf4aaf91cb6eda98a63a87",
+    "mtime": 1786422895.7409017,
+    "ast_hash": "e63d88fa0470ee074a145e64fc4e9d2d",
     "semantic_hash": ""
   },
   "frontend/src/trade/TradeForm.tsx": {
-    "mtime": 1785920444.4968357,
-    "ast_hash": "a7aa562961e2ead0e61d4c8ba3b65db9",
+    "mtime": 1786422895.7429006,
+    "ast_hash": "368612258390617d11096b41a7855527",
     "semantic_hash": ""
   },
   "frontend/src/trade/api.ts": {
-    "mtime": 1785326750.5435562,
-    "ast_hash": "a28419c4b46588acbe3f6b803b3dfb0b",
+    "mtime": 1786422895.743893,
+    "ast_hash": "baa25624f2a94262d7e1cc1b5b2a7db3",
     "semantic_hash": ""
   },
   "frontend/src/trade/validation.test.ts": {
-    "mtime": 1785317349.8496723,
-    "ast_hash": "b2f951b891486e73cd8f4556f91d56e5",
+    "mtime": 1786422895.743893,
+    "ast_hash": "843599aa556c5d5188bc0978d396f30b",
     "semantic_hash": ""
   },
   "frontend/src/trade/validation.ts": {
-    "mtime": 1785319814.7254715,
-    "ast_hash": "4c24ed7b17a9a708e463d4b0a6b0e9b8",
+    "mtime": 1786422895.7449007,
+    "ast_hash": "85b977f7474dcfb6dc85921568a6edc2",
     "semantic_hash": ""
   },
   "frontend/src/tradingmode/TradingModeBanner.tsx": {
-    "mtime": 1785920243.198874,
-    "ast_hash": "82878ee61c79b49cb8e7a82cd0420f2c",
+    "mtime": 1786422895.7458987,
+    "ast_hash": "dc32dfebce0207b4aebb8ce0723694a0",
     "semantic_hash": ""
   },
   "frontend/src/tradingmode/api.ts": {
-    "mtime": 1785664186.620988,
-    "ast_hash": "ddbf993a75c8808217c04b5f6613c14b",
+    "mtime": 1786422895.7458987,
+    "ast_hash": "384da00d527ea85f5c67eba18e985685",
     "semantic_hash": ""
   },
   "frontend/src/watchlist/Watchlist.tsx": {
-    "mtime": 1785228314.4562137,
-    "ast_hash": "6ebbf699f591cd5bca213892ceba7061",
+    "mtime": 1786422895.746901,
+    "ast_hash": "6066c7ccb87a29abdaef5b02cf938a48",
     "semantic_hash": ""
   },
   "frontend/src/watchlist/api.ts": {
-    "mtime": 1785228273.2754083,
-    "ast_hash": "200f19662b238412f211e57077affd43",
+    "mtime": 1786422895.7479,
+    "ast_hash": "c72e3af66a749099dfe235ca64c9875a",
     "semantic_hash": ""
   },
   "frontend/tsconfig.app.json": {
-    "mtime": 1784990960.717227,
-    "ast_hash": "5f2dafd737dea8a4ddcbb10f5113ac5a",
+    "mtime": 1786422895.7479,
+    "ast_hash": "e4f83bdfdf660f5e5364945e14291d70",
     "semantic_hash": ""
   },
   "frontend/tsconfig.json": {
-    "mtime": 1784990960.7222247,
-    "ast_hash": "a3d39fa780ebff65444de257f291ce6c",
+    "mtime": 1786422895.7488992,
+    "ast_hash": "852c3a5df14a4b43ac28e9554ebedf4a",
     "semantic_hash": ""
   },
   "frontend/tsconfig.node.json": {
-    "mtime": 1784990960.7272243,
-    "ast_hash": "f9cb81ddcea69ffdab672fc8c48dca66",
+    "mtime": 1786422895.7488992,
+    "ast_hash": "74cde0261ad0a13045ca0a05ab1542ae",
     "semantic_hash": ""
   },
   "frontend/vite.config.ts": {
-    "mtime": 1785038278.026431,
-    "ast_hash": "be5c516235516f74f70eac481e2f2cb0",
+    "mtime": 1786422895.7499032,
+    "ast_hash": "4fa85843a8fc5846b1e7c97df4556491",
     "semantic_hash": ""
   },
   "frontend/vitest.config.ts": {
-    "mtime": 1785227262.2408366,
-    "ast_hash": "5b0a857cd71d3e316ad26df4cd832dda",
+    "mtime": 1786422895.7499032,
+    "ast_hash": "a498f0f9d2f2cb14dfa70b1cff096e9e",
     "semantic_hash": ""
   },
   ".claude/agents/Explore.md": {
-    "mtime": 1784980754.7960608,
-    "ast_hash": "290a515bd424fc5a6671a2318c051740",
+    "mtime": 1786422895.475423,
+    "ast_hash": "5664f98499384f4202285da79d80b33c",
     "semantic_hash": ""
   },
   ".claude/agents/Plan.md": {
-    "mtime": 1784980741.2499063,
-    "ast_hash": "3ef29ea16726360e39bb541052acced9",
+    "mtime": 1786422895.4764175,
+    "ast_hash": "b4c111298e1051d6d58a3eb0d6e29869",
     "semantic_hash": ""
   },
   ".claude/agents/general-purpose.md": {
-    "mtime": 1784980770.6580272,
-    "ast_hash": "8039898aebf5aabd91570721a9397ff2",
+    "mtime": 1786422895.4764175,
+    "ast_hash": "02a736ad539f1638b960e0407aa95916",
     "semantic_hash": ""
   },
   ".claude/skills/adapter-contract-check/SKILL.md": {
-    "mtime": 1784981966.991923,
-    "ast_hash": "d531fc0890e6f8d20b97df4056891d73",
+    "mtime": 1786422895.4784188,
+    "ast_hash": "6ccef8d68ce94e11ed537756f65c3435",
     "semantic_hash": ""
   },
   ".claude/skills/dataviz/SKILL.md": {
-    "mtime": 1784981919.5359666,
-    "ast_hash": "782ca89ee2aaab0ceb37296b6e93d382",
+    "mtime": 1786422895.479418,
+    "ast_hash": "a13377c7589139239a66b21769b30601",
     "semantic_hash": ""
   },
   ".claude/skills/guardrail-check/SKILL.md": {
-    "mtime": 1784981976.4737139,
-    "ast_hash": "e7d32a6574cefde8add572faa7725896",
+    "mtime": 1786422895.479418,
+    "ast_hash": "5e52716b966fa2ecdd1ac953b8654207",
     "semantic_hash": ""
   },
   ".claude/skills/run/SKILL.md": {
-    "mtime": 1784981911.2915344,
-    "ast_hash": "c3b0cf21607bda8d78788ade4ed68c7a",
+    "mtime": 1786422895.480418,
+    "ast_hash": "f9977701b6729214efda2e84a1e7cc75",
     "semantic_hash": ""
   },
   ".claude/skills/security-review/SKILL.md": {
-    "mtime": 1784981941.3073595,
-    "ast_hash": "e1be2dbe9e7689c3513af05412f1105d",
+    "mtime": 1786422895.4814243,
+    "ast_hash": "d8dd5fcf85286d5b36fcd835ecfa9b76",
     "semantic_hash": ""
   },
   ".claude/skills/signal-rule-review/SKILL.md": {
-    "mtime": 1784981957.872295,
-    "ast_hash": "401aae04947e21f311655451a4c4ab23",
+    "mtime": 1786422895.4824185,
+    "ast_hash": "5e7006de07e76fd98eab3d996b1d4e78",
     "semantic_hash": ""
   },
   ".claude/skills/simplify/SKILL.md": {
-    "mtime": 1784981930.4605055,
-    "ast_hash": "4b7973e1927e5ecd82c60ffecd6aeccc",
+    "mtime": 1786422895.4824185,
+    "ast_hash": "99690967d1a161a88daf020a7168d9e0",
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1785036285.7159739,
-    "ast_hash": "ba2aaaac807614916be42c0c7583990e",
+    "mtime": 1786422895.4854176,
+    "ast_hash": "d35ba6d70df545c034890ecc0c1be6a8",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1786359368.6604252,
-    "ast_hash": "d30c4f9d165c26cb4b14e9f6efb81f9e",
+    "mtime": 1786424744.6609166,
+    "ast_hash": "c5ce932be2b8c5cfb688f32e30d42428",
     "semantic_hash": ""
   },
   "docker-compose.yml": {
-    "mtime": 1784991019.484817,
-    "ast_hash": "227d1ccfa21fcc14d6fc4533529d3cee",
+    "mtime": 1786422895.698381,
+    "ast_hash": "c12f5278ad2602de10f0c9133690a629",
     "semantic_hash": ""
   },
   "docs/agile-plan.md": {
-    "mtime": 1786356496.3221073,
-    "ast_hash": "1b408837b9d8a914cbda5b720edb2dcb",
+    "mtime": 1786422895.7033718,
+    "ast_hash": "f88df58ed9b14a26604f50a7d62081bb",
     "semantic_hash": ""
   },
   "docs/runbooks/credential-key-rotation.md": {
-    "mtime": 1785037569.3345845,
-    "ast_hash": "792ef5d21ab7b16ef58eeee129ca4b0f",
+    "mtime": 1786422895.7043784,
+    "ast_hash": "71c25e7664432d86a531f2263493b46e",
     "semantic_hash": ""
   },
   "frontend/README.md": {
-    "mtime": 1784990960.7419622,
-    "ast_hash": "10495bfcc6c568eca4dab6dd5df795d3",
+    "mtime": 1786422895.707376,
+    "ast_hash": "3a8e2f41658852c43fdce93a22bc2f90",
     "semantic_hash": ""
   },
   "frontend/index.html": {
-    "mtime": 1785920157.289006,
-    "ast_hash": "8607aadf621187b45736d478b8753a36",
+    "mtime": 1786422895.7080655,
+    "ast_hash": "feb4544b3bc9e99fb453c7c0279d504e",
     "semantic_hash": ""
   },
   "frontend/public/favicon.svg": {
-    "mtime": 1784990960.7943468,
+    "mtime": 1786422895.71008,
     "ast_hash": "7e840862161341271697daa99a40d76b",
     "semantic_hash": "7e840862161341271697daa99a40d76b"
   },
   "frontend/public/icons.svg": {
-    "mtime": 1784990960.8203523,
-    "ast_hash": "3b4fcfcf393eca4d264dca4a4663bc37",
+    "mtime": 1786422895.71107,
+    "ast_hash": "21c7473c592c67dc87223d49892c8f0a",
     "semantic_hash": ""
   },
   ".claude/settings.json": {
-    "mtime": 1785661908.4237473,
+    "mtime": 1786422895.4774177,
     "ast_hash": "a675b726a0b074b1fb3ef7e434ec2662",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/tradingmode/PaperTradeThresholdNotMetException.java": {
-    "mtime": 1785664119.0056334,
-    "ast_hash": "0756823c4681ef166f723b6b53959523",
+    "mtime": 1786422895.5997102,
+    "ast_hash": "9e2e74f86e29867ad4898ddb9f1ab8f3",
     "semantic_hash": ""
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1786359360.666772,
-    "ast_hash": "1e487bd5d0199bd85813ff33cd9e336c",
+    "mtime": 1786424801.1735349,
+    "ast_hash": "03ed1ac1418c7d0a7a088c0de19a2a64",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/risk/RiskExceptionHandler.java": {
-    "mtime": 1785685459.0769227,
-    "ast_hash": "896d4661934f4a1878fb29eca98f86e7",
+    "mtime": 1786422895.5794983,
+    "ast_hash": "7efd60a80d47395c3990904e9b2ddc00",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/risk/RiskLimitConfig.java": {
-    "mtime": 1785678790.4697607,
-    "ast_hash": "af5861208fc61a9fea6f25a59a33d095",
+    "mtime": 1786422895.5794983,
+    "ast_hash": "ea6d0146efa97841850ac94c3890aadd",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/risk/RiskLimitExceededException.java": {
-    "mtime": 1785678765.3783736,
-    "ast_hash": "8ad073b701eecfe2bf5254e6ce3f0f97",
+    "mtime": 1786422895.5804963,
+    "ast_hash": "a6f6473519bf19828d264197d5d5e4cc",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/risk/RiskLimitService.java": {
-    "mtime": 1785685519.9843273,
-    "ast_hash": "284db4891b1bb3e5272bd8820786a63d",
+    "mtime": 1786422895.5804963,
+    "ast_hash": "4b4684e98c2ae3ac030ab77f843e2f53",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/risk/RiskLimitsProperties.java": {
-    "mtime": 1785682721.6342916,
-    "ast_hash": "59a92210b6ab571ce839fb210bb9a110",
+    "mtime": 1786422895.581498,
+    "ast_hash": "2572fcbaab7fabe3d0a8e0cce9a29649",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/tradingmode/RiskConsentEvent.java": {
-    "mtime": 1785664072.842867,
-    "ast_hash": "9b136f74ae2d22af6acc06335c813591",
+    "mtime": 1786422895.600708,
+    "ast_hash": "108288a3fd0369afb810e38a754d5723",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/tradingmode/RiskConsentEventRepository.java": {
-    "mtime": 1785664074.2884636,
-    "ast_hash": "f97e1da44514a01b11f717ba0e2e4e37",
+    "mtime": 1786422895.6014788,
+    "ast_hash": "6bb74426ff02a17cc8145d4f633c2deb",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/tradingmode/RiskConsentNotGivenException.java": {
-    "mtime": 1785664081.5217347,
-    "ast_hash": "e9a27ba417b55e95dcc9997c4b4684e4",
+    "mtime": 1786422895.6014788,
+    "ast_hash": "850c0d7461707804bb9a66540275c199",
     "semantic_hash": ""
   },
   "backend/src/main/resources/db/migration/V11__add_risk_consents.sql": {
-    "mtime": 1785664062.958527,
-    "ast_hash": "7f494542cb47a80323ee8121f35a6dc3",
+    "mtime": 1786422895.6124952,
+    "ast_hash": "69649f33157a02f3e8df5c85db0be5af",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/risk/RiskLimitServiceTest.java": {
-    "mtime": 1785682799.2928526,
-    "ast_hash": "6643e3f83e73cfe2ea18a3a0b3020e34",
+    "mtime": 1786422895.6808558,
+    "ast_hash": "bd22c94c20375bdb6e3b368d63291256",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/risk/EngageKillSwitchResponse.java": {
-    "mtime": 1785681543.134593,
-    "ast_hash": "5c6f9c2308e94b651f31c847e4578663",
+    "mtime": 1786422895.5744925,
+    "ast_hash": "1e1ce782b4ae895ec362b3e986048638",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/risk/KillSwitchCancelSummary.java": {
-    "mtime": 1785681541.89912,
-    "ast_hash": "b5c3b52a5f1db5c8b1514988fdd9e18d",
+    "mtime": 1786422895.5744925,
+    "ast_hash": "d352100865391e4c75b95c6d0ff90777",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/risk/KillSwitchController.java": {
-    "mtime": 1785681912.643154,
-    "ast_hash": "10f0aa3e87ac31555259331375ee9efb",
+    "mtime": 1786422895.5754979,
+    "ast_hash": "2117923efc43de5b79bc59623792d4bf",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/risk/KillSwitchEngagedException.java": {
-    "mtime": 1785681538.2695448,
-    "ast_hash": "8c9dae79a84ce972cd45cc34a1df5836",
+    "mtime": 1786422895.5764983,
+    "ast_hash": "9f9b4b301e4a82d130ef87a6f5697bf5",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/risk/KillSwitchEvent.java": {
-    "mtime": 1785681535.7276728,
-    "ast_hash": "268258b234080df0eaf069ca323947ac",
+    "mtime": 1786422895.5764983,
+    "ast_hash": "e062f1d2a11962f9266f1004566206f1",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/risk/KillSwitchEventRepository.java": {
-    "mtime": 1785681537.1590152,
-    "ast_hash": "902040d88b55a1eea211e13e5fb1b6fd",
+    "mtime": 1786422895.5774984,
+    "ast_hash": "4b0b9d33b322d37c6e8c4c666f9695b1",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/risk/KillSwitchResponse.java": {
-    "mtime": 1785681540.0844383,
-    "ast_hash": "cf17f3353f1cd9769cd880052ab8168d",
+    "mtime": 1786422895.5774984,
+    "ast_hash": "1146d2e2d391ed626f6d2a1f117657d0",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/risk/KillSwitchService.java": {
-    "mtime": 1785685499.5134296,
-    "ast_hash": "9e26366d8909d9db9184fd48abc24542",
+    "mtime": 1786422895.5785003,
+    "ast_hash": "be104a48a852f1ae5fbc4838bbbdb6e4",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/risk/KillSwitchState.java": {
-    "mtime": 1785681527.7127223,
-    "ast_hash": "eee1464d4144c61eadf703f6b522dbd7",
+    "mtime": 1786422895.5785003,
+    "ast_hash": "e620a319f632b8cf84e2db25e3880b8f",
     "semantic_hash": ""
   },
   "backend/src/main/resources/db/migration/V12__add_kill_switch_events.sql": {
-    "mtime": 1785681566.1696014,
-    "ast_hash": "ed19c68c4e7d1ad959aceab40cb99336",
+    "mtime": 1786422895.6134913,
+    "ast_hash": "e9925a0ba93d38e427616658feae917e",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/risk/KillSwitchControllerTest.java": {
-    "mtime": 1785681740.3709006,
-    "ast_hash": "7c2d1a7f177c4cdf3910c3f56745a9bc",
+    "mtime": 1786422895.6788588,
+    "ast_hash": "fa66fbbe99ab6c1583924da897a40c79",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/risk/KillSwitchServiceTest.java": {
-    "mtime": 1785681931.92234,
-    "ast_hash": "c7f23ee4e326a576b75206ebffb9b0a9",
+    "mtime": 1786422895.6798546,
+    "ast_hash": "07e9fc9c9679558e1eadf4d7990c72ba",
     "semantic_hash": ""
   },
   "frontend/src/killswitch/KillSwitchControl.tsx": {
-    "mtime": 1785920234.3178692,
-    "ast_hash": "1f71f514e1e6d2515b470aba445ca22b",
+    "mtime": 1786422895.7208972,
+    "ast_hash": "2206d25c6e49c444657faff790fb78ee",
     "semantic_hash": ""
   },
   "frontend/src/killswitch/api.ts": {
-    "mtime": 1785681779.5405495,
-    "ast_hash": "6e00b64de0ae2891a54e3f190f9016b7",
+    "mtime": 1786422895.7208972,
+    "ast_hash": "5a41a6ece4fc1db61ba4bd1a30acd0c3",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/order/OrderAuditEntry.java": {
-    "mtime": 1785684533.234085,
-    "ast_hash": "31da1a33e4a6f696f401e422c5631796",
+    "mtime": 1786422895.564046,
+    "ast_hash": "9fb62de161f4306262fe8d3033db63b3",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/order/OrderAuditEntryRepository.java": {
-    "mtime": 1786166353.914696,
+    "mtime": 1786422895.564965,
     "ast_hash": "6003302b25584f27b16e172a3764c16a",
     "semantic_hash": ""
   },
   "backend/src/main/resources/db/migration/V13__add_order_audit_entries.sql": {
-    "mtime": 1785683645.1236336,
-    "ast_hash": "de5f6ad2cdde23792e46202f40f39c54",
+    "mtime": 1786422895.614485,
+    "ast_hash": "b3258020043d03e5bb57d55a1462ac8b",
     "semantic_hash": ""
   },
   "backend/src/main/resources/db/migration/V14__add_rule_table_version_to_order_audit_entries.sql": {
-    "mtime": 1785684522.4559007,
-    "ast_hash": "7289b124a3ba0579e7da397f8e4b5bc5",
+    "mtime": 1786422895.614485,
+    "ast_hash": "a135d6e2cfc30e24c54084c5180febc5",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/security/SecurityConfigPasswordFallbackTest.java": {
-    "mtime": 1785686397.875513,
-    "ast_hash": "794832ec2ac46f75103d408ffd2ea0dc",
+    "mtime": 1786422895.6808558,
+    "ast_hash": "6ef7c70b0f3e49240f8ec6749c9ff264",
     "semantic_hash": ""
   },
   "scripts/db-backup.sh": {
-    "mtime": 1785759720.0007212,
+    "mtime": 1786422895.7899032,
     "ast_hash": "5ad457b4c712be91da6055bbe1e25be3",
     "semantic_hash": ""
   },
   "scripts/db-restore.sh": {
-    "mtime": 1785760953.7535367,
+    "mtime": 1786422895.790891,
     "ast_hash": "5f54ae296022230267a5ed75c3e22d50",
     "semantic_hash": ""
   },
   "docker-compose.restore-test.yml": {
-    "mtime": 1785759812.7457957,
-    "ast_hash": "d7f695960170b643fd382e6aa524eb83",
+    "mtime": 1786422895.698381,
+    "ast_hash": "a7c31dd3130fb77554d1d5a894052964",
     "semantic_hash": ""
   },
   "docs/runbooks/oracle-backup-restore.md": {
-    "mtime": 1785759748.3159118,
-    "ast_hash": "f5ed3ed51054bc4a2f641ee0c20ca923",
+    "mtime": 1786422895.7053764,
+    "ast_hash": "d254243dc80ba8766584dfcbc186e21f",
     "semantic_hash": ""
   },
   "frontend/src/layout/Tabs.tsx": {
-    "mtime": 1785916850.8696055,
-    "ast_hash": "c8cec484750ac1b242798c18a8b6d884",
+    "mtime": 1786422895.7218916,
+    "ast_hash": "47df6513442176664a0cd5d1d977cc7a",
     "semantic_hash": ""
   },
   "frontend/src/layout/ThemeToggle.tsx": {
-    "mtime": 1785920166.0276916,
-    "ast_hash": "0cff0c6660df6c9c98d827ff14aef376",
+    "mtime": 1786422895.722891,
+    "ast_hash": "5acf7c061e139acf2322582afb25731a",
     "semantic_hash": ""
   },
   "frontend/src/theme/ThemeContext.tsx": {
-    "mtime": 1785920150.9269538,
-    "ast_hash": "1ace9315c19211515ba45e1ba90019aa",
+    "mtime": 1786422895.7419,
+    "ast_hash": "8477b4685d807c82d87645b262608b55",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/ThresholdCalibrationTest.java": {
-    "mtime": 1786253112.2266147,
-    "ast_hash": "9058bd33aa9d29cdcacfc213dfafc2a7",
+    "mtime": 1786423112.7654889,
+    "ast_hash": "8d3afeaee67d9d999782f3d6c770b22c",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/BacktestHarnessTpSlTest.java": {
-    "mtime": 1786028621.3399165,
+    "mtime": 1786422895.6284087,
     "ast_hash": "c216a1fc0f63a30a594396022ddd8790",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/CheckpointStatsTest.java": {
-    "mtime": 1785943118.499695,
-    "ast_hash": "b45d000b9ed4cdf994ce1b747626d1d5",
+    "mtime": 1786422895.629409,
+    "ast_hash": "9b261609f7a1dfb7b81d1587781569cf",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/signal/IndicatorId.java": {
-    "mtime": 1785944761.0964215,
-    "ast_hash": "806ff9c560e99060d84e3929227c94c2",
+    "mtime": 1786422895.5845006,
+    "ast_hash": "9b486e2ac2ddc830f7e7f32630dd2a8a",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/signal/WeightedVoteRuleEngine.java": {
-    "mtime": 1786018742.248978,
-    "ast_hash": "ac8baf6d75997e924a1f2839bd3ecc15",
+    "mtime": 1786422895.5947049,
+    "ast_hash": "367d8a8ca6757743d79014ede8d50c6d",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/IndicatorExpectancyCalibrationTest.java": {
-    "mtime": 1786018767.929813,
-    "ast_hash": "0bfde83fdaa000f747a4fb2a89a65146",
+    "mtime": 1786422895.6314087,
+    "ast_hash": "4ee2d65cb1f9993ad28b0246ef81efe1",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/WeightedVoteBacktestTest.java": {
-    "mtime": 1785945171.9397721,
-    "ast_hash": "7cb06ff9a524c254d237822602a2686f",
+    "mtime": 1786422895.6409795,
+    "ast_hash": "16afd0032541cb1623d4f4e9103b8894",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/signal/WeightedVoteRuleEngineTest.java": {
-    "mtime": 1786253207.2383392,
-    "ast_hash": "dcad3cbe5e155cf256697bed66e0beb9",
+    "mtime": 1786423087.2024982,
+    "ast_hash": "8666315d3e7020d1fef77c840c9487b9",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/indicator/AdxCalculator.java": {
-    "mtime": 1785947345.5485382,
-    "ast_hash": "f37e999bb66f923d6a1a8a6f6191057e",
+    "mtime": 1786422895.5227778,
+    "ast_hash": "71b43da9056cda41aa1f05730e8a747c",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/signal/Regime.java": {
-    "mtime": 1785947350.9787705,
-    "ast_hash": "40633b8d376d2b05ada62aeba6a8da83",
+    "mtime": 1786422895.5864978,
+    "ast_hash": "326fb535b65d96667b2d34d3b8d446bb",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/signal/RegimeClassifier.java": {
-    "mtime": 1785947355.7007346,
-    "ast_hash": "590d919750e499d824acf22413e27474",
+    "mtime": 1786422895.5864978,
+    "ast_hash": "000d4d07b7a6bab7fa72257e4b159020",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/signal/RegimeGatedRuleEngine.java": {
-    "mtime": 1786357037.5999851,
-    "ast_hash": "634e6ec1f66f78e7a04dd4738e6e7ac4",
+    "mtime": 1786422895.5874977,
+    "ast_hash": "317898a7d407dfc49900ec45499a3682",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/RegimeCalibrationTest.java": {
-    "mtime": 1786254396.1297338,
-    "ast_hash": "899bd8190d638e1fc2fff993f93da972",
+    "mtime": 1786422895.63598,
+    "ast_hash": "861b17133349b38f64b9ee45e3047a73",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/RegimeSplitStats.java": {
-    "mtime": 1785947372.953432,
-    "ast_hash": "e57da3dea91e3f27ed04c9b46a4e6562",
+    "mtime": 1786422895.6379812,
+    "ast_hash": "f4e0924e89234be51c150337d846abd5",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/indicator/AdxCalculatorTest.java": {
-    "mtime": 1785947474.347692,
-    "ast_hash": "3998d47ea1592c4033179d7f7b7e7e6a",
+    "mtime": 1786422895.6580696,
+    "ast_hash": "0cbba1f7b533eee4d6b12f834242ec5f",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/signal/RegimeClassifierTest.java": {
-    "mtime": 1785947481.5862772,
-    "ast_hash": "d7e798ed066be665733d4ee056606ef6",
+    "mtime": 1786422895.6828656,
+    "ast_hash": "91d67707144dcae34e01a39231657c66",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/signal/RegimeGatedRuleEngineTest.java": {
-    "mtime": 1786357275.1969118,
-    "ast_hash": "ffd774803236d5ece4fc8f1536bbecfe",
+    "mtime": 1786422895.683855,
+    "ast_hash": "8a1df13f5f970c42792c15ecb7ae21e6",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/OutOfSampleValidationTest.java": {
-    "mtime": 1786253089.7728186,
-    "ast_hash": "f772525015f95406058a748c8dda4d70",
+    "mtime": 1786423117.894141,
+    "ast_hash": "b2c4484bd3611498223bf28af97639f9",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/backtest/BacktestConfig.java": {
-    "mtime": 1786028621.325829,
+    "mtime": 1786422895.495492,
     "ast_hash": "7043c4fa8adf448cd16fdec652149773",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/backtest/Checkpoint.java": {
-    "mtime": 1786028621.325829,
+    "mtime": 1786422895.496497,
     "ast_hash": "bb176815c44feacbe3f7ed984ac1d03f",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/backtest/CheckpointStats.java": {
-    "mtime": 1786028621.326827,
+    "mtime": 1786422895.4971688,
     "ast_hash": "6386ca9248f2a29cb0dd8ad2c5c9fd7f",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/backtest/DirectionalAccumulator.java": {
-    "mtime": 1786028621.3278263,
+    "mtime": 1786422895.4981773,
     "ast_hash": "66c1befa25ed4e9a1e22dc5f6e71b824",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/backtest/DirectionalOutcome.java": {
-    "mtime": 1786028621.3278263,
+    "mtime": 1786422895.4991744,
     "ast_hash": "b65a46056d0aba5804b789d16936f67a",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/backtest/DirectionalOutcomeStats.java": {
-    "mtime": 1786028621.3288302,
+    "mtime": 1786422895.4991744,
     "ast_hash": "b545746ea44a9d8486a0d98fc2273cac",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/backtest/DirectionalScoreResult.java": {
-    "mtime": 1786028621.329828,
+    "mtime": 1786422895.5001729,
     "ast_hash": "e8e0536425479879e211556b9d1b0cc7",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/backtest/ExitReason.java": {
-    "mtime": 1786028621.329828,
+    "mtime": 1786422895.5011811,
     "ast_hash": "1aacf2c9b718cd82cccec67e3910aaf2",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/backtest/WalkForwardScorer.java": {
-    "mtime": 1786028621.3308268,
+    "mtime": 1786422895.502179,
     "ast_hash": "db117ba23d73c5c6d6210eda9da81b6c",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/monitoring/CheckpointDrift.java": {
-    "mtime": 1786028621.3308268,
+    "mtime": 1786422895.5470252,
     "ast_hash": "c9502b41aa36f03765706e1a41513fe3",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/monitoring/DirectionalDrift.java": {
-    "mtime": 1786028621.331828,
+    "mtime": 1786422895.5480337,
     "ast_hash": "c543f32d1f3bf157ff5ad18ee3536fa3",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/monitoring/LiveDriftBaseline.java": {
-    "mtime": 1786357406.9896426,
+    "mtime": 1786422895.550031,
     "ast_hash": "c392eb71176044b40fdc2e48c993c22b",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/monitoring/LiveSignalDriftService.java": {
-    "mtime": 1786028621.3329108,
+    "mtime": 1786422895.5510294,
     "ast_hash": "bb5c62a558d7a0ddd2eb5863778e7323",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/monitoring/RuleTableVersionDrift.java": {
-    "mtime": 1786028621.3339193,
+    "mtime": 1786422895.552031,
     "ast_hash": "0f0c8e8d090cc181e9807d70841b7a7c",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/monitoring/SignalDriftController.java": {
-    "mtime": 1786028621.3339193,
+    "mtime": 1786422895.5530334,
     "ast_hash": "50b58aa02fee5ca365783f9c7db4111e",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/monitoring/SignalDriftReport.java": {
-    "mtime": 1786028621.3349154,
+    "mtime": 1786422895.5540302,
     "ast_hash": "af353ed5a5652a0cfe8996d2c544a288",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/monitoring/LiveDriftBaselineTest.java": {
-    "mtime": 1786357411.4738128,
+    "mtime": 1786422895.6680436,
     "ast_hash": "7be61f294404ef9e51f8b73e05e88cc8",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/monitoring/LiveSignalDriftServiceTest.java": {
-    "mtime": 1786028621.340916,
+    "mtime": 1786422895.6688504,
     "ast_hash": "39e6cc63df170a726043603da3242e16",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/monitoring/SignalDriftControllerIntegrationTest.java": {
-    "mtime": 1786028621.3419187,
+    "mtime": 1786422895.6698592,
     "ast_hash": "69a9067a725a01665b81ac2352747620",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/RsiOversoldRecalibrationTest.java": {
-    "mtime": 1786253101.675539,
-    "ast_hash": "925a934070a810a4c7d70a0447fa1253",
+    "mtime": 1786423104.5749838,
+    "ast_hash": "32da3e298d81cc02369a8d746aa1010e",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/RsiOverboughtRecalibrationTest.java": {
-    "mtime": 1786253097.983318,
-    "ast_hash": "756b84d2201a1c06268ee7c9222edf9f",
+    "mtime": 1786423107.8909612,
+    "ast_hash": "247910d8bd2312496201dee20e4a06ea",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/common/PagedResponse.java": {
-    "mtime": 1786166359.781283,
-    "ast_hash": "9a63e8251d9e1ccb2f4c7154f6195e6c",
+    "mtime": 1786422895.5201747,
+    "ast_hash": "b1ceea807953750175d81bac0fd6c0a0",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/order/AuditEntryResponse.java": {
-    "mtime": 1786166370.900473,
-    "ast_hash": "6c58e6ae38b6ffe3cf59f25595d0a212",
+    "mtime": 1786422895.5607965,
+    "ast_hash": "31c7de9d7bae7c505bc83ed2fca857b9",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/order/OrderAuditControllerIntegrationTest.java": {
-    "mtime": 1786167239.3090124,
-    "ast_hash": "c6d30d8f7ea13405ed54101a8d649198",
+    "mtime": 1786422895.6738591,
+    "ast_hash": "4cb7fcdc50448ef3c5c156464b623d7e",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/order/OrderAuditEntryRepositoryTest.java": {
-    "mtime": 1786166630.6245606,
-    "ast_hash": "02d52e35858e312657d7044256130655",
+    "mtime": 1786422895.6748588,
+    "ast_hash": "bdcca8bba3b196fb431f8fb2828b0c19",
     "semantic_hash": ""
   },
   "frontend/src/auditentry/AuditTrail.tsx": {
-    "mtime": 1786167665.8625686,
-    "ast_hash": "2dc367c8f658b244bd74f42f404e0356",
+    "mtime": 1786422895.7128866,
+    "ast_hash": "cee16391dad080f5954b3c23e0939c05",
     "semantic_hash": ""
   },
   "frontend/src/auditentry/api.ts": {
-    "mtime": 1786166784.7523634,
-    "ast_hash": "6b24d82bce057163e1b6f66cb4fb5683",
+    "mtime": 1786422895.7138965,
+    "ast_hash": "f9a2f13673fdc0202d4005e20bc71f16",
     "semantic_hash": ""
   },
   "frontend/src/order/statusTone.ts": {
-    "mtime": 1786166769.9535296,
-    "ast_hash": "679cf1532cba95fd5c47249fbc524173",
+    "mtime": 1786422895.7378936,
+    "ast_hash": "dedb65c4517ccf6fb27fdbe9f7242e58",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/signal/PerSymbolRuleThresholds.java": {
-    "mtime": 1786253123.542411,
-    "ast_hash": "66cc491ba3e9e93e1898d38968b4b0ed",
+    "mtime": 1786423165.6201496,
+    "ast_hash": "ba09f6dbb37bd23139ddd1468e63f953",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/FixtureSplits.java": {
-    "mtime": 1786172627.0712535,
+    "mtime": 1786422895.6304178,
     "ast_hash": "3b3f8a1346ead640068a818053a502f3",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/PerSymbolRsiOverboughtCalibrationTest.java": {
-    "mtime": 1786253094.010909,
-    "ast_hash": "bf10d010ae2b970409d2089d286b144e",
+    "mtime": 1786423110.5738661,
+    "ast_hash": "36a0e65893e592dc05180b5a29356074",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/MacdHistogramMagnitudeCalibrationTest.java": {
-    "mtime": 1786253330.2809994,
-    "ast_hash": "b2b351ce97741cd39d42b4264d228162",
+    "mtime": 1786423115.5093846,
+    "ast_hash": "9f5391453ef5237de70b0cb0a9cce5f3",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/RegimeOutOfSampleValidationTest.java": {
-    "mtime": 1786254335.2367752,
-    "ast_hash": "4a0ff05f0467c21d346c6242410e0713",
+    "mtime": 1786422895.636987,
+    "ast_hash": "ef4747bfeda80f988c468615f29bddba",
+    "semantic_hash": ""
+  },
+  "backend/src/test/java/com/autotrade/dashboard/backtest/MaCrossoverSeparationCalibrationTest.java": {
+    "mtime": 1786423287.301996,
+    "ast_hash": "01eadc4f2f95d93c92e11e9e8aeb0533",
     "semantic_hash": ""
   }
 }

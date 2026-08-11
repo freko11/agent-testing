@@ -61,7 +61,7 @@ class SignalServiceTest {
 
         MacdResult macd = new MacdResult(new BigDecimal("2.0"), new BigDecimal("1.0"), new BigDecimal("1.0"), new BigDecimal("0"));
         MovingAverageResult ma = new MovingAverageResult(10, new BigDecimal("111.0"), 30,
-                new BigDecimal("108.0"), MovingAverageRelation.SHORT_ABOVE_LONG);
+                new BigDecimal("108.0"), MovingAverageRelation.SHORT_ABOVE_LONG, BigDecimal.ZERO);
         IndicatorResponse response = new IndicatorResponse(TickerSummary.from(ticker), Broker.ALPACA,
                 Instant.parse("2026-02-09T00:00:00Z"), new BigDecimal("113.10"), new BigDecimal("20"), macd, ma,
                 new BigDecimal("2.0"), new BigDecimal("1000000.0000"), new BigDecimal("1.0000"));
@@ -99,7 +99,7 @@ class SignalServiceTest {
 
         MacdResult macd = new MacdResult(new BigDecimal("2.0"), new BigDecimal("1.0"), new BigDecimal("0"), new BigDecimal("0"));
         MovingAverageResult ma = new MovingAverageResult(10, new BigDecimal("111.0"), 30,
-                new BigDecimal("108.0"), MovingAverageRelation.EQUAL);
+                new BigDecimal("108.0"), MovingAverageRelation.EQUAL, BigDecimal.ZERO);
         IndicatorResponse response = new IndicatorResponse(TickerSummary.from(ticker), Broker.ALPACA,
                 Instant.parse("2026-02-09T00:00:00Z"), new BigDecimal("113.10"), new BigDecimal("50"), macd, ma,
                 new BigDecimal("2.0"), new BigDecimal("1000000.0000"), new BigDecimal("1.0000"));
@@ -161,7 +161,7 @@ class SignalServiceTest {
 
         MacdResult macd = new MacdResult(new BigDecimal("1.0"), new BigDecimal("2.0"), new BigDecimal("-1.0"), new BigDecimal("0"));
         MovingAverageResult ma = new MovingAverageResult(10, new BigDecimal("110.0"), 30,
-                new BigDecimal("110.0"), MovingAverageRelation.EQUAL);
+                new BigDecimal("110.0"), MovingAverageRelation.EQUAL, BigDecimal.ZERO);
         IndicatorResponse response = new IndicatorResponse(TickerSummary.from(ticker), Broker.BINANCE,
                 Instant.parse("2026-02-09T00:00:00Z"), new BigDecimal("100.00"), new BigDecimal("72"), macd, ma,
                 new BigDecimal("2.0"), new BigDecimal("1000000.0000"), new BigDecimal("1.0000"));
@@ -187,7 +187,7 @@ class SignalServiceTest {
 
         MacdResult macd = new MacdResult(new BigDecimal("1.0"), new BigDecimal("2.0"), new BigDecimal("-1.0"), new BigDecimal("0"));
         MovingAverageResult ma = new MovingAverageResult(10, new BigDecimal("110.0"), 30,
-                new BigDecimal("110.0"), MovingAverageRelation.EQUAL);
+                new BigDecimal("110.0"), MovingAverageRelation.EQUAL, BigDecimal.ZERO);
         IndicatorResponse response = new IndicatorResponse(TickerSummary.from(ticker), Broker.ALPACA,
                 Instant.parse("2026-02-09T00:00:00Z"), new BigDecimal("100.00"), new BigDecimal("72"), macd, ma,
                 new BigDecimal("2.0"), new BigDecimal("1000000.0000"), new BigDecimal("1.0000"));
@@ -280,7 +280,7 @@ class SignalServiceTest {
         return (ticker, broker) -> {
             MacdResult macd = new MacdResult(new BigDecimal("2.0"), new BigDecimal("1.0"), new BigDecimal("1.0"), new BigDecimal("0"));
             MovingAverageResult ma = new MovingAverageResult(10, new BigDecimal("111.0"), 30,
-                    new BigDecimal("108.0"), MovingAverageRelation.SHORT_ABOVE_LONG);
+                    new BigDecimal("108.0"), MovingAverageRelation.SHORT_ABOVE_LONG, BigDecimal.ZERO);
             return new IndicatorResponse(TickerSummary.from(ticker), broker, Instant.parse("2026-02-09T00:00:00Z"),
                     new BigDecimal("113.10"), new BigDecimal("20"), macd, ma, new BigDecimal("2.0"),
                     new BigDecimal("1000000.0000"), new BigDecimal("1.0000"));
@@ -291,7 +291,7 @@ class SignalServiceTest {
         return (ticker, broker) -> {
             MacdResult macd = new MacdResult(new BigDecimal("-2.0"), new BigDecimal("-1.0"), new BigDecimal("-1.0"), new BigDecimal("0"));
             MovingAverageResult ma = new MovingAverageResult(10, new BigDecimal("108.0"), 30,
-                    new BigDecimal("111.0"), MovingAverageRelation.SHORT_BELOW_LONG);
+                    new BigDecimal("111.0"), MovingAverageRelation.SHORT_BELOW_LONG, BigDecimal.ZERO);
             return new IndicatorResponse(TickerSummary.from(ticker), broker, Instant.parse("2026-02-09T00:00:00Z"),
                     new BigDecimal("113.10"), new BigDecimal("80"), macd, ma, new BigDecimal("2.0"),
                     new BigDecimal("1000000.0000"), new BigDecimal("1.0000"));

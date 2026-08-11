@@ -85,7 +85,7 @@ class ThresholdCalibrationTest {
     private static NamedCandidate candidate(String label, BigDecimal rsiOversold, BigDecimal rsiOverbought,
                                              BigDecimal volatilityExtreme, BigDecimal volumeDriedUp) {
         return new NamedCandidate(label, new RuleThresholds(rsiOversold, rsiOverbought, volatilityExtreme, volumeDriedUp,
-                BASELINE.macdMinHistogramMagnitudePct()));
+                BASELINE.macdMinHistogramMagnitudePct(), BASELINE.maMinSeparationPctOfPrice()));
     }
 
     private void sweepDimension(String dimensionName, List<NamedCandidate> candidates) {
