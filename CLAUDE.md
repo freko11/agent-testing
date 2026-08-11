@@ -71,7 +71,12 @@ axis those stories left untried — MA-crossover magnitude thresholding —
 and is also done; like S2/S3/S5 it shipped no threshold change, see its
 entry below for the per-symbol sweep and why SOLUSDT's own held-out tail
 preferred no filter at all while BTCUSDT/DOGEUSDT each wanted a nonzero
-one, the same asset-dependent conflict every prior E8-F1 axis hit.
+one, the same asset-dependent conflict every prior E8-F1 axis hit. E2-F1-S5,
+a follow-up to E2-F1-S4 back on E2's F2.1, extends the hardcoded
+holiday/early-close calendar from 2024-2027 to 2024-2029 per that story's
+own "data-only addition when it's next needed" flag, and is also done —
+see its entry below for the newly-added years and the 2027-12-31 observed-
+holiday gap the extension surfaced and fixed.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -103,6 +108,29 @@ one, the same asset-dependent conflict every prior E8-F1 axis hit.
   day immediately before it, and the early-close open/at-cutoff/after-cutoff
   boundary), no frontend change — the frontend only ever reacted to the
   generic `MARKET_CLOSED` 409, never to calendar specifics itself.
+- E2-F1-S5: extended the hardcoded holiday/early-close calendar from
+  2024-2027 to 2024-2029, following E2-F1-S4's own explicit "extending the
+  range is a data-only addition when it's next needed" flag — added before
+  the old range actually ran out, not after. New entries: 2028's full
+  holiday set, 2029's full holiday set, both years' Thanksgiving-Friday and
+  (where July 4th itself is a weekday holiday, not weekend-shifted)
+  day-before-July-4th early closes, computed the same way as the original
+  2024-2027 set (nth-weekday federal holidays computed directly, Good
+  Friday via the Anonymous Gregorian Easter algorithm, cross-checked
+  against the existing 2024-2027 entries' Good Friday dates before trusting
+  it for the new years). One real gap the extension surfaced and fixed: New
+  Year's Day 2028 falls on a Saturday, so NYSE observes it on the preceding
+  Friday, **2027-12-31** — a holiday physically inside the already-shipped
+  2027 calendar that E2-F1-S4 missed since it never had a reason to look
+  past Jan 1 of the following year. `MarketHoursServiceTest` gained 5 new
+  cases: a previously-out-of-range 2028 holiday, the newly-added 2027-12-31
+  observed holiday specifically, the 2029 early-close open/at-cutoff
+  boundary, and a control proving 2030 (still beyond the new 2024-2029
+  range) correctly falls back to the plain no-holiday-awareness calendar
+  rather than silently extending forever. Backend-only, same as E2-F1-S4 —
+  no frontend change, no `RULE_TABLE_VERSION` bump (this calendar has no
+  relationship to the signal rule table). `./mvnw verify`: 511 tests, 0
+  failures, up from 506.
 - E2-F2-S1: RSI, MACD, moving-average crossover
 - E2-F2-S2: Volatility (ATR%) / volume-trend metric
 - E2-F3-S1: Indicators combined into a Buy/Sell/Hold call (rule engine)

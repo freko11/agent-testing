@@ -110,4 +110,43 @@ class MarketHoursServiceTest {
         LocalDate blackFriday2025 = LocalDate.of(2025, 11, 28);
         assertFalse(serviceAt(blackFriday2025, LocalTime.of(15, 0)).isRegularMarketOpen());
     }
+
+    @Test
+    void previouslyOutOfRangeHoliday_2028_isClosedAllDay() {
+        // 2028-12-25, Christmas Day, a Monday — 2028 was entirely out of range before
+        // E2-F1-S5 extended the calendar from 2024-2027 to 2024-2029.
+        LocalDate christmas2028 = LocalDate.of(2028, 12, 25);
+        assertFalse(serviceAt(christmas2028, LocalTime.of(10, 0)).isRegularMarketOpen());
+    }
+
+    @Test
+    void yearEndObservedHoliday_dec31_2027_isClosedAllDay() {
+        // New Year's Day 2028 falls on a Saturday, so NYSE observes it on the preceding
+        // Friday, 2027-12-31 — a real holiday physically inside the previously-shipped
+        // 2027 range that was missing until this extension added 2028's calendar.
+        LocalDate observedNewYears2028 = LocalDate.of(2027, 12, 31);
+        assertFalse(serviceAt(observedNewYears2028, LocalTime.of(10, 0)).isRegularMarketOpen());
+    }
+
+    @Test
+    void previouslyOutOfRangeEarlyClose_2029_beforeCutoff_isOpen() {
+        // 2029-11-23, day after Thanksgiving, a known 1:00pm ET early close.
+        LocalDate blackFriday2029 = LocalDate.of(2029, 11, 23);
+        assertTrue(serviceAt(blackFriday2029, LocalTime.of(12, 59, 59)).isRegularMarketOpen());
+    }
+
+    @Test
+    void previouslyOutOfRangeEarlyClose_2029_atCutoff_isClosed() {
+        LocalDate blackFriday2029 = LocalDate.of(2029, 11, 23);
+        assertFalse(serviceAt(blackFriday2029, LocalTime.of(13, 0, 0)).isRegularMarketOpen());
+    }
+
+    @Test
+    void stillOutOfRange_2030_fallsBackToPlainCalendar_noHolidayAwareness() {
+        // 2030-01-01, New Year's Day, a Tuesday — would be a full NYSE holiday in reality,
+        // but 2030 is still beyond this calendar's 2024-2029 range, so the documented
+        // fallback (plain Mon-Fri/09:30-16:00, no holiday awareness) applies.
+        LocalDate newYears2030 = LocalDate.of(2030, 1, 1);
+        assertTrue(serviceAt(newYears2030, LocalTime.of(10, 0)).isRegularMarketOpen());
+    }
 }

@@ -6631,3 +6631,86 @@ plus every existing test file that constructed a `MovingAverageResult`/
 `RegimeGatedRuleEngine` changes, no schema migration, no frontend changes.
 `graphify update .` run after implementation, per this repo's CLAUDE.md
 graphify rule.
+
+## E2-F1-S5 — extend the holiday/early-close calendar to 2024-2029
+
+E2-F1-S5 (extend `MarketHoursService`'s hardcoded holiday/early-close
+calendar past its original 2024-2027 range) is done. Picked up from the
+backlog added earlier this session, following E2-F1-S4's own explicit flag
+that "extending the range is a data-only addition... whenever it's next
+needed" — done proactively here (today is 2026-08-11, so 2027 was still
+roughly a year and a half out) rather than reactively once the range had
+actually run out. No design gate run, same reasoning E2-F1-S4 gave: the
+mechanism (a hardcoded `Set<LocalDate>`, no Easter/nth-weekday computation)
+was already fully specified by precedent, so there was no architecture
+question for a `Plan` pass to resolve — only new data.
+
+**Computing the new dates.** Extended `HOLIDAYS`/`EARLY_CLOSE_DAYS` by two
+more years, 2028 and 2029, using the same derivation E2-F1-S4 used for
+2024-2027: fixed dates for New Year's/Juneteenth/Independence Day/Christmas,
+nth-weekday rules for MLK Day (3rd Monday of January), Washington's
+Birthday (3rd Monday of February), Memorial Day (last Monday of May), Labor
+Day (1st Monday of September), and Thanksgiving (4th Thursday of November),
+plus the Saturday-observed-Friday/Sunday-observed-Monday weekend shift
+applied to any fixed-date holiday that lands on a weekend. Good Friday (the
+one non-trivial date, Easter-dependent) was computed via the Anonymous
+Gregorian algorithm and cross-checked against all four of E2-F1-S4's own
+already-shipped 2024-2027 Good Friday dates before trusting it for 2028/2029
+— the first attempt at transcribing the algorithm had a wrong intermediate
+term (`g = (f+1) div 3` instead of the correct `g = (b-f+1) div 3`) that
+silently produced a date exactly one week late; the 2024-2027 cross-check
+caught it immediately (computed 2024-04-07 against the shipped 2024-03-29),
+so the corrected formula was verified against known-good data before being
+used to compute anything new. Result: 2028's Good Friday is 2028-04-14,
+2029's is 2029-03-30.
+
+**Every other date was verified against actual day-of-week**, not assumed —
+each candidate nth-weekday/fixed date was checked with `date -d <date>
++%A` before being added, rather than hand-counting calendar weeks.
+
+**One real gap the extension surfaced and fixed.** New Year's Day 2028
+falls on a Saturday, so NYSE observes it on the preceding Friday —
+**2027-12-31**. That date is physically inside the already-shipped 2027
+calendar, but E2-F1-S4 never had reason to look past January 1st of the
+following year when it built the 2027 entries, so it was missing. Added to
+the existing 2027 block in `HOLIDAYS` (not the new 2028 block, since the
+actual closure date is a 2027 calendar date) with an inline comment
+explaining why. This is the same category of edge case as E2-F1-S4's own
+2026/2027 Independence Day and Juneteenth weekend-shift handling, just one
+that happened to span a year boundary the original story's own range
+didn't need to reason about.
+
+**Early-close days.** 2028's July 4th is a Tuesday (a full weekday holiday,
+not weekend-shifted) so 2028-07-03 is an early close, same for 2029's
+Wednesday July 4th giving 2029-07-03; both years' day-after-Thanksgiving
+(2028-11-24, 2029-11-23) are early closes per the existing rule. No special
+case needed for either year beyond what E2-F1-S4's own rule already covers.
+
+**Class Javadoc and inline comments updated** from "2024-2027" to
+"2024-2029" throughout `MarketHoursService`, plus a note that this is the
+second time the range has been extended (documenting the precedent for
+whoever does it a third time).
+
+**`MarketHoursServiceTest` gained 5 new cases** on top of the existing 14:
+`previouslyOutOfRangeHoliday_2028_isClosedAllDay` (2028-12-25, proving a
+date that was out-of-range before this story now resolves correctly, not
+just that the new data exists), `yearEndObservedHoliday_dec31_2027_isClosedAllDay`
+(the 2027-12-31 gap fix specifically), `previouslyOutOfRangeEarlyClose_2029_beforeCutoff_isOpen`/
+`_atCutoff_isClosed` (2029-11-23's 13:00 boundary, mirroring E2-F1-S4's own
+Black-Friday boundary pair), and
+`stillOutOfRange_2030_fallsBackToPlainCalendar_noHolidayAwareness` — a
+control proving 2030 (still beyond the new 2024-2029 range) correctly falls
+back to the plain no-holiday-awareness calendar rather than the extension
+having accidentally made the range unbounded. All 19 cases pass; full
+`./mvnw verify`: **511 tests, 0 failures/errors, `BUILD SUCCESS`** (up from
+506 after E8-F1-S6, matching the 5 new cases exactly, zero regressions
+elsewhere).
+
+Backend only, `src/main/java` for the two `Set<LocalDate>` constants and
+the class Javadoc in `MarketHoursService`, `src/test/java` for the 5 new
+`MarketHoursServiceTest` cases — no `SignalRuleEngine`/`RULE_TABLE_VERSION`
+relationship (this calendar gates market-data/order availability, not
+signal calibration), no schema migration, no frontend change (same
+reasoning E2-F1-S4 gave: the frontend only ever reacts to the generic
+`MARKET_CLOSED` 409, never to calendar specifics itself, so there was
+nothing for it to pick up here either).

@@ -12,12 +12,13 @@ import java.util.Set;
 
 /**
  * Hardcoded NYSE/NASDAQ regular-hours calendar (09:30-16:00 America/New_York, Mon-Fri),
- * plus a hardcoded holiday and early-close (13:00 close) calendar for 2024-2027 — a
+ * plus a hardcoded holiday and early-close (13:00 close) calendar for 2024-2029 — a
  * bounded near-term range, not a computed/algorithmic calendar (no Easter/nth-weekday
  * rules), matching this class's existing "hardcoded, no library" precedent. Dates beyond
  * this range fall back to the plain Mon-Fri/09:30-16:00 calendar with no holiday
  * awareness — flagged here, not silently wrong, since extending the range is a simple
- * data addition when it's next needed.
+ * data addition when it's next needed (extended once already, from the original
+ * 2024-2027 range, by E2-F1-S5).
  */
 @Component
 public class MarketHoursService {
@@ -27,7 +28,7 @@ public class MarketHoursService {
     private static final LocalTime MARKET_CLOSE = LocalTime.of(16, 0);
     private static final LocalTime EARLY_CLOSE = LocalTime.of(13, 0);
 
-    // Standard NYSE/NASDAQ full-day closures, 2024-2027: New Year's Day, MLK Day,
+    // Standard NYSE/NASDAQ full-day closures, 2024-2029: New Year's Day, MLK Day,
     // Washington's Birthday, Good Friday, Memorial Day, Juneteenth, Independence Day,
     // Labor Day, Thanksgiving, Christmas (weekend-observed shifts applied per NYSE
     // convention where relevant).
@@ -51,7 +52,18 @@ public class MarketHoursService {
             LocalDate.of(2027, 1, 1), LocalDate.of(2027, 1, 18), LocalDate.of(2027, 2, 15),
             LocalDate.of(2027, 3, 26), LocalDate.of(2027, 5, 31), LocalDate.of(2027, 6, 18) /* Jun 19 falls Sat, observed Fri */,
             LocalDate.of(2027, 7, 5) /* Jul 4 falls Sun, observed Mon */, LocalDate.of(2027, 9, 6),
-            LocalDate.of(2027, 11, 25), LocalDate.of(2027, 12, 24) /* Dec 25 falls Sat, observed Fri */
+            LocalDate.of(2027, 11, 25), LocalDate.of(2027, 12, 24) /* Dec 25 falls Sat, observed Fri */,
+            LocalDate.of(2027, 12, 31) /* New Year's Day 2028 falls Sat, observed Fri Dec 31 2027 */,
+            // 2028
+            LocalDate.of(2028, 1, 17), LocalDate.of(2028, 2, 21),
+            LocalDate.of(2028, 4, 14), LocalDate.of(2028, 5, 29), LocalDate.of(2028, 6, 19),
+            LocalDate.of(2028, 7, 4), LocalDate.of(2028, 9, 4), LocalDate.of(2028, 11, 23),
+            LocalDate.of(2028, 12, 25),
+            // 2029
+            LocalDate.of(2029, 1, 1), LocalDate.of(2029, 1, 15), LocalDate.of(2029, 2, 19),
+            LocalDate.of(2029, 3, 30), LocalDate.of(2029, 5, 28), LocalDate.of(2029, 6, 19),
+            LocalDate.of(2029, 7, 4), LocalDate.of(2029, 9, 3), LocalDate.of(2029, 11, 22),
+            LocalDate.of(2029, 12, 25)
     );
 
     // Known 1:00pm ET early-close days: day after Thanksgiving every year, plus the day
@@ -61,7 +73,9 @@ public class MarketHoursService {
             LocalDate.of(2024, 7, 3), LocalDate.of(2024, 11, 29),
             LocalDate.of(2025, 7, 3), LocalDate.of(2025, 11, 28),
             LocalDate.of(2026, 11, 27),
-            LocalDate.of(2027, 11, 26)
+            LocalDate.of(2027, 11, 26),
+            LocalDate.of(2028, 7, 3), LocalDate.of(2028, 11, 24),
+            LocalDate.of(2029, 7, 3), LocalDate.of(2029, 11, 23)
     );
 
     private final Clock clock;
