@@ -81,6 +81,21 @@ public final class BacktestHarness {
     }
 
     /**
+     * E8-F3-S4: as {@link #run(String, List)}, but classifies regime against {@code
+     * regimeThreshold} instead of the global default — the entry point {@code
+     * PerSymbolAdxTrendingThresholdCalibrationTest} sweeps candidates through. Uses {@link
+     * SignalRuleEngine.RuleThresholds#DEFAULT} for the underlying rule-table evaluation and leaves
+     * the SELL regime gate unapplied, isolating the ADX axis from the already-shipped RSI/SELL-gate
+     * axes so this sweep's BUY-side findings aren't confounded by either.
+     */
+    public static BacktestReport run(String label, List<Candle> candles, BigDecimal regimeThreshold) {
+        SignalRuleEngine.RuleThresholds thresholds = SignalRuleEngine.RuleThresholds.DEFAULT;
+        return run(label, candles,
+                (rsi, macd, ma, volatility, volumeTrend) -> SignalRuleEngine.evaluate(rsi, macd, ma, volatility, volumeTrend, thresholds),
+                thresholds, false, regimeThreshold);
+    }
+
+    /**
      * E8-F3-S1: accepts any {@link RuleEvaluator} (e.g. {@code WeightedVoteRuleEngine::evaluate})
      * in place of the hardcoded {@link SignalRuleEngine#evaluate} call, so a candidate rule
      * engine can be replayed through the exact same walk-forward machinery — decision points,
@@ -108,6 +123,24 @@ public final class BacktestHarness {
      */
     public static BacktestReport run(String label, List<Candle> candles, RuleEvaluator evaluator,
                                       SignalRuleEngine.RuleThresholds thresholds, boolean applySellRegimeGate) {
+        return run(label, candles, evaluator, thresholds, applySellRegimeGate, RegimeClassifier.ADX_TRENDING_THRESHOLD);
+    }
+
+    /**
+     * E8-F3-S4: as the 5-arg overload above, but classifies every decision point's regime against
+     * {@code regimeThreshold} instead of the hardcoded global {@link
+     * RegimeClassifier#ADX_TRENDING_THRESHOLD} — lets {@code
+     * PerSymbolAdxTrendingThresholdCalibrationTest} sweep candidate thresholds through the existing
+     * {@code buyByRegime}/{@code sellByRegime} split without touching production code. One {@code
+     * regime} value still feeds both the BUY and SELL regime-split accumulators for a given decision
+     * point (this overload doesn't independently reclassify per direction), so a swept candidate's
+     * {@code sellByRegime} numbers here are informational only — this story's ship bar is BUY-side
+     * only, per its AC. Defaults to today's global threshold everywhere it isn't explicitly swept,
+     * so every existing caller is unaffected.
+     */
+    public static BacktestReport run(String label, List<Candle> candles, RuleEvaluator evaluator,
+                                      SignalRuleEngine.RuleThresholds thresholds, boolean applySellRegimeGate,
+                                      BigDecimal regimeThreshold) {
         Map<SignalRuleId, Integer> callCounts = new EnumMap<>(SignalRuleId.class);
         Map<SignalRuleId, DirectionalAccumulator> directional = new EnumMap<>(SignalRuleId.class);
         Map<SignalRuleId, HoldGateAccumulator> holdGate = new EnumMap<>(SignalRuleId.class);
@@ -149,7 +182,7 @@ public final class BacktestHarness {
             BigDecimal volumeTrend = VolumeTrendCalculator.calculate(window,
                     VolumeTrendCalculator.DEFAULT_SHORT_PERIOD, VolumeTrendCalculator.DEFAULT_LONG_PERIOD);
             BigDecimal adx = AdxCalculator.calculate(window, AdxCalculator.DEFAULT_PERIOD);
-            Regime regime = RegimeClassifier.classify(adx);
+            Regime regime = RegimeClassifier.classify(adx, regimeThreshold);
 
             SignalRuleId ruleTableMatch = evaluator.evaluate(rsi, macd, ma, volatility, volumeTrend);
             SignalRuleId matchedRule = applySellRegimeGate

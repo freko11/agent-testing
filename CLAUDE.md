@@ -76,7 +76,16 @@ a follow-up to E2-F1-S4 back on E2's F2.1, extends the hardcoded
 holiday/early-close calendar from 2024-2027 to 2024-2029 per that story's
 own "data-only addition when it's next needed" flag, and is also done —
 see its entry below for the newly-added years and the 2027-12-31 observed-
-holiday gap the extension surfaced and fixed.
+holiday gap the extension surfaced and fixed. E8-F3-S4, a ninth E8
+follow-up (back on F8.3, alongside E8-F3-S1/S2/S3), calibrates
+`ADX_TRENDING_THRESHOLD` per ticker symbol on the BUY side — the
+per-symbol mechanism E8-F4-S2 named after finding the BUY-side regime
+effect is fixture-dependent, mirroring how E8-F1-S4 resolved the same
+kind of asset-divergent conflict for `rsiOverbought`. Also done, and also
+shipped no threshold change: unlike E8-F1-S4's RSI sweep, no symbol here
+even produces a confirmable tuning-window winner — see its entry below for
+why BTCUSDT's tuning-window winners reverse on its own held-out tail while
+DOGEUSDT/SOLUSDT's tuning windows never produce a winner to begin with.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -1193,6 +1202,69 @@ holiday gap the extension surfaced and fixed.
   no-production-change precedent E8-F1-S2/S3/S5 already established (only
   E8-F1-S4/E8-F3-S3, which shipped real behavior changes, needed that
   fallback). `./mvnw verify`: 506 tests, 0 failures, up from 504.
+- E8-F3-S4: per-symbol `ADX_TRENDING_THRESHOLD` calibration, on the BUY
+  side only — the mechanism E8-F4-S2 named after finding the BUY-side
+  regime effect is fixture-dependent (ranging beats trending on
+  BTCUSDT/DOGEUSDT, trending beats ranging on SOLUSDT), the same
+  asset-divergent shape E8-F1-S4 resolved for `rsiOverbought` with a
+  per-symbol override. New `RegimeClassifier.classify(BigDecimal,
+  BigDecimal)` overload takes an explicit threshold; the existing
+  no-arg `classify(BigDecimal)` stays wired unconditionally to the
+  global default and is the only one the shipped SELL gate
+  (`applySellGate`, E8-F3-S3) ever calls — deliberately never a single
+  shared `Regime` value reclassified once per symbol, so a per-symbol
+  BUY threshold can never leak into the SELL gate's already-validated
+  behavior for the same symbol. New `signal.PerSymbolAdxThresholds`
+  (keyed by normalized symbol, falls back to the global default)
+  mirrors `PerSymbolRuleThresholds`'s shape; new
+  `RegimeGatedRuleEngine.applyBuyGate`/`buyGateAppliesTo(String)` mirror
+  `applySellGate`/`sellGateAppliesTo`, but keyed by a fixed per-symbol
+  allow-list rather than `AssetType` (the BUY-side effect is
+  fixture-dependent, unlike the SELL side's uniform crypto-wide result,
+  so wiring can't generalize to the whole asset class the way
+  E8-F3-S3's did). `BacktestHarness.run` gained a `regimeThreshold`-
+  accepting overload (defaults to the global constant for every
+  existing caller) so a new `backtest.PerSymbolAdxTrendingThresholdCalibrationTest`
+  could sweep a `{15, 18, 20, 22, 25, 28, 30, 35, 40}` percent-of-price-
+  probe-sized grid (probe found real per-fixture ADX ranging roughly
+  9-68 across all three fixtures, medians 22-26) through the existing
+  `buyByRegime`/`sellByRegime` split, per symbol, against that symbol's
+  own `FixtureSplits` 70/30 tune/held-out windows — the same
+  per-symbol tune-then-validate design E8-F1-S4 established. Result:
+  **no ship, for all three symbols independently.** BTCUSDT's tuning
+  window does produce candidates (ADX≥25/28/30) where trending
+  uniformly beats ranging's after-cost expectancy at every checkpoint
+  with non-degenerate n (e.g. ADX≥25: trending n=55 max +0.975% vs.
+  ranging n=120 max -0.155%) — but every one of those reverses on
+  BTCUSDT's own held-out tail (same threshold: trending n=38 max
+  -0.795% vs. ranging n=42 max -0.077%); the only held-out-tail
+  candidate where trending wins (ADX≥35) has a degenerate trending
+  bucket (n=3). DOGEUSDT and SOLUSDT both fail earlier than that:
+  ranging beats trending at every one of the 9 swept candidates on
+  each symbol's own tuning window, so neither ever produces a
+  tuning-window winner to validate in the first place — for SOLUSDT
+  specifically, this means its tuning window (ranging favored) and its
+  own held-out tail (trending favored at the default, per E8-F4-S2)
+  actively disagree with each other before any candidate is even
+  tested. `PerSymbolAdxThresholds.OVERRIDES` and
+  `RegimeGatedRuleEngine.BUY_GATE_CONFIRMED_SYMBOLS` both ship empty;
+  `RULE_TABLE_VERSION` stays v4 (no bump — the same "ships only inert,
+  unwired investigation infrastructure" precedent E8-F3-S1/S2 and
+  E8-F1-S2/S3/S5/S6 established, this time for a per-symbol mechanism
+  rather than a single global one). New test coverage:
+  `RegimeClassifierTest` (the new 2-arg overload plus a pinned
+  byte-identical-to-1-arg-overload check), `PerSymbolAdxThresholdsTest`,
+  `RegimeGatedRuleEngineTest` (mirrors the existing `applySellGate`
+  block for `applyBuyGate`/`buyGateAppliesTo`), `BacktestHarnessTest`
+  (structural pin of the new threshold-accepting overload: an
+  ADX≥0 threshold must classify every decision point trending, an
+  unreachable threshold must classify every one ranging, and the
+  existing 5-arg overload must be byte-identical to the new one called
+  with the global default explicitly). Since this story shipped no
+  production behavior change, no live-browser/`SignalServiceTest`
+  end-to-end verification was needed beyond the calibration test's own
+  run — the same no-production-change precedent E8-F1-S2/S3/S5/S6
+  established. `./mvnw verify`: 527 tests, 0 failures, up from 506.
 
 ## Build / lint / test
 
@@ -1243,6 +1315,14 @@ holiday gap the extension surfaced and fixed.
   it for crypto tickers, per `sellGateAppliesTo(AssetType)`, after
   `SignalRuleEngine.evaluate` returns) — `Regime`/`RegimeClassifier`
   classify an `AdxCalculator` reading into TRENDING/RANGING for both.
+  `RegimeClassifier.classify` has a threshold-accepting overload
+  (E8-F3-S4) that the SELL gate never calls (always the global-default
+  no-arg form); a BUY-side counterpart, `applyBuyGate`/
+  `buyGateAppliesTo(String)`, mirrors `applySellGate` but stays
+  **unwired for every symbol** — `PerSymbolAdxThresholds` (E8-F3-S4,
+  mirrors `PerSymbolRuleThresholds`'s per-symbol shape) ships with an
+  empty override map, since no symbol's tuning-window winner confirmed
+  on its own held-out tail.
 - `backtest` (`src/main/java`, E8-F5-S1) — the TP/SL-aware walk-forward scoring
   primitives promoted out of the test-only `BacktestHarness` so live signal
   monitoring can reuse them: `WalkForwardScorer` (`score`/`findFirstCrossing`/

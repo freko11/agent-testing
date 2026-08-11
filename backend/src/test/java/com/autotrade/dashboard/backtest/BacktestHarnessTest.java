@@ -2,11 +2,13 @@ package com.autotrade.dashboard.backtest;
 
 import com.autotrade.dashboard.marketdata.Candle;
 import com.autotrade.dashboard.signal.IndicatorId;
+import com.autotrade.dashboard.signal.RegimeClassifier;
 import com.autotrade.dashboard.signal.SignalCall;
 import com.autotrade.dashboard.signal.SignalRuleEngine;
 import com.autotrade.dashboard.signal.SignalRuleId;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -65,6 +67,43 @@ class BacktestHarnessTest {
         assertEquals(ungated.overallSell().totalCalls() - ungated.sellByRegime().ranging().totalCalls(),
                 gated.overallSell().totalCalls(),
                 label + ": gated SELL total must equal ungated SELL total minus its ranging-regime calls");
+    }
+
+    /**
+     * E8-F3-S4: pins down the new {@code regimeThreshold}-accepting overload structurally — an
+     * extreme-low threshold (every ADX reading clears it) must push every decision point's regime
+     * split to trending-only, an extreme-high threshold (no ADX reading clears it) must push every
+     * one to ranging-only, and the existing 5-arg overload (no explicit threshold) must be
+     * byte-identical to calling the new overload with {@code RegimeClassifier.ADX_TRENDING_THRESHOLD}
+     * explicitly.
+     */
+    @Test
+    void regimeThresholdOverload_extremesPushEveryDecisionPointToOneRegimeBucket() {
+        assertRegimeThresholdBehavesStructurally("BTCUSDT", "backtest/btcusdt-daily-history.csv");
+        assertRegimeThresholdBehavesStructurally("DOGEUSDT", "backtest/dogeusdt-daily-history.csv");
+    }
+
+    private void assertRegimeThresholdBehavesStructurally(String label, String fixture) {
+        List<Candle> candles = BacktestCandleCsvLoader.load(fixture);
+
+        BacktestReport allTrending = BacktestHarness.run(label, candles, BigDecimal.ZERO);
+        assertEquals(0, allTrending.buyByRegime().ranging().totalCalls(),
+                label + ": an ADX>=0 threshold must classify every decision point as trending (BUY)");
+        assertEquals(0, allTrending.sellByRegime().ranging().totalCalls(),
+                label + ": an ADX>=0 threshold must classify every decision point as trending (SELL)");
+
+        BacktestReport allRanging = BacktestHarness.run(label, candles, new BigDecimal("1000"));
+        assertEquals(0, allRanging.buyByRegime().trending().totalCalls(),
+                label + ": an unreachable ADX threshold must classify every decision point as ranging (BUY)");
+        assertEquals(0, allRanging.sellByRegime().trending().totalCalls(),
+                label + ": an unreachable ADX threshold must classify every decision point as ranging (SELL)");
+
+        BacktestReport implicitDefault = BacktestHarness.run(label, candles);
+        BacktestReport explicitDefault = BacktestHarness.run(label, candles, RegimeClassifier.ADX_TRENDING_THRESHOLD);
+        assertEquals(implicitDefault.buyByRegime(), explicitDefault.buyByRegime(),
+                label + ": the 5-arg overload must be byte-identical to the new overload called with the global default threshold");
+        assertEquals(implicitDefault.sellByRegime(), explicitDefault.sellByRegime(),
+                label + ": the 5-arg overload must be byte-identical to the new overload called with the global default threshold");
     }
 
     private void runAndVerify(String label, String fixture) {

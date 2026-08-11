@@ -90,4 +90,46 @@ class RegimeGatedRuleEngineTest {
     void sellGateAppliesTo_stock_false() {
         assertFalse(RegimeGatedRuleEngine.sellGateAppliesTo(AssetType.STOCK));
     }
+
+    @Test
+    void buyInRangingRegime_forBuyOnlyGate_suppressedToNoStrongSignal() {
+        assertEquals(SignalRuleId.NO_STRONG_SIGNAL,
+                RegimeGatedRuleEngine.applyBuyGate(SignalRuleId.BULLISH_UNANIMOUS, Regime.RANGING));
+    }
+
+    @Test
+    void buyInTrendingRegime_forBuyOnlyGate_unchanged() {
+        assertEquals(SignalRuleId.BULLISH_UNANIMOUS,
+                RegimeGatedRuleEngine.applyBuyGate(SignalRuleId.BULLISH_UNANIMOUS, Regime.TRENDING));
+    }
+
+    @Test
+    void sellInRangingRegime_forBuyOnlyGate_unaffected() {
+        assertEquals(SignalRuleId.BEARISH_MAJORITY,
+                RegimeGatedRuleEngine.applyBuyGate(SignalRuleId.BEARISH_MAJORITY, Regime.RANGING));
+    }
+
+    @Test
+    void holdCauseRule_forBuyOnlyGate_unchangedRegardlessOfRegime() {
+        for (Regime regime : Regime.values()) {
+            assertEquals(SignalRuleId.VOLATILITY_TOO_EXTREME,
+                    RegimeGatedRuleEngine.applyBuyGate(SignalRuleId.VOLATILITY_TOO_EXTREME, regime));
+            assertEquals(SignalRuleId.CONFLICTING_SIGNALS,
+                    RegimeGatedRuleEngine.applyBuyGate(SignalRuleId.CONFLICTING_SIGNALS, regime));
+            assertEquals(SignalRuleId.NO_STRONG_SIGNAL,
+                    RegimeGatedRuleEngine.applyBuyGate(SignalRuleId.NO_STRONG_SIGNAL, regime));
+        }
+    }
+
+    /**
+     * E8-F3-S4: {@code PerSymbolAdxTrendingThresholdCalibrationTest}'s sweep found no symbol's
+     * tuning-window winner (if any) confirms on that same symbol's own held-out tail — a
+     * documented, final no-ship outcome, not a placeholder pending a future sweep.
+     */
+    @Test
+    void buyGateAppliesTo_noSymbolConfirmed_falseForEverySymbol() {
+        assertFalse(RegimeGatedRuleEngine.buyGateAppliesTo("BTCUSDT"));
+        assertFalse(RegimeGatedRuleEngine.buyGateAppliesTo("DOGEUSDT"));
+        assertFalse(RegimeGatedRuleEngine.buyGateAppliesTo("SOLUSDT"));
+    }
 }

@@ -2,6 +2,8 @@ package com.autotrade.dashboard.signal;
 
 import com.autotrade.dashboard.ticker.AssetType;
 
+import java.util.Set;
+
 /**
  * E8-F3-S2: an engine-agnostic post-filter that suppresses a directional (BUY/SELL) call when the
  * market is in a RANGING regime — "the same MA-crossover means different things in a choppy vs.
@@ -93,4 +95,49 @@ public final class RegimeGatedRuleEngine {
     public static boolean sellGateAppliesTo(AssetType assetType) {
         return assetType == AssetType.CRYPTO;
     }
+
+    /**
+     * E8-F3-S4: the per-symbol BUY-side counterpart to {@link #applySellGate} — collapses {@code
+     * matchedRule} to {@link SignalRuleId#NO_STRONG_SIGNAL} only when it's a BUY call in a {@link
+     * Regime#RANGING} regime; SELL calls and every HOLD-cause rule pass through completely
+     * unchanged regardless of regime. Unlike {@link #applySellGate}, {@code regime} here must
+     * already be classified against a per-symbol threshold ({@code PerSymbolAdxThresholds}), not
+     * the global {@link RegimeClassifier#ADX_TRENDING_THRESHOLD} — see {@link #buyGateAppliesTo}
+     * for which symbols this gate is wired for at all.
+     */
+    public static SignalRuleId applyBuyGate(SignalRuleId matchedRule, Regime regime) {
+        if (matchedRule.call() == SignalCall.BUY && regime == Regime.RANGING) {
+            return SignalRuleId.NO_STRONG_SIGNAL;
+        }
+        return matchedRule;
+    }
+
+    /**
+     * E8-F3-S4: symbols confirmed here have a BUY-side per-symbol trending-threshold override
+     * (see {@code PerSymbolAdxTrendingThresholdCalibrationTest}'s class Javadoc for the sweep
+     * methodology and docs/CHANGELOG.md's E8-F3-S4 entry for the actual per-symbol figures)
+     * that cleared the same tune-then-validate-on-own-held-out-tail bar {@code
+     * PerSymbolRuleThresholds}'s per-symbol RSI override used. Deliberately a fixed allow-list, not
+     * an {@link AssetType} check like {@link #sellGateAppliesTo}: unlike the SELL gate (evidence
+     * held uniformly across every crypto symbol tested), the BUY-side regime effect is
+     * fixture-dependent — E8-F4-S2 found it favors ranging on some symbols and trending on others —
+     * so wiring is conditioned on each symbol's own confirmed evidence, not generalized to the
+     * whole asset class. A symbol can confirm at the global default value with no {@code
+     * PerSymbolAdxThresholds} entry at all — membership here and having a non-default override are
+     * independent facts.
+     *
+     * <p><b>This set is empty — no symbol confirms, so the BUY gate stays unwired for every
+     * symbol.</b> See {@code PerSymbolAdxThresholds}' Javadoc for why: BTCUSDT's tuning-window
+     * winners reversed on its own held-out tail, and DOGEUSDT/SOLUSDT's tuning windows never
+     * produced a qualifying winner in the first place (ranging beat trending at every swept
+     * candidate on both). {@link #applyGate} (both directions, still unwired) and this per-symbol
+     * BUY gate now cover every mechanism E8-F3/E8-F4 tried for the BUY-side regime effect; per
+     * E8-F4-S2's own finding, it remains fixture-dependent in a way no threshold value — global or
+     * per-symbol — resolves.
+     */
+    public static boolean buyGateAppliesTo(String normalizedSymbol) {
+        return BUY_GATE_CONFIRMED_SYMBOLS.contains(normalizedSymbol);
+    }
+
+    private static final Set<String> BUY_GATE_CONFIRMED_SYMBOLS = Set.of();
 }
