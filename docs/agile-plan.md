@@ -220,9 +220,10 @@ full account. Four more follow-ups (E8-F1-S8 through S11) were added after that,
 found during a sweep for flagged-but-never-converted findings: E8-F1-S5/S6 each
 left a SELL-side secondary finding unactioned (chartered for the BUY-side
 mismatch instead), and E8-F1-S6's own closing note named per-symbol MACD/MA
-thresholds as the one BUY-side mechanism still untried. E8-F1-S10 is now
-done (no ship — see CLAUDE.md's Status section). E8-F1-S11 is not yet
-built.*
+thresholds as the one BUY-side mechanism still untried. E8-F1-S10 is done
+(no ship) and E8-F1-S11 is done (shipped — see CLAUDE.md's Status section
+for both). This closes out the second E8-F1 follow-up batch; E8's backlog
+is fully complete again.*
 
 **F8.1 Threshold calibration**
 | ID | Story | Acceptance Criteria | Pts |

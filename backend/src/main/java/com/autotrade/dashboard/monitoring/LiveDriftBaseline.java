@@ -57,25 +57,43 @@ import com.autotrade.dashboard.backtest.Checkpoint;
  * they did under v4, so {@code BacktestHarness.run}'s output for them, and therefore every
  * constant below, is byte-identical. {@link LiveDriftBaselineTest} needed no changes and passed
  * unmodified, confirming this.
+ *
+ * <p><b>E8-F1-S11's v5&rarr;v6 bump is like E8-F3-S3's, not E8-F1-S8's: the SELL constants were
+ * genuinely recomputed again, not just relabeled.</b> Wiring {@code MaCrossoverSellGate#applySellGate}
+ * into production alongside the already-wired regime gate means a live v6 SELL audit entry can
+ * only ever be a trending-regime call whose MA-crossover separation also clears 2.00% — the v5
+ * SELL constants were derived from the regime-gated-only {@code overallSell()}, which no longer
+ * describes what a v6 SELL call looks like. {@link LiveDriftBaselineTest} now calls {@code
+ * BacktestHarness.run}'s 7-arg overload with both {@code applySellRegimeGate=true} and {@code
+ * applyMaCrossoverSellGate=true} for the SELL assertions, and the SELL constants below were
+ * re-derived from that run's actual output — every checkpoint moved up again from its v5 value
+ * (MIN 0.033652&rarr;0.067244, MID 0.180769&rarr;0.165253, MAX 0.222951&rarr;0.241016), consistent
+ * with dropping more of the weaker-performing SELL calls from the pool, though MID moved down
+ * slightly rather than up (the two gates don't remove a strictly nested set of calls — layering a
+ * second, independent filter on top of the first can shift a weighted average either direction at
+ * a given checkpoint even while the other two move up). BUY is unaffected by both gates (neither
+ * ever touches BUY calls) and the BUY constants below are confirmed byte-identical to their v5
+ * values by {@link LiveDriftBaselineTest}'s own unchanged (ungated) BUY assertions.
  */
 public final class LiveDriftBaseline {
 
     /** The rule table version these baseline figures were computed against — {@code
      * LiveSignalDriftService} only compares audit entries whose own {@code ruleTableVersion}
      * matches this, never a stale cross-version comparison. */
-    public static final String RULE_TABLE_VERSION = "v5";
+    public static final String RULE_TABLE_VERSION = "v6";
 
     public static final double BUY_MIN_EXPECTANCY_PCT_AFTER_COSTS = -0.053166;
     public static final double BUY_MID_EXPECTANCY_PCT_AFTER_COSTS = 0.027064;
     public static final double BUY_MAX_EXPECTANCY_PCT_AFTER_COSTS = 0.033141;
 
-    /** E8-F3-S3: recomputed against the gated ({@code applySellRegimeGate=true}) SELL behavior —
-     * see class Javadoc. Every checkpoint moved up from its v3 (ungated) value, since dropping the
-     * ranging-regime SELL calls (E8-F4-S2 found ranging SELL expectancy consistently worse than
-     * trending on both fixtures) removes exactly the weaker-performing calls from the pool. */
-    public static final double SELL_MIN_EXPECTANCY_PCT_AFTER_COSTS = 0.033652;
-    public static final double SELL_MID_EXPECTANCY_PCT_AFTER_COSTS = 0.180769;
-    public static final double SELL_MAX_EXPECTANCY_PCT_AFTER_COSTS = 0.222951;
+    /** E8-F1-S11: recomputed against both gates' combined behavior ({@code
+     * applySellRegimeGate=true}, {@code applyMaCrossoverSellGate=true}) — see class Javadoc. Every
+     * checkpoint moved up again from its v4/v5 (regime-gated-only) value, since layering the
+     * MA-crossover separation gate on top removes more of the weaker-performing SELL calls from the
+     * pool, the same direction E8-F3-S3's own v3&rarr;v4 recomputation moved. */
+    public static final double SELL_MIN_EXPECTANCY_PCT_AFTER_COSTS = 0.067244;
+    public static final double SELL_MID_EXPECTANCY_PCT_AFTER_COSTS = 0.165253;
+    public static final double SELL_MAX_EXPECTANCY_PCT_AFTER_COSTS = 0.241016;
 
     private LiveDriftBaseline() {
     }

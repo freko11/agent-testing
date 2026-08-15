@@ -7,6 +7,7 @@ import com.autotrade.dashboard.backtest.Checkpoint;
 import com.autotrade.dashboard.backtest.CheckpointStats;
 import com.autotrade.dashboard.backtest.DirectionalOutcomeStats;
 import com.autotrade.dashboard.marketdata.Candle;
+import com.autotrade.dashboard.signal.RegimeClassifier;
 import com.autotrade.dashboard.signal.SignalRuleEngine;
 import org.junit.jupiter.api.Test;
 
@@ -57,16 +58,17 @@ class LiveDriftBaselineTest {
                 LiveDriftBaseline.expectancyPctAfterCosts(true, Checkpoint.MAX), TOLERANCE);
     }
 
-    /** E8-F3-S3: the SELL baseline now must reflect the wired {@code applySellGate} behavior — a
-     * live SELL audit entry can only ever be a trending-regime call, so the baseline must be
-     * recomputed with the gate applied ({@code applySellRegimeGate=true}), not just relabeled, per
-     * the gap this story closed versus E8-F1-S4's own (behavior-unaffected) version bump. */
+    /** E8-F1-S11: the SELL baseline now must reflect both wired SELL-only gates' combined behavior
+     * — a live SELL audit entry can only ever be a trending-regime call whose MA-crossover
+     * separation also clears 2.00%, so the baseline must be recomputed with both gates applied
+     * ({@code applySellRegimeGate=true}, {@code applyMaCrossoverSellGate=true}), not just relabeled,
+     * the same "recompute, don't just relabel" treatment E8-F3-S3's v3&rarr;v4 bump got. */
     @Test
     void sellBaselineMatchesCombinedFixtureComputation() {
         BacktestReport btc = BacktestHarness.run("BTCUSDT", BTCUSDT, SignalRuleEngine::evaluate,
-                SignalRuleEngine.RuleThresholds.DEFAULT, true);
+                SignalRuleEngine.RuleThresholds.DEFAULT, true, RegimeClassifier.ADX_TRENDING_THRESHOLD, true);
         BacktestReport doge = BacktestHarness.run("DOGEUSDT", DOGEUSDT, SignalRuleEngine::evaluate,
-                SignalRuleEngine.RuleThresholds.DEFAULT, true);
+                SignalRuleEngine.RuleThresholds.DEFAULT, true, RegimeClassifier.ADX_TRENDING_THRESHOLD, true);
 
         assertCombinedMatches(btc.overallSell(), doge.overallSell(),
                 LiveDriftBaseline.SELL_MIN_EXPECTANCY_PCT_AFTER_COSTS,

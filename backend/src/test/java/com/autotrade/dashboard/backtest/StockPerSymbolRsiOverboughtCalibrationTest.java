@@ -97,7 +97,7 @@ class StockPerSymbolRsiOverboughtCalibrationTest {
     }
 
     private String candidateLabel(BigDecimal overbought) {
-        String suffix = overbought.compareTo(CURRENT_DEFAULT_OVERBOUGHT) == 0 ? " (v5/current default)"
+        String suffix = overbought.compareTo(CURRENT_DEFAULT_OVERBOUGHT) == 0 ? " (v6/current default)"
                 : overbought.compareTo(new BigDecimal("70")) == 0 ? " (pre-tuning)" : "";
         return "25/" + overbought + suffix;
     }

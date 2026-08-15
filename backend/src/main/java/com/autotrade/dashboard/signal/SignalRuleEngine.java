@@ -217,10 +217,29 @@ import java.math.BigDecimal;
  * +1.206%; SOLUSDT max +1.506% vs. +0.844%) — acting on it is E8-F1-S11's separate, chartered
  * story. See {@code PerSymbolMaCrossoverSeparationCalibrationTest}'s class Javadoc and
  * docs/CHANGELOG.md's E8-F1-S10 entry for the full per-symbol figures.
+ *
+ * <p><b>E8-F1-S11 wired {@link MaCrossoverSellGate#applySellGate} into production</b> — unlike
+ * E8-F1-S9's attempt at the same SELL-only wiring for {@link #MACD_MIN_HISTOGRAM_MAGNITUDE_PCT}
+ * (no ship), this axis's SELL-side finding actually cleared the global,
+ * uniform-across-all-three-symbols bar: {@code ma&gt;=2.00%} beats the {@code separation=0}
+ * SELL-side after-cost-expectancy baseline at every checkpoint on all three of
+ * BTCUSDT/DOGEUSDT/SOLUSDT's own tuning windows simultaneously, and confirms on all three symbols'
+ * own held-out tails too. {@code SignalService.computeSignalWithProvenance} now calls {@link
+ * MaCrossoverSellGate#applySellGate} after {@link RegimeGatedRuleEngine#applySellGate}, for crypto
+ * tickers only ({@link MaCrossoverSellGate#sellGateAppliesTo}) — a SELL call whose MA-crossover
+ * separation falls short of 2.00% (re-evaluated under a stricter threshold) resolves to {@link
+ * SignalRuleId#NO_STRONG_SIGNAL} instead of its rule-table match; BUY calls and every stock ticker
+ * are completely unaffected. {@link #RULE_TABLE_VERSION} bumps to v6 since this changes a real
+ * resolved {@link SignalRuleId} for a real input class (a crypto SELL call with insufficient
+ * MA-crossover separation), the same treatment E8-F3-S3's v3&rarr;v4 bump got. See {@code
+ * SellMaCrossoverSeparationCalibrationTest}'s class Javadoc, {@link MaCrossoverSellGate}'s own
+ * class Javadoc, and docs/CHANGELOG.md's E8-F1-S11 entry for the full figures and the recomputed
+ * {@code LiveDriftBaseline} SELL figures. This was E8-F1-S8 through S11's last story — the second
+ * E8-F1 follow-up batch is now complete.
  */
 public final class SignalRuleEngine {
 
-    public static final String RULE_TABLE_VERSION = "v5";
+    public static final String RULE_TABLE_VERSION = "v6";
 
     public static final BigDecimal RSI_OVERSOLD_THRESHOLD = new BigDecimal("25");
     public static final BigDecimal RSI_OVERBOUGHT_THRESHOLD = new BigDecimal("75");

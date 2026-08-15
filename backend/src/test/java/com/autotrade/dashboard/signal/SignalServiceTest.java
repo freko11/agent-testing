@@ -330,6 +330,81 @@ class SignalServiceTest {
         assertEquals(SignalRuleId.BEARISH_UNANIMOUS.name(), signalResponse.matchedRule());
     }
 
+    /**
+     * E8-F1-S11: proves {@code MaCrossoverSellGate.applySellGate} is actually wired into the real
+     * production call path — {@link SignalService} is not mocked here, only {@code
+     * IndicatorService} is, same unmocked-{@code SignalService} approach as the RSI/MACD/regime
+     * cases above. RSI bearish + MA bearish (MACD neutral, so it never votes) is
+     * BEARISH_MAJORITY under the base (separation=0) threshold; with separation below {@code
+     * MaCrossoverSellGate.SELL_MIN_SEPARATION_PCT_OF_PRICE} (2.00%), the gate's stricter
+     * re-evaluation drops the MA vote entirely, leaving only RSI's lone bearish vote — not enough
+     * for a majority, so the call is suppressed to NO_STRONG_SIGNAL.
+     */
+    @Test
+    void sellCallWithInsufficientMaSeparation_forCryptoTicker_suppressedToNoStrongSignal() {
+        SignalResponse signalResponse = computeCryptoSignal(sellIndicatorsWithMaSeparation("1.00"), TRENDING_ADX);
+
+        assertEquals(SignalCall.HOLD, signalResponse.call());
+        assertEquals(SignalRuleId.NO_STRONG_SIGNAL.name(), signalResponse.matchedRule());
+    }
+
+    /** Control for {@link #sellCallWithInsufficientMaSeparation_forCryptoTicker_suppressedToNoStrongSignal}
+     * — identical indicators, separation raised to 3.00% (past the 2.00% bar). Confirms the
+     * suppression above is really driven by the separation magnitude, not some other difference
+     * between the two scenarios. */
+    @Test
+    void sellCallWithSufficientMaSeparation_forCryptoTicker_unaffected() {
+        SignalResponse signalResponse = computeCryptoSignal(sellIndicatorsWithMaSeparation("3.00"), TRENDING_ADX);
+
+        assertEquals(SignalCall.SELL, signalResponse.call());
+        assertEquals(SignalRuleId.BEARISH_MAJORITY.name(), signalResponse.matchedRule());
+    }
+
+    /** E8-F1-S11: proves BUY calls pass through this gate completely unaffected — {@code
+     * MaCrossoverSellGate.applySellGate} only ever touches SELL calls, mirroring {@code
+     * RegimeGatedRuleEngine.applySellGate}'s own BUY passthrough. */
+    @Test
+    void buyCallInRangingRegime_forCryptoTicker_unaffectedByMaCrossoverSellGate() {
+        SignalResponse signalResponse = computeCryptoSignal(bullishIndicators(), TRENDING_ADX);
+
+        assertEquals(SignalCall.BUY, signalResponse.call());
+        assertEquals(SignalRuleId.BULLISH_UNANIMOUS.name(), signalResponse.matchedRule());
+    }
+
+    /** E8-F1-S11: proves the gate is scoped to crypto tickers only — a stock ticker's SELL call
+     * with insufficient MA separation is unaffected, since {@code
+     * MaCrossoverSellGate.sellGateAppliesTo} returns {@code false} for {@code AssetType.STOCK}
+     * (zero stock evidence exists for this axis). */
+    @Test
+    void sellCallWithInsufficientMaSeparation_forStockTicker_unaffected() {
+        Ticker ticker = new Ticker("AAPL", AssetType.STOCK, "NASDAQ");
+        IndicatorSnapshot snapshot = new IndicatorSnapshot(ticker, Instant.parse("2026-02-09T00:00:00Z"),
+                new BigDecimal("113.10"), Broker.ALPACA);
+        IndicatorResponse response = sellIndicatorsWithMaSeparation("1.00").apply(ticker, Broker.ALPACA);
+
+        when(indicatorService.computeForSignal("AAPL", 200))
+                .thenReturn(new IndicatorService.IndicatorComputation(response, snapshot, TRENDING_ADX));
+
+        SignalResponse signalResponse = service.computeSignal("AAPL", 200);
+
+        assertEquals(SignalCall.SELL, signalResponse.call());
+        assertEquals(SignalRuleId.BEARISH_MAJORITY.name(), signalResponse.matchedRule());
+    }
+
+    /** RSI bearish + MA bearish at {@code separationPctOfPrice}, MACD flat (histogram 0, so it
+     * never votes either way) — isolates the MA-crossover SELL gate's own effect from the other
+     * two indicators. */
+    private static IndicatorFactory sellIndicatorsWithMaSeparation(String separationPctOfPrice) {
+        return (ticker, broker) -> {
+            MacdResult macd = new MacdResult(new BigDecimal("1.0"), new BigDecimal("1.0"), new BigDecimal("0"), new BigDecimal("0"));
+            MovingAverageResult ma = new MovingAverageResult(10, new BigDecimal("108.0"), 30,
+                    new BigDecimal("111.0"), MovingAverageRelation.SHORT_BELOW_LONG, new BigDecimal(separationPctOfPrice));
+            return new IndicatorResponse(TickerSummary.from(ticker), broker, Instant.parse("2026-02-09T00:00:00Z"),
+                    new BigDecimal("113.10"), new BigDecimal("80"), macd, ma, new BigDecimal("2.0"),
+                    new BigDecimal("1000000.0000"), new BigDecimal("1.0000"));
+        };
+    }
+
     private SignalResponse computeCryptoSignal(IndicatorFactory indicators, BigDecimal adx) {
         Ticker ticker = new Ticker("BTCUSDT", AssetType.CRYPTO, null);
         IndicatorSnapshot snapshot = new IndicatorSnapshot(ticker, Instant.parse("2026-02-09T00:00:00Z"),
@@ -358,11 +433,17 @@ class SignalServiceTest {
         };
     }
 
+    /** E8-F1-S11 fixture fallout: MA separation bumped from 0 to 3.00% (comfortably past {@code
+     * MaCrossoverSellGate.SELL_MIN_SEPARATION_PCT_OF_PRICE}, 2.00%) so this fixture's SELL calls
+     * still resolve to BEARISH_UNANIMOUS under the now-wired MA-crossover SELL gate — at the
+     * original 0, the gate's stricter re-evaluation would drop the MA vote entirely, downgrading
+     * {@link #sellCallInTrendingRegime_forCryptoTicker_unaffected}'s expected BEARISH_UNANIMOUS to
+     * BEARISH_MAJORITY, which is a real (correct) gate effect but not what that test is isolating. */
     private static IndicatorFactory bearishIndicators() {
         return (ticker, broker) -> {
             MacdResult macd = new MacdResult(new BigDecimal("-2.0"), new BigDecimal("-1.0"), new BigDecimal("-1.0"), new BigDecimal("0"));
             MovingAverageResult ma = new MovingAverageResult(10, new BigDecimal("108.0"), 30,
-                    new BigDecimal("111.0"), MovingAverageRelation.SHORT_BELOW_LONG, BigDecimal.ZERO);
+                    new BigDecimal("111.0"), MovingAverageRelation.SHORT_BELOW_LONG, new BigDecimal("3.00"));
             return new IndicatorResponse(TickerSummary.from(ticker), broker, Instant.parse("2026-02-09T00:00:00Z"),
                     new BigDecimal("113.10"), new BigDecimal("80"), macd, ma, new BigDecimal("2.0"),
                     new BigDecimal("1000000.0000"), new BigDecimal("1.0000"));

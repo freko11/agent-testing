@@ -13,6 +13,7 @@ import com.autotrade.dashboard.marketdata.Candle;
 import com.autotrade.dashboard.signal.HoldTerm;
 import com.autotrade.dashboard.signal.HoldTermCalculator;
 import com.autotrade.dashboard.signal.IndicatorId;
+import com.autotrade.dashboard.signal.MaCrossoverSellGate;
 import com.autotrade.dashboard.signal.Regime;
 import com.autotrade.dashboard.signal.RegimeClassifier;
 import com.autotrade.dashboard.signal.RegimeGatedRuleEngine;
@@ -141,6 +142,21 @@ public final class BacktestHarness {
     public static BacktestReport run(String label, List<Candle> candles, RuleEvaluator evaluator,
                                       SignalRuleEngine.RuleThresholds thresholds, boolean applySellRegimeGate,
                                       BigDecimal regimeThreshold) {
+        return run(label, candles, evaluator, thresholds, applySellRegimeGate, regimeThreshold, false);
+    }
+
+    /**
+     * E8-F1-S11: as the 6-arg overload above, but when {@code applyMaCrossoverSellGate} is {@code
+     * true}, every decision point's rule (after the regime gate above, if that was also applied)
+     * additionally passes through {@link MaCrossoverSellGate#applySellGate} — the same wiring
+     * {@code SignalService} applies in production, replayed here so {@code LiveDriftBaselineTest}
+     * can recompute {@code LiveDriftBaseline}'s SELL constants against both gates' combined
+     * behavior. Defaults to {@code false} (today's ungated-by-this-gate behavior) everywhere it
+     * isn't explicitly requested, so every existing caller is unaffected.
+     */
+    public static BacktestReport run(String label, List<Candle> candles, RuleEvaluator evaluator,
+                                      SignalRuleEngine.RuleThresholds thresholds, boolean applySellRegimeGate,
+                                      BigDecimal regimeThreshold, boolean applyMaCrossoverSellGate) {
         Map<SignalRuleId, Integer> callCounts = new EnumMap<>(SignalRuleId.class);
         Map<SignalRuleId, DirectionalAccumulator> directional = new EnumMap<>(SignalRuleId.class);
         Map<SignalRuleId, HoldGateAccumulator> holdGate = new EnumMap<>(SignalRuleId.class);
@@ -185,9 +201,12 @@ public final class BacktestHarness {
             Regime regime = RegimeClassifier.classify(adx, regimeThreshold);
 
             SignalRuleId ruleTableMatch = evaluator.evaluate(rsi, macd, ma, volatility, volumeTrend);
-            SignalRuleId matchedRule = applySellRegimeGate
+            SignalRuleId afterRegimeGate = applySellRegimeGate
                     ? RegimeGatedRuleEngine.applySellGate(ruleTableMatch, regime)
                     : ruleTableMatch;
+            SignalRuleId matchedRule = applyMaCrossoverSellGate
+                    ? MaCrossoverSellGate.applySellGate(afterRegimeGate, rsi, macd, ma, volatility, volumeTrend, thresholds)
+                    : afterRegimeGate;
             HoldTerm holdTerm = HoldTermCalculator.calculate(matchedRule, volatility);
 
             callCounts.merge(matchedRule, 1, Integer::sum);

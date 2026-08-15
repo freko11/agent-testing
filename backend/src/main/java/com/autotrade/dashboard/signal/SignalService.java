@@ -50,6 +50,16 @@ public class SignalService {
             matchedRule = RegimeGatedRuleEngine.applySellGate(ruleTableMatch, regime);
         }
 
+        // E8-F1-S11: a SELL call whose MA-crossover separation falls short of 2.00% (re-evaluated
+        // under a stricter threshold) is suppressed to NO_STRONG_SIGNAL, for crypto tickers only —
+        // see MaCrossoverSellGate.sellGateAppliesTo/applySellGate's Javadoc for why BUY stays
+        // unfiltered and why this is scoped to crypto. Composes with the regime gate above in
+        // either order, since both only ever downgrade an already-resolved SELL call.
+        if (MaCrossoverSellGate.sellGateAppliesTo(assetType)) {
+            matchedRule = MaCrossoverSellGate.applySellGate(matchedRule, indicators.rsi(), indicators.macd(),
+                    indicators.movingAverage(), indicators.volatility(), indicators.volumeTrend(), thresholds);
+        }
+
         HoldTerm holdTerm = HoldTermCalculator.calculate(matchedRule, indicators.volatility());
 
         SignalCallEntry entry = new SignalCallEntry(computation.snapshot().getTicker(), computation.snapshot(),

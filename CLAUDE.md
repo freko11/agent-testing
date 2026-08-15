@@ -156,7 +156,19 @@ DOGEUSDT/SOLUSDT's own tuning windows never produce a winner to begin
 with — see its entry below for the full per-symbol figures.
 `RULE_TABLE_VERSION` stays v5, the same no-production-change treatment
 E8-F1-S6/S9 established, since no symbol's override actually ships.
-E8-F1-S11 remains open.
+E8-F1-S11, the fourth and last story of this batch, wires the
+MA-crossover separation filter in for SELL calls specifically — the same
+SELL-only wiring attempt E8-F1-S9 made on the MACD axis, but this time it
+ships: `ma>=2.00%` clears the uniform-across-all-three-symbols
+tuning-window bar E8-F1-S9 failed to clear, and confirms on all three
+symbols' own held-out tails too. New `MaCrossoverSellGate` is wired into
+`SignalService.computeSignalWithProvenance` for crypto tickers only,
+`RULE_TABLE_VERSION` bumps v5→v6, and `LiveDriftBaseline`'s SELL
+constants are recomputed against both wired SELL-only gates' combined
+behavior — see its entry below for the full figures. This closes out the
+second E8-F1 follow-up batch (E8-F1-S8 through S11); E8's backlog is
+fully complete again, until a future sweep finds more flagged,
+never-converted findings.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -1670,6 +1682,79 @@ E8-F1-S11 remains open.
   precedent E8-F1-S2/S3/S5/S6/E8-F3-S4/E8-F1-S9 established. `./mvnw
   verify`: 552 tests, 0 failures, up from 550. E8-F1-S11 remains open in
   the second follow-up batch.
+- E8-F1-S11: wires the MA-crossover separation filter in for SELL calls
+  specifically, the fourth and last story of the second E8-F1 follow-up
+  batch — the same SELL-only wiring attempt E8-F1-S9 made on the MACD
+  axis, chartered here for the MA-crossover axis after E8-F1-S6/S10 each
+  flagged a ~2.00% separation threshold as improving SELL-side after-cost
+  expectancy uniformly across all three symbols but left it unactioned.
+  New `backtest.SellMaCrossoverSeparationCalibrationTest` swept the same
+  0.00%-10.00% grid E8-F1-S6/S10 used against E8-F1-S9's own global,
+  uniform-across-all-three-symbols ship bar (a candidate must beat the
+  `separation=0` SELL-side after-cost-expectancy baseline at every
+  checkpoint on all three of BTCUSDT/DOGEUSDT/SOLUSDT's own tuning
+  windows simultaneously, before even reaching held-out confirmation).
+  Result, unlike E8-F1-S9's own no-ship finding on the MACD axis: **ship**
+  — `ma>=2.00%` clears the tuning-window bar on all three symbols at once
+  (BTCUSDT -0.342%/-0.475%/-0.497% → -0.181%/-0.428%/-0.424%, n=115;
+  DOGEUSDT +0.175%/+0.616%/+0.521% → +0.207%/+0.844%/+0.787%, n=77;
+  SOLUSDT -0.528%/-0.216%/-0.216% → -0.414%/-0.134%/-0.133%, n=69, all
+  three beating baseline on every symbol) and then confirms on all three
+  symbols' own held-out tails too (BTCUSDT +0.736%/+0.963%/+0.999% →
+  +1.046%/+1.191%/+1.213%, n=52; DOGEUSDT +0.230%/+1.042%/+1.206% →
+  +0.504%/+1.265%/+1.612%, n=36; SOLUSDT +0.357%/+0.647%/+0.844% →
+  +1.002%/+1.246%/+1.506%, n=37). New `signal.MaCrossoverSellGate`
+  (mirrors `RegimeGatedRuleEngine.applySellGate`'s shape, but — since
+  `maMinSeparationPctOfPrice` gates `computeVotes`'s MA vote directly and
+  symmetrically, unlike the regime gate's orthogonal ADX input — actually
+  re-runs `SignalRuleEngine.evaluate` under a second, stricter threshold
+  and keeps the result only if it's still a SELL call, collapsing to
+  `NO_STRONG_SIGNAL` otherwise) is wired into
+  `SignalService.computeSignalWithProvenance` for crypto tickers only
+  (`MaCrossoverSellGate.sellGateAppliesTo`, same crypto-only scoping
+  `RegimeGatedRuleEngine.sellGateAppliesTo` uses, since zero stock
+  evidence exists for this axis), composing with the already-wired regime
+  gate in either order since both only ever downgrade an already-resolved
+  SELL call. `RULE_TABLE_VERSION` bumps v5→v6 — a real behavior change,
+  the same treatment E8-F3-S3's v3→v4 bump got.
+  `BacktestHarness.run` gained a 7-arg overload
+  (`applyMaCrossoverSellGate`, default `false`) so `LiveDriftBaselineTest`
+  could replay both wired SELL-only gates' combined behavior against the
+  real BTCUSDT/DOGEUSDT fixtures; `LiveDriftBaseline`'s SELL constants
+  were genuinely recomputed again (not just relabeled), moving from their
+  v5 values (MIN 0.033652, MID 0.180769, MAX 0.222951) to v6 (MIN
+  0.067244, MID 0.165253, MAX 0.241016) — MIN/MAX moved up as expected
+  from dropping more weak-performing SELL calls, MID moved down slightly
+  since the two gates don't remove a strictly nested set of calls. BUY
+  constants stay byte-identical (neither gate ever touches BUY),
+  confirmed by `LiveDriftBaselineTest`'s own unchanged BUY assertions.
+  Fixture fallout caught by `./mvnw verify`: `OrderCsvExporterTest`'s
+  hardcoded `v5` CSV-row literal and `StockPerSymbolRsiOverboughtCalibrationTest`'s
+  `(v5/current default)` print-label literal both moved to v6; and a
+  real, more substantive gap — `SignalServiceTest`'s existing
+  `bearishIndicators()` fixture had MA separation at 0, which the newly-
+  wired gate would now downgrade from its expected `BEARISH_UNANIMOUS` to
+  `BEARISH_MAJORITY` on the one test exercising a TRENDING-regime crypto
+  SELL call; fixed by bumping that fixture's separation to 3.00%
+  (comfortably past 2.00%), the same "bump the fixture past the new
+  gate's threshold" fix E8-F1-S8 applied to its own SOLUSDT MACD-override
+  fallout. New test coverage: `MaCrossoverSellGateTest` (mirrors
+  `RegimeGatedRuleEngineTest`'s style, but with real `MacdResult`/
+  `MovingAverageResult` fixtures since this gate re-derives votes rather
+  than taking a pure enum input — covers insufficient-separation
+  suppression, sufficient-separation passthrough, a
+  BEARISH_UNANIMOUS→BEARISH_MAJORITY downgrade-not-suppression case, BUY
+  passthrough, HOLD-cause passthrough, and the crypto/stock scoping), plus
+  four new real (unmocked) `SignalServiceTest` cases exercising the actual
+  `SignalService`→`MaCrossoverSellGate`→`SignalRuleEngine.evaluate` path
+  end to end (insufficient/sufficient separation, BUY unaffected, stock
+  ticker unaffected). Docker wasn't available in this session (same
+  recurring blocker prior E8/E6 stories hit), so those `SignalServiceTest`
+  cases stood in for the `run` skill's normal live-browser verification,
+  the same fallback E8-F1-S4/E8-F3-S3/E8-F1-S8 used for their own
+  shipped-value changes. `./mvnw verify`: 566 tests, 0 failures, up from
+  552. This closes out the second E8-F1 follow-up batch (E8-F1-S8 through
+  S11); E8's backlog is fully complete again.
 
 ## Build / lint / test
 
@@ -1701,7 +1786,7 @@ E8-F1-S11 remains open.
   (pure static, no library — see `docs/CHANGELOG.md` E2-F2-S1 for why), plus
   `IndicatorService`/`IndicatorSnapshot` persistence.
 - `signal` — `SignalRuleEngine` (versioned rule table, currently
-  `RULE_TABLE_VERSION` v5, safety gates + 2-of-3 directional vote →
+  `RULE_TABLE_VERSION` v6, safety gates + 2-of-3 directional vote →
   BUY/SELL/HOLD), `HoldTermCalculator` (versioned day-range table),
   `SignalCallEntry` audit log. `PerSymbolRuleThresholds` (E8-F1-S4, extended
   by E8-F1-S8) resolves `RuleThresholds` per normalized ticker symbol —
@@ -1732,7 +1817,17 @@ E8-F1-S11 remains open.
   **unwired for every symbol** — `PerSymbolAdxThresholds` (E8-F3-S4,
   mirrors `PerSymbolRuleThresholds`'s per-symbol shape) ships with an
   empty override map, since no symbol's tuning-window winner confirmed
-  on its own held-out tail.
+  on its own held-out tail. `MaCrossoverSellGate` (E8-F1-S11, **wired** —
+  `SignalService.computeSignalWithProvenance` calls it for crypto tickers,
+  per `sellGateAppliesTo(AssetType)`, after `RegimeGatedRuleEngine
+  .applySellGate` returns) re-runs `SignalRuleEngine.evaluate` under a
+  stricter `maMinSeparationPctOfPrice=2.00%` threshold and collapses a
+  SELL call to `NO_STRONG_SIGNAL` if it no longer qualifies — unlike the
+  regime gate's orthogonal ADX input, `maMinSeparationPctOfPrice` gates
+  `computeVotes`'s MA vote directly, so "SELL-only" here means a full
+  second rule-table evaluation, not a plain enum-in/enum-out filter. The
+  two SELL-only gates compose in either order (both only ever downgrade
+  an already-resolved SELL call).
 - `backtest` (`src/main/java`, E8-F5-S1) — the TP/SL-aware walk-forward scoring
   primitives promoted out of the test-only `BacktestHarness` so live signal
   monitoring can reuse them: `WalkForwardScorer` (`score`/`findFirstCrossing`/
