@@ -535,8 +535,8 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/signal/SignalRuleEngine.java": {
-    "mtime": 1786780487.4226494,
-    "ast_hash": "39d24079d396584de1f08ee0200f04f6",
+    "mtime": 1786782884.0579698,
+    "ast_hash": "9391d12fe67301370d8e981da105374f",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/signal/SignalRuleId.java": {
@@ -1255,8 +1255,8 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1786781213.1677086,
-    "ast_hash": "d29b334d31511ceef1097cec5d17c5d2",
+    "mtime": 1786783591.3392484,
+    "ast_hash": "147d194163921d7bd2295b82f30043e8",
     "semantic_hash": ""
   },
   "docker-compose.yml": {
@@ -1265,8 +1265,8 @@
     "semantic_hash": ""
   },
   "docs/agile-plan.md": {
-    "mtime": 1786781180.5122848,
-    "ast_hash": "b14dca4d6ed70374de09ecc21011b6aa",
+    "mtime": 1786783605.9042976,
+    "ast_hash": "ec27dea4ead2d0580be0792d9c8fc25e",
     "semantic_hash": ""
   },
   "docs/runbooks/credential-key-rotation.md": {
@@ -1305,8 +1305,8 @@
     "semantic_hash": ""
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1786781260.9985664,
-    "ast_hash": "13faf2262517f10d63fdd3e4f5bd3574",
+    "mtime": 1786783655.615656,
+    "ast_hash": "c0437550183c283c5ec1b705d3b8432a",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/risk/RiskExceptionHandler.java": {
@@ -1720,8 +1720,8 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/signal/PerSymbolRuleThresholds.java": {
-    "mtime": 1786773786.5474615,
-    "ast_hash": "57e540d4ac1f6a1a1dba0e47edf06ee7",
+    "mtime": 1786782892.9762013,
+    "ast_hash": "d2862b3c46c56f369a359ca10ac5b9cd",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/autotrade/dashboard/backtest/FixtureSplits.java": {
@@ -1792,6 +1792,11 @@
   "backend/src/test/java/com/autotrade/dashboard/backtest/SellMacdHistogramMagnitudeCalibrationTest.java": {
     "mtime": 1786780214.1291807,
     "ast_hash": "552e5069fb08a692a1d982b869ef6290",
+    "semantic_hash": ""
+  },
+  "backend/src/test/java/com/autotrade/dashboard/backtest/PerSymbolMaCrossoverSeparationCalibrationTest.java": {
+    "mtime": 1786782694.9480698,
+    "ast_hash": "992e4cc0d1a0ddd15e6a6768ca289f72",
     "semantic_hash": ""
   }
 }

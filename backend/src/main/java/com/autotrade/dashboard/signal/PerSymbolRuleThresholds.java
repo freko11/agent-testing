@@ -71,6 +71,20 @@ import java.util.Map;
  * count doesn't matter" treatment E8-F1-S4 gave its own v2&rarr;v3 bump. See {@code
  * PerSymbolMacdHistogramMagnitudeCalibrationTest}'s class Javadoc and docs/CHANGELOG.md's
  * E8-F1-S8 entry for the full per-symbol sweep and figures.
+ *
+ * <p><b>E8-F1-S10 tried a third axis, {@code maMinSeparationPctOfPrice} — no symbol ships an
+ * override.</b> {@code PerSymbolMaCrossoverSeparationCalibrationTest} swept BTCUSDT/DOGEUSDT/
+ * SOLUSDT independently against this class's own tune-then-confirm design (a candidate must beat
+ * the {@code separation=0} baseline at every checkpoint on a symbol's own tuning window before its
+ * held-out tail is even checked). BTCUSDT's own tuning-window winners (ma&gt;=5.00%/7.00%/10.00%)
+ * each fail held-out confirmation — 5.00% reverses sharply on a degenerate held-out sample (n=6),
+ * and 7.00%/10.00% produce zero held-out BUY calls to confirm against at all. DOGEUSDT and SOLUSDT
+ * never produce a tuning-window winner in the first place — every nonzero candidate is worse than
+ * the no-filter baseline at some checkpoint on both symbols' own tuning windows. This map is
+ * unchanged by this story (still only the SOLUSDT entry from E8-F1-S8); {@link
+ * SignalRuleEngine#RULE_TABLE_VERSION} stays v5, since no new resolution logic actually ships. See
+ * {@code PerSymbolMaCrossoverSeparationCalibrationTest}'s class Javadoc and docs/CHANGELOG.md's
+ * E8-F1-S10 entry for the full per-symbol sweep and figures.
  */
 public final class PerSymbolRuleThresholds {
 

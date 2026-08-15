@@ -187,6 +187,36 @@ import java.math.BigDecimal;
  * SellMacdHistogramMagnitudeCalibrationTest}, which pins the BTCUSDT no-winner finding down as a
  * real assertion rather than a printed observation. See docs/CHANGELOG.md's E8-F1-S9 entry for the
  * full per-symbol figures.
+ *
+ * <p><b>E8-F1-S10 extended E8-F1-S4/S8's per-symbol mechanism to a third axis: {@link
+ * #MA_MIN_SEPARATION_PCT_OF_PRICE} — no ship, for any symbol.</b> {@code
+ * PerSymbolMaCrossoverSeparationCalibrationTest} swept BTCUSDT/DOGEUSDT/SOLUSDT independently
+ * against E8-F1-S4/S8's own tune-then-confirm design (a candidate must first beat the
+ * {@code separation=0} baseline at every checkpoint on a symbol's own tuning window before its
+ * held-out tail is even checked) — a stricter bar than E8-F1-S6's own global sweep used (which
+ * checked held-out tails directly, with no tuning-window pre-selection). Under this stricter bar,
+ * BTCUSDT's only tuning-window winners (ma&gt;=5.00%/7.00%/10.00%) each fail held-out confirmation:
+ * 5.00% reverses sharply (held-out min -1.284% vs. baseline -0.425%, on a degenerate n=6), and
+ * 7.00%/10.00% produce zero BUY calls at all on the held-out tail, leaving nothing to confirm.
+ * Notably, BTCUSDT's own true held-out-tail optimum (ma&gt;=1.00%, the same value E8-F1-S6's global
+ * sweep already found) never even reaches held-out evaluation here, since it fails the tuning-window
+ * pre-selection step (its tuning-window min checkpoint, -0.050%, is worse than the baseline's
+ * +0.075%) — the tune-then-confirm design that worked for E8-F1-S4/S8's RSI/MACD axes filters out a
+ * real held-out winner on this axis before it can be seen. DOGEUSDT and SOLUSDT fail earlier still:
+ * neither symbol's tuning window ever produces a candidate that beats the {@code separation=0}
+ * baseline at every checkpoint, so neither reaches held-out confirmation at all — the same
+ * "no tuning-window winner to begin with" shape E8-F3-S4 found for DOGEUSDT/SOLUSDT on the ADX axis.
+ * Net: {@link #MA_MIN_SEPARATION_PCT_OF_PRICE} stays 0, {@code PerSymbolRuleThresholds.OVERRIDES}
+ * is unchanged (still SOLUSDT-only, from E8-F1-S8), {@link #RULE_TABLE_VERSION} stays v5 — since no
+ * symbol's override actually ships, no new resolution logic is added to {@code
+ * PerSymbolRuleThresholds}, so unlike E8-F1-S4/S8's own version bumps this is the same
+ * no-production-change treatment E8-F1-S6/S9 already established. A secondary, out-of-scope
+ * finding, consistent with E8-F1-S6's own: a ~2.00% separation threshold improves SELL-side
+ * after-cost expectancy at every checkpoint on all three symbols' own held-out tails in this
+ * per-symbol split too (e.g. BTCUSDT max +1.213% vs. baseline +0.999%; DOGEUSDT max +1.612% vs.
+ * +1.206%; SOLUSDT max +1.506% vs. +0.844%) — acting on it is E8-F1-S11's separate, chartered
+ * story. See {@code PerSymbolMaCrossoverSeparationCalibrationTest}'s class Javadoc and
+ * docs/CHANGELOG.md's E8-F1-S10 entry for the full per-symbol figures.
  */
 public final class SignalRuleEngine {
 

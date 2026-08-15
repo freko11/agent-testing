@@ -145,7 +145,18 @@ and BTCUSDT's own SELL-side tuning window never produces a single
 candidate that beats its own baseline at every checkpoint, so the bar
 fails before DOGEUSDT/SOLUSDT's own (real, but non-overlapping) winners
 are even relevant — see its entry below for the full per-symbol figures.
-E8-F1-S10/S11 remain open.
+E8-F1-S10, the third story of that batch, extends E8-F1-S4/S8's
+per-symbol mechanism to a third axis, `maMinSeparationPctOfPrice` — the
+MA-crossover axis E8-F1-S6's own global sweep found asset-divergent — and
+is now done, shipping no override for any symbol: under the stricter
+tune-then-confirm bar E8-F1-S4/S8 established, BTCUSDT's only
+tuning-window winners either reverse sharply on a degenerate held-out
+sample or produce zero held-out BUY calls to confirm against, while
+DOGEUSDT/SOLUSDT's own tuning windows never produce a winner to begin
+with — see its entry below for the full per-symbol figures.
+`RULE_TABLE_VERSION` stays v5, the same no-production-change treatment
+E8-F1-S6/S9 established, since no symbol's override actually ships.
+E8-F1-S11 remains open.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -1612,6 +1623,53 @@ E8-F1-S10/S11 remain open.
   E8-F1-S2/S3/S5/S6/E8-F3-S4 established. `./mvnw verify`: 550 tests, 0
   failures, up from 547. E8-F1-S10/S11 remain open in the second
   follow-up batch.
+- E8-F1-S10: per-symbol `maMinSeparationPctOfPrice` calibration, the third
+  story of the second follow-up batch, extending E8-F1-S4/S8's per-symbol
+  mechanism to this axis — the MA-crossover asset-divergent conflict
+  E8-F1-S6's own global sweep found (BTCUSDT prefers ~1.00% separation,
+  DOGEUSDT ~2.00%, SOLUSDT no filter at all, on held-out tails checked
+  directly). New `backtest.PerSymbolMaCrossoverSeparationCalibrationTest`
+  swept the same 0.00%-10.00% grid E8-F1-S6 used, per symbol, against
+  E8-F1-S4/S8's stricter tune-then-confirm bar (a candidate must first
+  beat the `separation=0` baseline at every checkpoint on a symbol's own
+  tuning window before its held-out tail is even checked) — a stricter
+  bar than E8-F1-S6's own held-out-only one. Result: no ship, for all
+  three symbols independently. BTCUSDT's tuning window does produce
+  winners (ma>=5.00%, n=64, beating the baseline's aft-cost expectancy
+  +0.075%/+0.165%/+0.200% with +0.107%/+0.380%/+0.605%; also ma>=7.00%/
+  10.00% at much smaller n) but every one fails held-out confirmation:
+  5.00% reverses sharply on a degenerate held-out sample (min -1.284% vs.
+  baseline -0.425%, n=6), and 7.00%/10.00% produce zero held-out BUY calls
+  to confirm against at all. Notably, BTCUSDT's own true held-out optimum
+  (ma>=1.00%, the same value E8-F1-S6's global sweep found) never reaches
+  held-out evaluation here at all, since it fails the tuning-window
+  pre-selection step (tuning min -0.050% vs. baseline +0.075%) — the
+  tune-then-confirm design that worked for E8-F1-S4/S8's RSI/MACD axes
+  filters out a real held-out winner on this axis before it's even seen.
+  DOGEUSDT and SOLUSDT fail earlier still: neither symbol's tuning window
+  ever produces a candidate beating the `separation=0` baseline at every
+  checkpoint (every nonzero candidate is worse at some checkpoint on
+  both), so neither reaches held-out confirmation at all — the same
+  "no tuning-window winner to begin with" shape E8-F3-S4 found for
+  DOGEUSDT/SOLUSDT on the ADX axis. `PerSymbolRuleThresholds.OVERRIDES`
+  is unchanged (still SOLUSDT-only, from E8-F1-S8); `RULE_TABLE_VERSION`
+  stays v5 — since no symbol's override actually ships, no new resolution
+  logic is added to `PerSymbolRuleThresholds`, so unlike E8-F1-S4/S8's own
+  version bumps this gets the same no-production-change treatment
+  E8-F1-S6/S9 established. A secondary, out-of-scope finding, consistent
+  with E8-F1-S6's own: a ~2.00% separation threshold improves SELL-side
+  after-cost expectancy at every checkpoint on all three symbols' own
+  held-out tails in this per-symbol split too (e.g. BTCUSDT max +1.213%
+  vs. baseline +0.999%; DOGEUSDT max +1.612% vs. +1.206%; SOLUSDT max
+  +1.506% vs. +0.844%) — acting on it is E8-F1-S11's separate, chartered
+  story, not this one. `SignalRuleEngine`'s and `PerSymbolRuleThresholds`'s
+  class Javadocs both gained a new closing paragraph documenting this
+  finding. Since this story shipped no production behavior change, no
+  live-browser/`SignalServiceTest` end-to-end verification was needed
+  beyond the calibration test's own run — the same no-production-change
+  precedent E8-F1-S2/S3/S5/S6/E8-F3-S4/E8-F1-S9 established. `./mvnw
+  verify`: 552 tests, 0 failures, up from 550. E8-F1-S11 remains open in
+  the second follow-up batch.
 
 ## Build / lint / test
 

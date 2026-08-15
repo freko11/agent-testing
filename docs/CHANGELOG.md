@@ -7761,3 +7761,149 @@ E8-F1-S2/S3/S5/S6/E8-F3-S4 established.
 **`./mvnw verify`: 550 tests, 0 failures/errors, `BUILD SUCCESS`** (up from
 547 after E8-F1-S8). Of the second follow-up batch (E8-F1-S8 through S11),
 E8-F1-S8/S9 are now done — E8-F1-S10/S11 remain open.
+
+## E8-F1-S10 — per-symbol MA-crossover separation calibration, evaluated and no-shipped
+
+**Story**: the third of the second E8-F1 follow-up batch. Extends
+E8-F1-S4/S8's per-symbol threshold-override mechanism to a third,
+independent axis: `maMinSeparationPctOfPrice` (added by E8-F1-S6 as a
+global-only field, default 0). E8-F1-S6's own global sweep already found
+this axis's BUY side is asset-divergent on held-out tails checked
+directly — BTCUSDT prefers ~1.00% separation, DOGEUSDT ~2.00%, SOLUSDT no
+filter at all — the same "no single value wins everywhere" shape E8-F1-S3
+found for `rsiOverbought` and E8-F1-S4 then resolved with a per-symbol
+override. This story asks the same question for the MA-crossover axis:
+does per-symbol resolution find a confirmable value where one global value
+couldn't?
+
+### Design
+
+No new design decisions were needed — this story is a template mirror of
+`PerSymbolMacdHistogramMagnitudeCalibrationTest` (E8-F1-S8) applied to a
+different `RuleThresholds` field, per the story's own AC ("following the
+same per-symbol mechanism as E8-F1-S8"). One difference worth calling out
+explicitly, since it materially shaped the result: E8-F1-S8's own
+tune-then-confirm bar (candidate must win on a symbol's own tuning window
+*first*, then get checked against that symbol's own held-out tail) is
+strictly stricter than E8-F1-S6's own bar for this exact axis (which
+checked all three symbols' held-out tails directly, with no tuning-window
+pre-selection gate). This story deliberately uses E8-F1-S4/S8's stricter
+bar, not E8-F1-S6's, per the task's explicit instruction to mirror E8-F1-S8
+"almost exactly, just on a different axis" — the two bars are not
+guaranteed to agree, and (as the actual run below shows) they don't:
+BTCUSDT's own true held-out optimum from E8-F1-S6 (ma&gt;=1.00%) never even
+reaches held-out evaluation under this story's stricter bar, because it
+fails the tuning-window pre-selection step first.
+
+The candidate grid was reused verbatim from `MaCrossoverSeparationCalibrationTest`
+(E8-F1-S6) — `{0.00, 1.00, 2.00, 3.00, 4.00, 5.00, 7.00, 10.00}` — rather
+than re-derived, since E8-F1-S6's own probe already sized it against real
+`separationPctOfPrice` values across all three fixtures. `thresholdsFor`
+fixes every other `RuleThresholds` field at `DEFAULT`'s values, including
+`macdMinHistogramMagnitudePct` at 0 — deliberately *not* SOLUSDT's own
+shipped 0.10 override from E8-F1-S8 — since this test calibrates the
+global-default baseline for the MA axis in isolation, the same choice
+E8-F1-S8's own template made for the axes it held fixed.
+
+### Implementation
+
+**New test**: `backend/src/test/java/com/autotrade/dashboard/backtest/
+PerSymbolMaCrossoverSeparationCalibrationTest.java`, structurally
+identical to `PerSymbolMacdHistogramMagnitudeCalibrationTest` (E8-F1-S8) —
+same `SymbolFixture` record, same `FixtureSplits.{BTCUSDT,DOGEUSDT,SOLUSDT}_
+{TUNING,HELD_OUT}` fixtures, same two-test shape
+(`sweepEachSymbolOnItsOwnTuningWindow`/`validateEachSymbolOnItsOwnHeldOutTail`),
+same structural-only assertions (`assertStructurallySane`/
+`assertExpectancySignsAreSane`, copied verbatim). No pinned SELL-side
+assertion was added (unlike S8's `shippedSolusdtCandidateAlsoImprovesSellSide`),
+since — per the actual run below — no symbol ships an override here, so
+there is no shipped candidate whose SELL-side effect needs pinning down;
+the SELL-side observation is reported in prose only, matching the
+"printed but not gating, and no dedicated test unless something ships"
+instruction this story was scoped to.
+
+**Actual run** (`./mvnw test -Dtest=PerSymbolMaCrossoverSeparationCalibrationTest`,
+both tests green):
+
+- **BTCUSDT tuning** (baseline min/mid/max after-cost expectancy
+  +0.075%/+0.165%/+0.200%, n=175): every candidate from 1.00% through
+  4.00% fails at the MIN checkpoint specifically (e.g. 1.00%: -0.050%,
+  n=146; 4.00%: +0.055% — just short of the +0.075% baseline, n=88).
+  ma&gt;=5.00% (n=64) is the first candidate to beat baseline at all three
+  checkpoints (+0.107%/+0.380%/+0.605%), followed by 7.00% (n=21,
+  +0.974%/+2.053%/+2.273%) and 10.00% (n=11, +1.245%/+3.345%/+3.345%) at
+  much smaller n. Held-out confirmation for all three: 5.00% reverses
+  sharply on a degenerate held-out sample (baseline min/mid/max
+  -0.425%/-0.314%/-0.427%, n=80/78/78 → 5.00%'s own held-out
+  -1.284%/-2.872%/-3.200%, n=6) — dramatically worse, not a partial miss.
+  7.00%/10.00% produce zero BUY calls at all on the held-out tail
+  (`Overall BUY (n=0)`), leaving literally nothing to confirm against.
+  None of BTCUSDT's three tuning-window winners survives held-out
+  confirmation. Separately, and not part of this story's ship bar but
+  worth recording: BTCUSDT's own true held-out-tail optimum is ma&gt;=1.00%
+  (held-out -0.202%/-0.139%/-0.316%, beating baseline at all three
+  checkpoints, n=64/62/62) — the same value E8-F1-S6's own held-out-only
+  bar already found — but this story's stricter tune-then-confirm design
+  never reaches it, since 1.00% fails the tuning-window pre-selection step
+  (tuning min -0.050% is worse than baseline's +0.075%).
+- **DOGEUSDT tuning** (baseline -0.024%/-0.158%/-0.170%, n=132): every one
+  of the 7 nonzero candidates is worse than baseline at some checkpoint
+  (e.g. 2.00%: -0.040%/-0.213%/-0.229%, n=105 — worse at all three; 10.00%:
+  +0.084%/-0.533%/-0.533%, n=30 — MIN improves but MID/MAX don't). No
+  candidate clears the tuning-window bar at all, so DOGEUSDT never reaches
+  held-out evaluation.
+- **SOLUSDT tuning** (baseline -0.046%/+0.022%/-0.043%, n=188): the
+  closest candidate, ma&gt;=1.00% (n=173), improves MIN (+0.010%) and holds
+  roughly flat at MAX (-0.046%) but is worse at MID (+0.017% vs. baseline's
+  +0.022%) — fails by a hair. Every candidate at or above 2.00% is worse
+  at every checkpoint (e.g. 2.00%: -0.115%/-0.141%/-0.209%, n=161). No
+  candidate clears the tuning-window bar, so SOLUSDT never reaches
+  held-out evaluation either — consistent with E8-F1-S6's own finding that
+  SOLUSDT's BUY side prefers no filter at all.
+
+**Net: no ship, for all three symbols independently**, and for three
+distinct reasons — BTCUSDT has tuning-window winners that don't survive
+held-out confirmation (degenerate reversal, or zero held-out signal to
+confirm against at all); DOGEUSDT and SOLUSDT never produce a
+tuning-window winner in the first place, the same "no winner to begin
+with" shape E8-F3-S4 found for DOGEUSDT/SOLUSDT on the ADX axis.
+
+**Secondary, out-of-scope finding** (not part of this story's ship bar,
+consistent with E8-F1-S6's own secondary finding, reported in prose only
+per this story's scope — printed for every candidate but not pinned as a
+dedicated assertion, since nothing ships here): a ~2.00% separation
+threshold improves SELL-side after-cost expectancy at every checkpoint on
+all three symbols' own held-out tails in this per-symbol split too —
+BTCUSDT (baseline +0.736%/+0.963%/+0.999%, n=67 → 2.00%'s
++1.046%/+1.191%/+1.213%, n=52), DOGEUSDT (baseline +0.230%/+1.042%/
++1.206%, n=48 → +0.504%/+1.265%/+1.612%, n=36), and SOLUSDT (baseline
++0.357%/+0.647%/+0.844%, n=49 → +1.002%/+1.246%/+1.506%, n=37). Acting on
+this is E8-F1-S11's separate, chartered story, not this one.
+
+### Scope / no-op confirmation
+
+**No ship.** `MA_MIN_SEPARATION_PCT_OF_PRICE` stays 0.
+`PerSymbolRuleThresholds.OVERRIDES` is unchanged — still only the
+SOLUSDT entry E8-F1-S8 shipped (`rsiOverbought=70`,
+`macdMinHistogramMagnitudePct=0.10`). No new `RuleThresholds` field (the
+field already exists from E8-F1-S6), no new gate class, no
+`SignalRuleEngine#RULE_TABLE_VERSION` bump (stays v5) — since no symbol's
+override actually ships, no new resolution logic is added to
+`PerSymbolRuleThresholds` for this axis, so unlike E8-F1-S4/S8's own
+version bumps (where at least one symbol's override genuinely changed
+`OVERRIDES`' composed value), this gets the same no-production-change
+treatment E8-F1-S6/S9 established. No `SignalService`/`OrderService`/
+`PlaceOrderRequest` change. This story's only artifact is the calibration
+test itself. Both `SignalRuleEngine`'s and `PerSymbolRuleThresholds`'s
+class Javadocs gained a new closing paragraph documenting this finding,
+mirroring every prior E8-F1 no-ship entry's treatment. No schema
+migration. No frontend changes — backend/test-only, same precedent as
+every other E8-F1 story. Docker wasn't available in this session (same
+recurring blocker prior E8/E6 stories hit); since this story shipped no
+production behavior change, no live-browser/`SignalServiceTest` end-to-end
+verification was needed beyond the calibration test's own run, the same
+no-production-change precedent E8-F1-S2/S3/S5/S6/E8-F3-S4/S9 established.
+
+**`./mvnw verify`: 552 tests, 0 failures/errors, `BUILD SUCCESS`** (up from
+550 after E8-F1-S9). Of the second follow-up batch (E8-F1-S8 through S11),
+E8-F1-S8/S9/S10 are now done — E8-F1-S11 remains open.
