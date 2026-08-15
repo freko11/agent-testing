@@ -48,13 +48,22 @@ import com.autotrade.dashboard.backtest.Checkpoint;
  * resolved behavior, these constants become stale for newly-produced audit entries until a future
  * story re-derives them; {@link LiveSignalDriftService} does not attempt to detect or warn about
  * that staleness itself.
+ *
+ * <p><b>E8-F1-S8's v4&rarr;v5 bump required only a version-label update here, not a
+ * re-derivation</b> — the same treatment E8-F1-S4's own v2&rarr;v3 bump got. That story's only
+ * shipped override ({@code macdMinHistogramMagnitudePct = 0.10}, composed alongside the existing
+ * {@code rsiOverbought = 70}) is SOLUSDT-specific; BTCUSDT/DOGEUSDT — the only two fixtures this
+ * baseline is computed from — still resolve to {@code RuleThresholds.DEFAULT} under v5 exactly as
+ * they did under v4, so {@code BacktestHarness.run}'s output for them, and therefore every
+ * constant below, is byte-identical. {@link LiveDriftBaselineTest} needed no changes and passed
+ * unmodified, confirming this.
  */
 public final class LiveDriftBaseline {
 
     /** The rule table version these baseline figures were computed against — {@code
      * LiveSignalDriftService} only compares audit entries whose own {@code ruleTableVersion}
      * matches this, never a stale cross-version comparison. */
-    public static final String RULE_TABLE_VERSION = "v4";
+    public static final String RULE_TABLE_VERSION = "v5";
 
     public static final double BUY_MIN_EXPECTANCY_PCT_AFTER_COSTS = -0.053166;
     public static final double BUY_MID_EXPECTANCY_PCT_AFTER_COSTS = 0.027064;

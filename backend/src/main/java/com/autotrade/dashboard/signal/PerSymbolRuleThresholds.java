@@ -49,6 +49,28 @@ import java.util.Map;
  * SignalRuleEngine.RuleThresholds#DEFAULT} — the "zero stock evidence exists" gap this class
  * previously described is now closed with *negative* evidence (a real stock sweep that didn't
  * confirm), not merely an absent one. See docs/CHANGELOG.md's E8-F1-S7 entry for the full sweep.
+ *
+ * <p><b>E8-F1-S8 calibrated {@code macdMinHistogramMagnitudePct} per symbol, the same
+ * tune-then-validate methodology applied to a second, independent axis — and this is the first
+ * story to ship a symbol with <em>two</em> non-default fields at once.</b> BTCUSDT and DOGEUSDT
+ * both ship no override: BTCUSDT's tuning-window winners (macd&gt;=0.75%/1.00%, both beating the
+ * magnitude-0 baseline at every checkpoint) each fail held-out confirmation specifically at the
+ * MIN checkpoint, and DOGEUSDT's only tuning-window winner (macd&gt;=0.10%) fails held-out
+ * confirmation completely (worse than baseline at every checkpoint there). <b>SOLUSDT ships
+ * {@code macdMinHistogramMagnitudePct = 0.10}</b>, composed into its existing {@code
+ * rsiOverbought = 70} entry rather than replacing it — a genuine, non-degenerate confirmation
+ * (beats the magnitude-0 baseline's BUY-side after-cost expectancy at every checkpoint on both its
+ * tuning window, n=186 vs. 188, and its own held-out tail, n=67 vs. 69). Unlike {@code
+ * rsiOverbought} (zero measurable SELL-side effect per E8-F1-S3), this axis gates the MACD vote
+ * symmetrically, so SOLUSDT's SELL-side classification changes too — checked and found to be a
+ * real, positive effect at every checkpoint on both windows (see {@code
+ * PerSymbolMacdHistogramMagnitudeCalibrationTest}'s class Javadoc for the full figures), not a
+ * side effect that offsets the BUY-side gain. {@link SignalRuleEngine#RULE_TABLE_VERSION} bumps to
+ * v5 for the resolution mechanism itself, per this story's confirmed scope, regardless of how many
+ * symbols ended up with a non-default override on this axis — the same "mechanism ships, value
+ * count doesn't matter" treatment E8-F1-S4 gave its own v2&rarr;v3 bump. See {@code
+ * PerSymbolMacdHistogramMagnitudeCalibrationTest}'s class Javadoc and docs/CHANGELOG.md's
+ * E8-F1-S8 entry for the full per-symbol sweep and figures.
  */
 public final class PerSymbolRuleThresholds {
 
@@ -58,7 +80,7 @@ public final class PerSymbolRuleThresholds {
                     new BigDecimal("70"),
                     SignalRuleEngine.RuleThresholds.DEFAULT.volatilityExtreme(),
                     SignalRuleEngine.RuleThresholds.DEFAULT.volumeDriedUp(),
-                    SignalRuleEngine.RuleThresholds.DEFAULT.macdMinHistogramMagnitudePct(),
+                    new BigDecimal("0.10"),
                     SignalRuleEngine.RuleThresholds.DEFAULT.maMinSeparationPctOfPrice()));
 
     private PerSymbolRuleThresholds() {

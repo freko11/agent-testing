@@ -7411,4 +7411,218 @@ E8-F1-S7 established.
 **`./mvnw verify`: 538 tests, 0 failures/errors, `BUILD SUCCESS`** (up from
 532 after E8-F1-S7). This closes out all 6 backlog stories filed in the
 same batch (E2-F1-S5, E8-F1-S6, E8-F1-S7, E8-F2-S3, E8-F3-S4, E8-F3-S5) —
-E8's backlog is now fully complete.
+E8's backlog was fully complete at that point, before a second batch of
+four more follow-ups (E8-F1-S8 through S11) was filed, found during a
+sweep for flagged-but-never-converted findings: E8-F1-S5/S6 each left a
+SELL-side secondary finding unactioned (chartered for the BUY-side
+mismatch instead), and E8-F1-S6's own closing note named per-symbol
+MACD/MA thresholds as the one BUY-side mechanism still untried.
+
+## E8-F1-S8 — per-symbol `macdMinHistogramMagnitudePct` calibration on the BUY side
+
+**Story**: the first of the second E8-F1 follow-up batch (E8-F1-S8 through
+S11). `MacdHistogramMagnitudeCalibrationTest` (E8-F1-S5) already found
+asset-divergent BUY-side optima for `macdMinHistogramMagnitudePct` on the
+same global, all-three-symbols-simultaneously bar every other E8-F1 axis
+hit — BTCUSDT improves at MID/MAX but not MIN, SOLUSDT improves near
+0.50%-1.00%, DOGEUSDT prefers no filter at all. E8-F1-S6's own closing note
+named per-symbol MACD/MA thresholds as the one mechanism no E8-F1 story
+through S6 had tried. This story tries it for the MACD axis specifically,
+extending `PerSymbolRuleThresholds` (E8-F1-S4's per-symbol `rsiOverbought`
+mechanism) to a second, independent field.
+
+### Design gate
+
+Scoped via the `Plan` agent before implementation. The plan's grounding was
+straightforward — `PerSymbolRuleThresholds.OVERRIDES` already carries one
+full `RuleThresholds` record per symbol, so a second axis composes into the
+same map with zero restructuring, no sibling class needed — but it flagged
+one thing explicitly for verification during implementation rather than
+assuming an answer: **unlike `rsiOverbought` (E8-F1-S3 found zero
+measurable SELL-side effect anywhere in its swept range),
+`macdMinHistogramMagnitudePct` gates `computeVotes`'s `macdBullish`/
+`macdBearish` reads symmetrically off the same threshold.** There is no way
+to make this BUY-only at the vote-computation layer without an
+out-of-scope `evaluate` signature change, so whatever candidate a symbol
+ends up shipping necessarily also changes that symbol's SELL-side
+classification — the plan required checking and documenting that effect
+explicitly for any shipped candidate, not assuming it away or suppressing
+it.
+
+### Implementation
+
+**New test**: `backend/src/test/java/com/autotrade/dashboard/backtest/
+PerSymbolMacdHistogramMagnitudeCalibrationTest.java`, structurally cloned
+from `PerSymbolRsiOverboughtCalibrationTest` (E8-F1-S4)'s independent-
+per-symbol tune/held-out shape (`SymbolFixture` record, `SYMBOLS` list off
+`FixtureSplits.{BTCUSDT,DOGEUSDT,SOLUSDT}_{TUNING,HELD_OUT}`,
+`sweepEachSymbolOnItsOwnTuningWindow()`/`validateEachSymbolOnItsOwnHeldOutTail()`),
+but sweeping `macdMinHistogramMagnitudePct` via a `thresholdsFor(magnitude)`
+helper mirroring `MacdHistogramMagnitudeCalibrationTest` (E8-F1-S5)'s own.
+Grid reused verbatim: `{0.00, 0.10, 0.25, 0.50, 0.75, 1.00, 1.50, 2.00}`.
+Ship bar is E8-F1-S4's per-symbol bar, not E8-F1-S5's all-three-
+simultaneous one (the exact reason the earlier global sweep no-shipped
+everywhere): a symbol ships an override only if some candidate beats the
+`magnitude=0` baseline's `overallBuy().expectancyPctAfterCosts()` at every
+one of MIN/MID/MAX on that symbol's own tuning window with comparable
+scored `n`, *and* that same candidate still beats the baseline at every
+checkpoint on that same symbol's own held-out tail. `overallSell()` is
+printed for every candidate (via the existing `printCompact` helper,
+unchanged from the clone) but never gates the decision — acting on it is
+E8-F1-S9's separate, chartered story.
+
+**`PerSymbolRuleThresholds.OVERRIDES`** — SOLUSDT's existing entry (E8-F1-S4's
+`rsiOverbought = 70`) had its `macdMinHistogramMagnitudePct` field changed
+from `DEFAULT.macdMinHistogramMagnitudePct()` to the literal `new
+BigDecimal("0.10")`, composed into the same record rather than replacing
+it — the first symbol in this map with two independently-calibrated
+non-default fields at once. `PerSymbolRuleThresholds`'s class Javadoc
+gained a new paragraph recording this.
+
+**`SignalRuleEngine.RULE_TABLE_VERSION`** bumped `"v4"` → `"v5"`
+unconditionally, per the story's AC ("bumps as soon as the per-symbol
+resolution mechanism ships for this axis, regardless of how many symbols
+end up with a non-default override") — the same treatment E8-F1-S4's own
+v2→v3 bump got even though only 1 of 3 symbols shipped there. New trailing
+class-Javadoc paragraph added documenting the grid, the per-symbol
+independent ship bar, and the actual result.
+
+### Findings
+
+Real run, read from the printed output, not assumed from E8-F1-S5's
+hypothesized directions:
+
+**BTCUSDT — no ship.** Tuning-window baseline (`magnitude=0`): Overall BUY
+min/mid/max after-cost expectancy `+0.075%/+0.165%/+0.200%` (n=175).
+Candidates `macd>=0.75%` (n=64) and `macd>=1.00%` (n=39) both beat the
+baseline at every checkpoint on the tuning window
+(`+0.537%/+0.364%/+0.230%` and `+0.654%/+1.157%/+1.088%` respectively) —
+real tuning-window winners, not marginal ones. But both fail held-out
+confirmation specifically at the MIN checkpoint: held-out baseline is
+`-0.425%/-0.314%/-0.427%` (n=80/78/78); `macd>=0.75%`'s held-out result is
+`-0.488%/+0.244%/+0.713%` (n=28, MIN worse than baseline) and
+`macd>=1.00%`'s is `-0.429%/+0.356%/+0.356%` (n=9, MIN also worse, and
+degenerately small). Both confirm at MID/MAX but the ship bar requires
+every checkpoint.
+
+**DOGEUSDT — no ship.** Tuning-window baseline: `-0.024%/-0.158%/-0.170%`
+(n=132). Only `macd>=0.10%` (n=127) clears the tuning-window bar
+(`+0.038%/-0.101%/-0.113%`, better than baseline at all three). On its own
+held-out tail, held-out baseline is `+0.205%/+0.945%/+1.226%` (n=47);
+`macd>=0.10%`'s held-out result is `+0.074%/+0.864%/+1.164%` (n=44) —
+worse than baseline at *every* checkpoint, not a partial miss like
+BTCUSDT's. No other candidate even clears the tuning-window bar for
+DOGEUSDT (the next-closest, `0.25%`, misses at MIN by a hair:
+`-0.025%` vs. baseline `-0.024%`).
+
+**SOLUSDT — ships `macdMinHistogramMagnitudePct = 0.10`.** Tuning-window
+baseline: `-0.046%/+0.022%/-0.043%` (n=188). `macd>=0.10%` (n=186, nearly
+identical sample size) beats the baseline at every checkpoint
+(`-0.018%/+0.056%/-0.009%`). On SOLUSDT's own held-out tail, baseline is
+`-0.447%/-0.489%/-0.522%` (n=69); `macd>=0.10%` (n=67) again beats it at
+every checkpoint (`-0.365%/-0.408%/-0.442%`) — a genuine, non-degenerate
+confirmation on comparable `n` at both stages, not a byte-identical or
+degenerate-sample artifact. (Both windows' after-cost BUY expectancy stays
+negative even with the improvement — the ship bar is "beats the current
+default," not "turns positive," the same standard E8-F1-S4 used for its
+own SOLUSDT RSI finding.)
+
+**SOLUSDT's SELL-side effect (checked and pinned down as a real test
+assertion, per the design gate's requirement, not just printed)**: because
+this axis gates the MACD vote symmetrically, SOLUSDT's shipped candidate
+also changes its SELL-side classification. The effect is real and
+*positive* at every checkpoint on both windows — not an offsetting cost:
+
+```
+SOLUSDT tuning    Overall SELL: baseline -0.528%/-0.216%/-0.216% (n=87) → macd>=0.10% -0.399%/-0.073%/-0.072% (n=83)
+SOLUSDT held-out  Overall SELL: baseline +0.357%/+0.647%/+0.844% (n=49) → macd>=0.10% +0.462%/+0.805%/+0.995% (n=45)
+```
+
+This matches the direction E8-F1-S5 had already flagged as a
+consistent-but-unactioned secondary finding across all three symbols at
+nonzero candidates. Acting on it beyond SOLUSDT (e.g. wiring a SELL-only
+gate the way E8-F3-S3 did for the regime filter) is E8-F1-S9's separate,
+chartered story — not decided here.
+
+### Fixture fallout
+
+`./mvnw verify` caught one genuine regression from SOLUSDT's new MACD
+override going live, beyond the expected version-literal updates:
+
+- `LiveDriftBaseline.RULE_TABLE_VERSION`: `"v4"` → `"v5"`, label-only —
+  BTCUSDT/DOGEUSDT (the only two fixtures that baseline is computed from)
+  still resolve to `RuleThresholds.DEFAULT` under v5 exactly as under v4,
+  confirmed by `LiveDriftBaselineTest` passing unmodified. Same treatment
+  E8-F1-S4's own v2→v3 bump got.
+- `OrderCsvExporterTest`'s hardcoded `",42,BUY,BULLISH_MAJORITY,v4,3-10
+  days\r\n"` CSV-row literal → `v5`.
+- `StockPerSymbolRsiOverboughtCalibrationTest`'s cosmetic print-label
+  literal `" (v4/current default)"` → `" (v5/current default)"`.
+- **The real one**: the pre-existing E8-F1-S4 `SignalServiceTest` case
+  `solusdtOverride_rsi72BearishOnlyUnderPerSymbolOverride_producesBearishMajority`
+  used a MACD fixture with `histogramPctOfPrice = 0` as a stand-in value —
+  harmless when SOLUSDT had no MACD-axis override, but SOLUSDT's own new
+  `macdMinHistogramMagnitudePct = 0.10` gate now drops that MACD vote
+  entirely (`0 < 0.10`), collapsing the scenario's bearish vote count from
+  2 to 1 and flipping the expected result from `BEARISH_MAJORITY` to
+  `HOLD`/`NO_STRONG_SIGNAL`. Fixed by bumping the fixture's histogram
+  magnitude from `0` to `1.0` (comfortably clear of `0.10`) in both the
+  SOLUSDT case and its AAPL control, restoring the original test's
+  isolation of `rsiOverbought`'s own effect — exactly the kind of
+  cross-axis interaction the design gate flagged as worth watching for
+  once a symbol carries two composed overrides.
+
+### Test coverage
+
+- `PerSymbolMacdHistogramMagnitudeCalibrationTest` — the evidence
+  deliverable above, plus `shippedSolusdtCandidateAlsoImprovesSellSide`, a
+  real assertion (not just a printed observation) pinning down that
+  SOLUSDT's shipped candidate improves `overallSell()` at every checkpoint
+  on both the tuning window and the held-out tail versus baseline. Same
+  structural sanity checks (partition invariants, expectancy-sign sanity)
+  every other E8 calibration test carries.
+- New `backend/src/test/java/com/autotrade/dashboard/signal/
+  PerSymbolRuleThresholdsTest.java` — this class had no dedicated test file
+  before this story (every prior E8-F1 story exercised it only indirectly).
+  Covers unlisted-crypto/stock/unrecognized-symbol fallback to
+  `RuleThresholds.DEFAULT`, plus a composition case reading the real
+  SOLUSDT entry to prove both its `rsiOverbought`/
+  `macdMinHistogramMagnitudePct` overrides survive composition without
+  clobbering each other or leaking into the other four fields (still at
+  `DEFAULT`'s values) — pinned against the real map directly rather than a
+  constructed stand-in, since a real two-field-composed entry now exists to
+  test against (the AC's own fallback of constructing a synthetic scenario
+  was judged redundant once that became true, per the `simplify` pass).
+- Two new `SignalServiceTest` cases (real, unmocked `SignalService` →
+  `PerSymbolRuleThresholds` → `SignalRuleEngine.evaluate`, same pattern
+  E8-F1-S4 used for its own RSI pair): RSI=20 (one bullish vote) plus a
+  borderline MACD histogram magnitude (`histogramPctOfPrice = 0.05`, i.e.
+  0.05% of price) is the boundary. Under the global default (magnitude
+  threshold 0, any nonzero histogram counts), the MACD vote counts too,
+  producing a second bullish vote and `BULLISH_MAJORITY`
+  (`nonOverriddenSymbol_sameBorderlineMacdMagnitude_macdVoteCountsAndProducesBullishMajority`,
+  AAPL control). Under SOLUSDT's own `0.10%` override, that same `0.05%`
+  histogram no longer clears the gate, the MACD vote drops out, and RSI's
+  lone vote isn't enough for a majority, so the call becomes
+  `NO_STRONG_SIGNAL`
+  (`solusdtMacdOverride_borderlineHistogramMagnitude_dropsMacdVoteAndLosesMajority`).
+  Notably the opposite direction from E8-F1-S4's own RSI-widening example
+  — that override *added* a dissenting vote; this one *removes* a vote
+  that would otherwise have counted.
+
+### Scope / no-op confirmation
+
+BUY-side only for the ship *decision* — the calibration test's ship/no-ship
+gate reads only `overallBuy()`; `overallSell()` is printed/documented,
+never gates. No `SignalService`/`OrderService`/`PlaceOrderRequest` API
+changes (still the existing 6-arg `evaluate` overload, still resolved via
+`PerSymbolRuleThresholds.forSymbol`). No schema migration. No frontend
+changes — backend/test-only, same precedent as every other E8-F1 story.
+Docker wasn't available in this session (same recurring blocker prior
+E8/E6 stories hit), so the two `SignalServiceTest` cases above stood in for
+the `run` skill's normal live-browser verification, the same fallback
+E8-F1-S4/E8-F3-S3 used for their own shipped-value changes.
+
+**`./mvnw verify`: 547 tests, 0 failures/errors, `BUILD SUCCESS`** (up from
+538 after E8-F2-S3). Of the second follow-up batch (E8-F1-S8 through S11),
+only E8-F1-S8 is done — E8-F1-S9 through S11 remain open.

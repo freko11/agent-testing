@@ -214,13 +214,14 @@ validated, execution-realistic, and monitored" — enhancements identified revie
 E2's existing rule engine (`SignalRuleEngine`) and backtest harness
 (`BacktestHarness`, E2-F4-S1/S2) against professional quant practice. Backlog added
 after E2 shipped, same pattern as E4-F3-S3's post-launch addition to E4. The
-original 8 stories below plus 12 follow-ups (E8-F1-S2 through S7, E8-F2-S3,
+original 8 stories below plus 13 follow-ups (E8-F1-S2 through S8, E8-F2-S3,
 E8-F3-S3 through S5, E8-F4-S2) are done — see CLAUDE.md's Status section for the
 full account. Four more follow-ups (E8-F1-S8 through S11) were added after that,
 found during a sweep for flagged-but-never-converted findings: E8-F1-S5/S6 each
 left a SELL-side secondary finding unactioned (chartered for the BUY-side
 mismatch instead), and E8-F1-S6's own closing note named per-symbol MACD/MA
-thresholds as the one BUY-side mechanism still untried. Not yet built.*
+thresholds as the one BUY-side mechanism still untried. E8-F1-S9 through S11
+are not yet built.*
 
 **F8.1 Threshold calibration**
 | ID | Story | Acceptance Criteria | Pts |

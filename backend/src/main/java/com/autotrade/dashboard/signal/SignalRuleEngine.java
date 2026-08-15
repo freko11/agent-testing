@@ -148,10 +148,30 @@ import java.math.BigDecimal;
  * call in a ranging regime), unlike E8-F1-S4/S5's own no-value-change v3 stay. See {@code
  * docs/CHANGELOG.md}'s E8-F3-S3 entry for the wiring rationale and the recomputed {@code
  * LiveDriftBaseline} SELL figures.
+ *
+ * <p><b>E8-F1-S8 extended E8-F1-S4's per-symbol mechanism to a second axis: {@link
+ * #MACD_MIN_HISTOGRAM_MAGNITUDE_PCT}.</b> E8-F1-S6's closing note named per-symbol MACD/MA
+ * thresholds as the one still-untried lever after this exact axis's own earlier global sweep
+ * ({@code MacdHistogramMagnitudeCalibrationTest}, E8-F1-S5) hit the same asset-divergent conflict
+ * on the BUY side that every other global-bar E8-F1 axis hit. {@code
+ * PerSymbolMacdHistogramMagnitudeCalibrationTest} swept BTCUSDT/DOGEUSDT/SOLUSDT independently
+ * against E8-F1-S4's own {@link PerSymbolRuleThresholds} tune/held-out design. Result: BTCUSDT and
+ * DOGEUSDT both ship no override (BTCUSDT's tuning-window winners fail held-out confirmation
+ * specifically at the MIN checkpoint; DOGEUSDT's only tuning-window winner fails held-out
+ * confirmation at every checkpoint). SOLUSDT ships {@code macdMinHistogramMagnitudePct = 0.10},
+ * composed alongside its existing {@code rsiOverbought = 70} override into one {@code
+ * RuleThresholds} entry — the first symbol in this map with two independently-calibrated
+ * non-default fields at once. Because this axis gates the MACD vote symmetrically (unlike either
+ * RSI bound), SOLUSDT's SELL-side classification changes too; checked and found to be a real,
+ * positive effect at every checkpoint on both windows, not an offsetting cost. {@link
+ * #RULE_TABLE_VERSION} bumps to v5 for the resolution mechanism itself, per this story's confirmed
+ * scope, independent of the 1-of-3 override count — the same treatment E8-F1-S4's own v2&rarr;v3
+ * bump got. See {@link PerSymbolRuleThresholds}'s own class Javadoc and docs/CHANGELOG.md's
+ * E8-F1-S8 entry for the full per-symbol sweep and figures.
  */
 public final class SignalRuleEngine {
 
-    public static final String RULE_TABLE_VERSION = "v4";
+    public static final String RULE_TABLE_VERSION = "v5";
 
     public static final BigDecimal RSI_OVERSOLD_THRESHOLD = new BigDecimal("25");
     public static final BigDecimal RSI_OVERBOUGHT_THRESHOLD = new BigDecimal("75");

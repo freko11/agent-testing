@@ -77,7 +77,7 @@ class OrderCsvExporterTest {
 
         String csv = OrderCsvExporter.export(List.of(order), Map.of(42L, signalCallEntry));
 
-        assertTrue(csv.contains(",42,BUY,BULLISH_MAJORITY,v4,3-10 days\r\n"), csv);
+        assertTrue(csv.contains(",42,BUY,BULLISH_MAJORITY,v5,3-10 days\r\n"), csv);
     }
 
     @Test

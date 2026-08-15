@@ -123,8 +123,20 @@ once flat — purely additive to the backtest report, no
 `RULE_TABLE_VERSION` bump, no production wiring change, no change to
 `LiveSignalDriftService`/`LiveDriftBaseline`'s live comparison (confirmed
 scope boundary, same backtest-report-only precedent E8-F2-S1/S2 set). This
-closes out all 6 backlog stories filed in the same batch as E8-F1-S6/S7 and
-E8-F3-S4/S5 — E8's backlog is now fully complete.
+closed out all 6 backlog stories filed in the same batch as E8-F1-S6/S7 and
+E8-F3-S4/S5, at which point E8's backlog was fully complete — until a
+second batch of four more follow-ups (E8-F1-S8 through S11) was filed,
+found during a sweep for flagged-but-never-converted findings: E8-F1-S5/S6
+each left a SELL-side secondary finding unactioned (chartered for the
+BUY-side mismatch instead), and E8-F1-S6's own closing note named
+per-symbol MACD/MA thresholds as the one BUY-side mechanism still untried.
+E8-F1-S8, the first of that new batch, extends E8-F1-S4's per-symbol
+mechanism to `macdMinHistogramMagnitudePct` and is now done — SOLUSDT ships
+`macdMinHistogramMagnitudePct = 0.10` (composed alongside its existing
+`rsiOverbought = 70` override), BTCUSDT/DOGEUSDT ship no override,
+`RULE_TABLE_VERSION` bumps v4→v5 — see its entry below for the full
+per-symbol figures and the SOLUSDT SELL-side effect it documents.
+E8-F1-S9 through S11 remain open.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -1463,7 +1475,90 @@ E8-F3-S4/S5 — E8's backlog is now fully complete.
   `PlaceOrderRequest` changes, no schema migration, no frontend changes.
   `./mvnw verify`: 538 tests, 0 failures, up from 532. This was the last
   of the 6 backlog stories filed alongside E8-F1-S6/S7 and E8-F3-S4/S5 —
-  E8's backlog is now fully complete.
+  E8's backlog was fully complete at that point, before a second batch of
+  four more follow-ups (E8-F1-S8 through S11) was filed.
+- E8-F1-S8: per-symbol `macdMinHistogramMagnitudePct` calibration on the BUY
+  side, the first story of the second E8-F1-S8-through-S11 follow-up batch
+  (filed after E8-F2-S3 closed out the first batch), extending E8-F1-S4's
+  per-symbol mechanism to this axis — E8-F1-S6's own closing note had named
+  per-symbol MACD/MA thresholds as the one still-untried lever after every
+  prior E8-F1 axis hit the same asset-divergent, no-single-value-wins-
+  everywhere conflict. `PerSymbolMacdHistogramMagnitudeCalibrationTest` swept
+  BTCUSDT/DOGEUSDT/SOLUSDT independently against E8-F1-S4's own tune/held-out
+  design (each symbol's own 700-candle tuning window, validated against that
+  same symbol's own 300-candle held-out tail), reusing E8-F1-S5's original
+  0.00%-2.00% candidate grid. Result: BTCUSDT and DOGEUSDT both ship no
+  override. BTCUSDT's tuning-window winners (macd&gt;=0.75%/1.00%, both
+  beating the magnitude-0 baseline's after-cost expectancy at every
+  checkpoint, n=64/39 vs. baseline n=175) each fail held-out confirmation
+  specifically at the MIN checkpoint (0.75%: held-out min -0.488% vs.
+  baseline -0.425%; 1.00%: held-out min -0.429% vs. baseline -0.425%) even
+  though both confirm at MID/MAX. DOGEUSDT's only tuning-window winner
+  (macd&gt;=0.10%, n=127 vs. baseline n=132) fails held-out confirmation
+  completely — worse than baseline at every one of MIN/MID/MAX on its own
+  held-out tail. SOLUSDT ships `macdMinHistogramMagnitudePct = 0.10`,
+  composed into `PerSymbolRuleThresholds.OVERRIDES`'s existing SOLUSDT entry
+  alongside its E8-F1-S4 `rsiOverbought = 70` override (the first symbol in
+  this map with two independently-calibrated non-default fields at once) — a
+  genuine, non-degenerate confirmation, beating the magnitude-0 baseline's
+  BUY-side after-cost expectancy at every checkpoint on both its tuning
+  window (n=186 vs. 188) and its own held-out tail (n=67 vs. 69). Unlike
+  either RSI bound (E8-F1-S3 found `rsiOverbought` has zero measurable
+  SELL-side effect), this axis gates `computeVotes`'s `macdBullish`/
+  `macdBearish` reads symmetrically off the same threshold, so there is no
+  way to make it BUY-only at the vote-computation layer without an
+  out-of-scope `evaluate` signature change — SOLUSDT's SELL-side
+  classification changes too. Checked and pinned down as a real test
+  assertion (`shippedSolusdtCandidateAlsoImprovesSellSide`), not just
+  printed: the effect is positive at every checkpoint on both windows
+  (tuning baseline -0.528%/-0.216%/-0.216%, n=87 → shipped
+  -0.399%/-0.073%/-0.072%, n=83; held-out baseline +0.357%/+0.647%/+0.844%,
+  n=49 → shipped +0.462%/+0.805%/+0.995%, n=45) — matching the direction
+  E8-F1-S5 had already flagged as a consistent-but-unactioned secondary
+  finding across all three symbols. Acting on that SELL-side effect beyond
+  SOLUSDT (e.g. wiring a SELL-only gate the way E8-F3-S3 did for the regime
+  filter) is E8-F1-S9's separate, chartered story, not this one.
+  `RULE_TABLE_VERSION` bumps v4 → v5 for the resolution mechanism itself,
+  per this story's confirmed scope, regardless of the 1-of-3 override count
+  — the same treatment E8-F1-S4's own v2→v3 bump got. Fixture fallout
+  caught by `./mvnw verify`: `LiveDriftBaseline.RULE_TABLE_VERSION` needed
+  only a label update (BTCUSDT/DOGEUSDT — the only two fixtures that
+  baseline is computed from — still resolve to `RuleThresholds.DEFAULT`
+  under v5 exactly as under v4, confirmed by `LiveDriftBaselineTest` passing
+  unmodified); `OrderCsvExporterTest`'s hardcoded `v4` CSV-row literal and
+  `StockPerSymbolRsiOverboughtCalibrationTest`'s `(v4/current default)`
+  print-label literal both moved to v5; and a real, more substantive gap
+  surfaced by the SOLUSDT MACD override going live — the pre-existing
+  E8-F1-S4 `SignalServiceTest` case
+  (`solusdtOverride_rsi72BearishOnlyUnderPerSymbolOverride_producesBearishMajority`)
+  used a MACD fixture with `histogramPctOfPrice=0`, which SOLUSDT's own new
+  0.10% override now gates out entirely (0 &lt; 0.10), dropping that test's
+  MACD vote and collapsing its scenario from `BEARISH_MAJORITY` to `HOLD`;
+  fixed by bumping that fixture's histogram magnitude to 1.0 (comfortably
+  clear of 0.10) in both the SOLUSDT case and its AAPL control, restoring
+  the original test's isolation of `rsiOverbought`'s own effect. New
+  `signal.PerSymbolRuleThresholdsTest` (this class had no dedicated test
+  file before this story) covers unlisted-crypto/stock/unrecognized-symbol
+  fallback plus a composition case reading the real SOLUSDT entry, proving
+  both its `rsiOverbought`/`macdMinHistogramMagnitudePct` overrides survive
+  composition into one record without clobbering each other or leaking into
+  the other four fields (still at `DEFAULT`'s values). Two new
+  `SignalServiceTest` cases (real, unmocked
+  `SignalService` → `PerSymbolRuleThresholds` → `SignalRuleEngine.evaluate`,
+  same pattern E8-F1-S4 used) exercise the shipped override end to end: a
+  borderline (0.05%-of-price) MACD histogram magnitude that counts as a
+  bullish vote under the global default (giving `BULLISH_MAJORITY` with
+  RSI's own lone bullish vote) but gets gated out under SOLUSDT's 0.10%
+  override (dropping back to a lone RSI vote and `NO_STRONG_SIGNAL`) — this
+  story's mechanism *removes* a vote rather than adding a dissenting one,
+  the opposite direction from E8-F1-S4's own RSI-widening example. Docker
+  wasn't available in this session (same recurring blocker prior E8/E6
+  stories hit), so those two `SignalServiceTest` cases stood in for the
+  `run` skill's normal live-browser verification, the same fallback
+  E8-F1-S4/E8-F3-S3 used for their own shipped-value changes. No frontend
+  changes (backend/test-only, same precedent as every other E8-F1 story).
+  `./mvnw verify`: 547 tests, 0 failures, up from 538. E8-F1-S9 through S11
+  remain open in the second follow-up batch.
 
 ## Build / lint / test
 
@@ -1495,12 +1590,13 @@ E8-F3-S4/S5 — E8's backlog is now fully complete.
   (pure static, no library — see `docs/CHANGELOG.md` E2-F2-S1 for why), plus
   `IndicatorService`/`IndicatorSnapshot` persistence.
 - `signal` — `SignalRuleEngine` (versioned rule table, currently
-  `RULE_TABLE_VERSION` v4, safety gates + 2-of-3 directional vote →
+  `RULE_TABLE_VERSION` v5, safety gates + 2-of-3 directional vote →
   BUY/SELL/HOLD), `HoldTermCalculator` (versioned day-range table),
-  `SignalCallEntry` audit log. `PerSymbolRuleThresholds` (E8-F1-S4) resolves
-  `RuleThresholds` per normalized ticker symbol — currently only SOLUSDT has
-  a non-default override (`rsiOverbought=70`), every other symbol falls back
-  to `RuleThresholds.DEFAULT` (25/75) — called from
+  `SignalCallEntry` audit log. `PerSymbolRuleThresholds` (E8-F1-S4, extended
+  by E8-F1-S8) resolves `RuleThresholds` per normalized ticker symbol —
+  currently only SOLUSDT has non-default overrides (`rsiOverbought=70`,
+  `macdMinHistogramMagnitudePct=0.10`, composed into one entry), every other
+  symbol falls back to `RuleThresholds.DEFAULT` (25/75/0/0) — called from
   `SignalService.computeSignalWithProvenance`, the one production (i.e. not
   deliberately unwired) consumer of `RuleThresholds` besides the default.
   `WeightedVoteRuleEngine` (E8-F3-S1) is an alternative, deliberately

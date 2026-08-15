@@ -152,6 +152,13 @@ class SignalServiceTest {
      * override); under SOLUSDT's own override (rsiOverbought=70) the same RSI=72 crosses into
      * bearish territory, becomes a second dissenting vote, and the call becomes {@code
      * BEARISH_MAJORITY} — a real, observable behavior difference driven only by the ticker symbol.
+     *
+     * <p>E8-F1-S8 fixture fallout: the MACD histogram magnitude here was bumped from 0 to 1.0
+     * (histogramPctOfPrice) so it still clears SOLUSDT's own new {@code
+     * macdMinHistogramMagnitudePct = 0.10} override — at the original 0, SOLUSDT's own MACD gate
+     * would drop this scenario's MACD vote entirely (0 &lt; 0.10), collapsing bearishCount to 1 and
+     * breaking this test's isolation of {@code rsiOverbought}'s own effect. 1.0 is comfortably past
+     * the 0.10 threshold either way, so this remains a pure {@code rsiOverbought}-only scenario.
      */
     @Test
     void solusdtOverride_rsi72BearishOnlyUnderPerSymbolOverride_producesBearishMajority() {
@@ -159,7 +166,7 @@ class SignalServiceTest {
         IndicatorSnapshot snapshot = new IndicatorSnapshot(ticker, Instant.parse("2026-02-09T00:00:00Z"),
                 new BigDecimal("100.00"), Broker.BINANCE);
 
-        MacdResult macd = new MacdResult(new BigDecimal("1.0"), new BigDecimal("2.0"), new BigDecimal("-1.0"), new BigDecimal("0"));
+        MacdResult macd = new MacdResult(new BigDecimal("1.0"), new BigDecimal("2.0"), new BigDecimal("-1.0"), new BigDecimal("1.0"));
         MovingAverageResult ma = new MovingAverageResult(10, new BigDecimal("110.0"), 30,
                 new BigDecimal("110.0"), MovingAverageRelation.EQUAL, BigDecimal.ZERO);
         IndicatorResponse response = new IndicatorResponse(TickerSummary.from(ticker), Broker.BINANCE,
@@ -185,7 +192,7 @@ class SignalServiceTest {
         IndicatorSnapshot snapshot = new IndicatorSnapshot(ticker, Instant.parse("2026-02-09T00:00:00Z"),
                 new BigDecimal("100.00"), Broker.ALPACA);
 
-        MacdResult macd = new MacdResult(new BigDecimal("1.0"), new BigDecimal("2.0"), new BigDecimal("-1.0"), new BigDecimal("0"));
+        MacdResult macd = new MacdResult(new BigDecimal("1.0"), new BigDecimal("2.0"), new BigDecimal("-1.0"), new BigDecimal("1.0"));
         MovingAverageResult ma = new MovingAverageResult(10, new BigDecimal("110.0"), 30,
                 new BigDecimal("110.0"), MovingAverageRelation.EQUAL, BigDecimal.ZERO);
         IndicatorResponse response = new IndicatorResponse(TickerSummary.from(ticker), Broker.ALPACA,
@@ -199,6 +206,70 @@ class SignalServiceTest {
 
         assertEquals(SignalCall.HOLD, signalResponse.call());
         assertEquals(SignalRuleId.NO_STRONG_SIGNAL.name(), signalResponse.matchedRule());
+    }
+
+    /**
+     * E8-F1-S8: proves {@code PerSymbolRuleThresholds}'s second, independently-calibrated axis
+     * ({@code macdMinHistogramMagnitudePct}) is actually consulted through the real production call
+     * path, same unmocked-{@code SignalService} approach as the RSI pair above. RSI=20 alone (one
+     * bullish vote) plus a borderline MACD histogram magnitude (0.05% of price) is the boundary this
+     * scenario is built around: under the global default (magnitude threshold 0, any nonzero
+     * histogram counts) the MACD vote counts too, giving a second bullish vote and {@code
+     * BULLISH_MAJORITY} ({@link #nonOverriddenSymbol_sameBorderlineMacdMagnitude_macdVoteCountsAndProducesBullishMajority}
+     * proves exactly that for a symbol with no override); under SOLUSDT's own override (magnitude
+     * threshold 0.10%) that same 0.05% histogram no longer clears the gate, the MACD vote drops out,
+     * and RSI's lone vote isn't enough for a majority, so the call becomes {@code NO_STRONG_SIGNAL}
+     * — a real, observable behavior difference driven only by the ticker symbol, and (unlike the
+     * RSI override) one where the per-symbol threshold *removes* a vote rather than adding a
+     * dissenting one.
+     */
+    @Test
+    void solusdtMacdOverride_borderlineHistogramMagnitude_dropsMacdVoteAndLosesMajority() {
+        Ticker ticker = new Ticker("SOLUSDT", AssetType.CRYPTO, null);
+        IndicatorSnapshot snapshot = new IndicatorSnapshot(ticker, Instant.parse("2026-02-09T00:00:00Z"),
+                new BigDecimal("100.00"), Broker.BINANCE);
+
+        MacdResult macd = new MacdResult(new BigDecimal("1.0"), new BigDecimal("0.5"), new BigDecimal("0.5"), new BigDecimal("0.05"));
+        MovingAverageResult ma = new MovingAverageResult(10, new BigDecimal("110.0"), 30,
+                new BigDecimal("110.0"), MovingAverageRelation.EQUAL, BigDecimal.ZERO);
+        IndicatorResponse response = new IndicatorResponse(TickerSummary.from(ticker), Broker.BINANCE,
+                Instant.parse("2026-02-09T00:00:00Z"), new BigDecimal("100.00"), new BigDecimal("20"), macd, ma,
+                new BigDecimal("2.0"), new BigDecimal("1000000.0000"), new BigDecimal("1.0000"));
+
+        when(indicatorService.computeForSignal("SOLUSDT", 200))
+                .thenReturn(new IndicatorService.IndicatorComputation(response, snapshot, TRENDING_ADX));
+
+        SignalResponse signalResponse = service.computeSignal("SOLUSDT", 200);
+
+        assertEquals(SignalCall.HOLD, signalResponse.call());
+        assertEquals(SignalRuleId.NO_STRONG_SIGNAL.name(), signalResponse.matchedRule());
+    }
+
+    /** Control for {@link #solusdtMacdOverride_borderlineHistogramMagnitude_dropsMacdVoteAndLosesMajority}
+     * — same RSI=20, same borderline (0.05%) MACD histogram magnitude, same neutral MA, a symbol
+     * with no {@code PerSymbolRuleThresholds} override. Confirms the difference above is really
+     * driven by the per-symbol MACD magnitude threshold, not some other accidental difference
+     * between the two scenarios. */
+    @Test
+    void nonOverriddenSymbol_sameBorderlineMacdMagnitude_macdVoteCountsAndProducesBullishMajority() {
+        Ticker ticker = new Ticker("AAPL", AssetType.STOCK, "NASDAQ");
+        IndicatorSnapshot snapshot = new IndicatorSnapshot(ticker, Instant.parse("2026-02-09T00:00:00Z"),
+                new BigDecimal("100.00"), Broker.ALPACA);
+
+        MacdResult macd = new MacdResult(new BigDecimal("1.0"), new BigDecimal("0.5"), new BigDecimal("0.5"), new BigDecimal("0.05"));
+        MovingAverageResult ma = new MovingAverageResult(10, new BigDecimal("110.0"), 30,
+                new BigDecimal("110.0"), MovingAverageRelation.EQUAL, BigDecimal.ZERO);
+        IndicatorResponse response = new IndicatorResponse(TickerSummary.from(ticker), Broker.ALPACA,
+                Instant.parse("2026-02-09T00:00:00Z"), new BigDecimal("100.00"), new BigDecimal("20"), macd, ma,
+                new BigDecimal("2.0"), new BigDecimal("1000000.0000"), new BigDecimal("1.0000"));
+
+        when(indicatorService.computeForSignal("AAPL", 200))
+                .thenReturn(new IndicatorService.IndicatorComputation(response, snapshot, TRENDING_ADX));
+
+        SignalResponse signalResponse = service.computeSignal("AAPL", 200);
+
+        assertEquals(SignalCall.BUY, signalResponse.call());
+        assertEquals(SignalRuleId.BULLISH_MAJORITY.name(), signalResponse.matchedRule());
     }
 
     /**
