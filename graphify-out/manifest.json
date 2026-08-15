@@ -535,8 +535,8 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/signal/SignalRuleEngine.java": {
-    "mtime": 1786773805.2119975,
-    "ast_hash": "af9c63f4847cbdb8d10265ad1966fb9c",
+    "mtime": 1786780487.4226494,
+    "ast_hash": "39d24079d396584de1f08ee0200f04f6",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/signal/SignalRuleId.java": {
@@ -1255,8 +1255,8 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1786776344.4040785,
-    "ast_hash": "34033286ce686ecb4c1bb8a03b458757",
+    "mtime": 1786781213.1677086,
+    "ast_hash": "d29b334d31511ceef1097cec5d17c5d2",
     "semantic_hash": ""
   },
   "docker-compose.yml": {
@@ -1265,8 +1265,8 @@
     "semantic_hash": ""
   },
   "docs/agile-plan.md": {
-    "mtime": 1786775586.661742,
-    "ast_hash": "c3283d68cdec1d5700ec183269c18367",
+    "mtime": 1786781180.5122848,
+    "ast_hash": "b14dca4d6ed70374de09ecc21011b6aa",
     "semantic_hash": ""
   },
   "docs/runbooks/credential-key-rotation.md": {
@@ -1305,8 +1305,8 @@
     "semantic_hash": ""
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1786776350.1381526,
-    "ast_hash": "b344cf5206dd8c0773d110fa0970896f",
+    "mtime": 1786781260.9985664,
+    "ast_hash": "13faf2262517f10d63fdd3e4f5bd3574",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/risk/RiskExceptionHandler.java": {
@@ -1787,6 +1787,11 @@
   "backend/src/test/java/com/autotrade/dashboard/signal/PerSymbolRuleThresholdsTest.java": {
     "mtime": 1786775798.4291866,
     "ast_hash": "ec0c15ad5a26d58d5bc1dc279b14282f",
+    "semantic_hash": ""
+  },
+  "backend/src/test/java/com/autotrade/dashboard/backtest/SellMacdHistogramMagnitudeCalibrationTest.java": {
+    "mtime": 1786780214.1291807,
+    "ast_hash": "552e5069fb08a692a1d982b869ef6290",
     "semantic_hash": ""
   }
 }

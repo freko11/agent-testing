@@ -168,6 +168,25 @@ import java.math.BigDecimal;
  * scope, independent of the 1-of-3 override count — the same treatment E8-F1-S4's own v2&rarr;v3
  * bump got. See {@link PerSymbolRuleThresholds}'s own class Javadoc and docs/CHANGELOG.md's
  * E8-F1-S8 entry for the full per-symbol sweep and figures.
+ *
+ * <p><b>E8-F1-S9 tried to wire {@link #MACD_MIN_HISTOGRAM_MAGNITUDE_PCT} in for SELL calls
+ * specifically, mirroring E8-F3-S3's SELL-only regime wiring — no ship, and for the sharpest
+ * reason yet on this axis.</b> Unlike E8-F1-S8's per-symbol mechanism, this story's AC calls for
+ * one global value wired uniformly across every symbol (matching {@code RegimeGatedRuleEngine
+ * #applySellGate}'s crypto-wide scope), so the bar is: some candidate must beat the magnitude=0
+ * SELL-side after-cost-expectancy baseline at every checkpoint on <em>all three</em> of
+ * BTCUSDT/DOGEUSDT/SOLUSDT's own tuning windows simultaneously, before even reaching held-out
+ * validation. BTCUSDT's own SELL-side tuning window never produces a single qualifying candidate
+ * (baseline min/mid/max -0.342%/-0.475%/-0.497%, n=172; the closest candidate, macd&gt;=0.10%,
+ * improves mid/max but is slightly worse at min, and every candidate at or above 0.25% is worse at
+ * every checkpoint) — so the bar fails at the first symbol checked, before DOGEUSDT's own winner
+ * (0.75%) or SOLUSDT's own wide winning range (0.10%-1.50%, confirmed on held-out) are even
+ * relevant to the ship decision, since neither overlaps a value that also works for BTCUSDT. Net:
+ * nothing ships — no new field, no new gate class, no {@link #RULE_TABLE_VERSION} bump, no {@code
+ * SignalService} change; this story's only artifact is {@code
+ * SellMacdHistogramMagnitudeCalibrationTest}, which pins the BTCUSDT no-winner finding down as a
+ * real assertion rather than a printed observation. See docs/CHANGELOG.md's E8-F1-S9 entry for the
+ * full per-symbol figures.
  */
 public final class SignalRuleEngine {
 

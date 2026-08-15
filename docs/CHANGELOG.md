@@ -7626,3 +7626,138 @@ E8-F1-S4/E8-F3-S3 used for their own shipped-value changes.
 **`./mvnw verify`: 547 tests, 0 failures/errors, `BUILD SUCCESS`** (up from
 538 after E8-F2-S3). Of the second follow-up batch (E8-F1-S8 through S11),
 only E8-F1-S8 is done — E8-F1-S9 through S11 remain open.
+
+## E8-F1-S9 — SELL-only MACD histogram-magnitude gate, evaluated and no-shipped
+
+**Story**: the second of the second E8-F1 follow-up batch. Both
+`MacdHistogramMagnitudeCalibrationTest` (E8-F1-S5, global sweep) and
+`PerSymbolMacdHistogramMagnitudeCalibrationTest` (E8-F1-S8, per-symbol
+sweep) flagged a consistent SELL-side improvement from this axis at
+nonzero candidates, chartered to a future story each time rather than
+acted on — the same "uniform on one side, unactioned because the story was
+chartered for the other" shape that led E8-F3-S3 to wire the regime gate
+for SELL only. This story picks that up: sweep `macdMinHistogramMagnitudePct`
+on the SELL side specifically and, if a single value clears the bar
+uniformly across BTCUSDT/DOGEUSDT/SOLUSDT, wire it in — mirroring
+`RegimeGatedRuleEngine#applySellGate`'s crypto-wide, single-global-value
+wiring shape, not E8-F1-S8's per-symbol one.
+
+### Design
+
+Two candidate mechanisms were possible for a genuinely SELL-only gate,
+since `computeVotes`'s `macdBullish`/`macdBearish` reads are gated
+symmetrically off one threshold field (the exact constraint E8-F1-S8's
+own design gate already surfaced): (a) widen `RuleThresholds` with a
+second, SELL-specific magnitude field and thread it through `evaluate`'s
+signature, or (b) compute the rule-table match twice — once with the
+production thresholds (whatever `PerSymbolRuleThresholds.forSymbol`
+resolves) and once more with a candidate SELL-only magnitude substituted
+in — and only take the second computation's result when the first
+resolved to a SELL call, otherwise keep the first unchanged. Chose (b),
+matching `RegimeGatedRuleEngine#applySellGate`'s own shape exactly (a
+pure post-hoc directional gate composed on top of an already-computed
+`SignalRuleId`, not a widened engine signature): since raising a
+magnitude threshold can only ever *remove* an existing macd vote, never
+add one, and the default (unfiltered) computation's bullish count is
+always 0 for any input that already resolved to SELL, re-evaluating with
+a larger magnitude threshold can only ever leave that SELL call unchanged
+or downgrade it toward `NO_STRONG_SIGNAL` (via `BEARISH_UNANIMOUS` →
+`BEARISH_MAJORITY` → `NO_STRONG_SIGNAL`) — it can never flip a SELL call
+into a BUY or `CONFLICTING_SIGNALS`. This was verified analytically before
+writing any calibration code, not assumed: `computeVotes`'s `rsiBullish`/
+`rsiBearish`/`maBullish`/`maBearish` reads are untouched by the macd
+threshold, so a default bullish count of 0 stays 0 under the gated
+recompute, and a bearish count can only fall, never rise. This meant the
+calibration test could reuse the exact evidence shape every other E8-F1
+calibration test already produces (`BacktestHarness.run(candles,
+thresholds).overallSell()`) without needing any new production
+"apply-a-gate" scaffolding to prototype against — the ship bar could be
+evaluated directly off existing `DirectionalOutcomeStats` output.
+
+### Implementation
+
+**New test**: `backend/src/test/java/com/autotrade/dashboard/backtest/
+SellMacdHistogramMagnitudeCalibrationTest.java`, structurally close to
+`PerSymbolMacdHistogramMagnitudeCalibrationTest` (E8-F1-S8) — same
+`SymbolFixture` record, same `FixtureSplits.{BTCUSDT,DOGEUSDT,SOLUSDT}_
+{TUNING,HELD_OUT}` fixtures, same `{0.00, 0.10, 0.25, 0.50, 0.75, 1.00,
+1.50, 2.00}` candidate grid — but printing/gating on `overallSell()`
+instead of `overallBuy()`, and with a **stricter, global** ship bar
+instead of S8's independent-per-symbol one: a candidate must beat the
+`magnitude=0` baseline's SELL-side after-cost expectancy at every one of
+MIN/MID/MAX on *all three* symbols' own tuning windows simultaneously
+before even reaching held-out validation, matching this story's AC
+("a single value clears the bar uniformly across all three symbols").
+`sweepEachSymbolOnItsOwnTuningWindow()`/`validateEachSymbolOnItsOwnHeldOutTail()`
+print the full per-symbol/per-checkpoint grid (kept for documentation and
+to preserve the per-symbol byproduct evidence, same as S8's own
+`overallSell()` printing did in reverse); the actual ship decision is
+pinned down as a real assertion in
+`noCandidateClearsTuningWindowBarOnAllThreeSymbolsAtOnce()`, which checks
+every nonzero candidate against all three symbols' tuning windows and
+asserts none clears the bar, plus a second, more specific assertion that
+BTCUSDT's own tuning window has *no* qualifying candidate at all — the
+actual reason the global bar fails, not just a summary "no candidate
+works everywhere" claim.
+
+**Actual run** (`./mvnw test -Dtest=SellMacdHistogramMagnitudeCalibrationTest`,
+all 3 tests green):
+
+- **BTCUSDT tuning** (baseline min/mid/max after-cost expectancy
+  -0.342%/-0.475%/-0.497%, n=172): macd&gt;=0.10% (n=157) is the closest
+  candidate — mid improves to -0.452%, max improves to -0.453%, but min is
+  slightly *worse* at -0.347%. Every candidate at or above 0.25% is worse
+  than baseline at every checkpoint (e.g. 0.50%: -0.680%/-0.938%/-1.023%,
+  n=88; 1.00%: -0.958%/-1.105%/-1.423%, n=28). No candidate in the swept
+  range beats baseline at all three checkpoints simultaneously — BTCUSDT's
+  own tuning window produces zero qualifying winners for this story's bar.
+- **DOGEUSDT tuning** (baseline +0.175%/+0.616%/+0.521%, n=94): macd&gt;=0.75%
+  is a genuine winner (+0.310%/+1.036%/+1.000%, n=57, all three checkpoints
+  beat baseline), confirmed on DOGEUSDT's own held-out tail (baseline
+  +0.230%/+1.042%/+1.206%, n=48 → shipped +0.731%/+2.249%/+2.593%, n=29,
+  all three checkpoints improve there too).
+- **SOLUSDT tuning** (baseline -0.528%/-0.216%/-0.216%, n=87): every
+  candidate from 0.10% through 1.50% beats baseline at all three
+  checkpoints (e.g. 0.10%: -0.399%/-0.073%/-0.072%, n=83), confirmed
+  broadly on SOLUSDT's own held-out tail too (baseline +0.357%/+0.647%/
+  +0.844%, n=49 → e.g. 0.10%: +0.462%/+0.805%/+0.995%, n=45) — the same
+  0.10% value E8-F1-S8 already shipped as SOLUSDT's own per-symbol
+  BUY-side override.
+
+DOGEUSDT's winner (0.75%) and SOLUSDT's wide winning range (0.10%-1.50%)
+don't overlap with any value that also clears BTCUSDT's bar, because
+BTCUSDT has no winner at all — so no single value clears the "uniform
+across all three symbols" bar this story's global (not per-symbol) AC
+requires. The same asset-dependent, no-single-value-wins-everywhere
+conflict every other E8-F1 axis has hit (RSI bounds, MA-crossover
+separation, and this exact MACD axis's own BUY-side sweep) now confirmed
+for the SELL side too — the SELL-side "consistent improvement" E8-F1-S5/S8
+each flagged turns out to be consistent for DOGEUSDT/SOLUSDT specifically,
+not for BTCUSDT.
+
+### Scope / no-op confirmation
+
+**No ship.** No new `RuleThresholds` field, no new gate class (the
+analytical case in "Design" above for why (b)'s post-hoc gate would have
+been safe to build was never acted on, since there's no confirmed value
+to wire it with), no `SignalRuleEngine#RULE_TABLE_VERSION` bump (stays
+v5), no `SignalService`/`OrderService`/`PlaceOrderRequest` change. This
+story's only artifact is the calibration test — the same "ship only the
+investigation, not a value" precedent E8-F1-S2/S3 set, rather than
+E8-F1-S5/S6/S8's precedent of also shipping an inert new field (that
+field, `macdMinHistogramMagnitudePct`, already exists from E8-F1-S5; a
+SELL-only gate mechanism would have been genuinely new production code,
+and this no-ship finding doesn't justify writing it speculatively).
+`SignalRuleEngine`'s class Javadoc gained a new closing paragraph
+documenting this finding, mirroring every prior E8-F1 no-ship entry's
+treatment. No schema migration. No frontend changes — backend/test-only,
+same precedent as every other E8-F1 story. Docker wasn't available in this
+session (same recurring blocker prior E8/E6 stories hit); since this
+story shipped no production behavior change, no live-browser/
+`SignalServiceTest` end-to-end verification was needed beyond the
+calibration test's own run, the same no-production-change precedent
+E8-F1-S2/S3/S5/S6/E8-F3-S4 established.
+
+**`./mvnw verify`: 550 tests, 0 failures/errors, `BUILD SUCCESS`** (up from
+547 after E8-F1-S8). Of the second follow-up batch (E8-F1-S8 through S11),
+E8-F1-S8/S9 are now done — E8-F1-S10/S11 remain open.
