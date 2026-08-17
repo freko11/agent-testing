@@ -85,6 +85,19 @@ import java.util.Map;
  * SignalRuleEngine#RULE_TABLE_VERSION} stays v5, since no new resolution logic actually ships. See
  * {@code PerSymbolMaCrossoverSeparationCalibrationTest}'s class Javadoc and docs/CHANGELOG.md's
  * E8-F1-S10 entry for the full per-symbol sweep and figures.
+ *
+ * <p><b>E8-F1-S12 swept AAPL fresh on the two axes E8-F1-S8/E8-F1-S10 already calibrated for
+ * crypto - {@code macdMinHistogramMagnitudePct} and {@code maMinSeparationPctOfPrice} - neither
+ * had ever been checked against a stock before. Both come back no-ship.</b> AAPL's tuning window
+ * genuinely produces winners on both axes this time (unlike DOGEUSDT/SOLUSDT's own "no
+ * tuning-window winner to begin with" shape) - {@code macdMinHistogramMagnitudePct} 0.50%/0.75%,
+ * and {@code maMinSeparationPctOfPrice} 1.00%/2.00%/3.00%/4.00% - but every single one fails
+ * held-out confirmation, most commonly at the MIN checkpoint specifically. AAPL keeps falling back
+ * to {@link SignalRuleEngine.RuleThresholds#DEFAULT} on both axes, same as it already does on
+ * {@code rsiOverbought} per E8-F1-S7. See {@code StockPerSymbolMacdHistogramMagnitudeCalibrationTest}'s
+ * and {@code StockMaCrossoverSeparationCalibrationTest}'s own class Javadocs and
+ * docs/CHANGELOG.md's E8-F1-S12 entry for the full figures. This map is unchanged by this story
+ * (still only the SOLUSDT entry from E8-F1-S8).
  */
 public final class PerSymbolRuleThresholds {
 

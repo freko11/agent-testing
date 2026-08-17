@@ -236,6 +236,32 @@ import java.math.BigDecimal;
  * class Javadoc, and docs/CHANGELOG.md's E8-F1-S11 entry for the full figures and the recomputed
  * {@code LiveDriftBaseline} SELL figures. This was E8-F1-S8 through S11's last story — the second
  * E8-F1 follow-up batch is now complete.
+ *
+ * <p><b>E8-F1-S12 evaluated AAPL against the two axes that shipped real production changes since
+ * E8-F1-S7's stock-evidence story ({@link #MACD_MIN_HISTOGRAM_MAGNITUDE_PCT}'s per-symbol
+ * mechanism, and the already-wired {@link MaCrossoverSellGate}) — neither had ever been checked
+ * against a stock before, since both shipped purely "for lack of stock evidence," not because
+ * stock evidence contradicted them.</b> {@code StockPerSymbolMacdHistogramMagnitudeCalibrationTest}
+ * found real tuning-window winners this time (macd&gt;=0.50%/0.75%, both beating the magnitude=0
+ * baseline's BUY-side after-cost expectancy at every checkpoint) — unlike DOGEUSDT/SOLUSDT's own
+ * "no tuning-window winner to begin with" shape on other axes — but neither confirms on AAPL's own
+ * held-out tail: macd&gt;=0.50% fails specifically at MIN, macd&gt;=0.75% reverses sharply at every
+ * checkpoint. No override ships; AAPL keeps falling back to {@link RuleThresholds#DEFAULT}.
+ *
+ * <p>{@code StockMaCrossoverSeparationCalibrationTest} ran the same fresh per-symbol BUY-side
+ * sweep on {@link #MA_MIN_SEPARATION_PCT_OF_PRICE} (also no ship — four tuning-window winners,
+ * none confirm on held-out, each failing specifically at the MIN checkpoint) <i>and</i> a distinct,
+ * narrower check: does {@link MaCrossoverSellGate}'s already-shipped {@code ma&gt;=2.00%} SELL-only
+ * gate value actually help AAPL's own SELL-side expectancy, the way it does for all three crypto
+ * symbols? The answer is a clean <b>no</b> — the shipped value makes AAPL's SELL-side after-cost
+ * expectancy uniformly worse, not better, at all six checkpoints checked (three on the tuning
+ * window, three on the held-out tail), a direct contradiction of the crypto-wide finding, not a
+ * mixed result. This is the second time a stock has actively contradicted a crypto-wide pattern
+ * (the first being E8-F1-S7's regime-gate finding); {@link MaCrossoverSellGate#sellGateAppliesTo}
+ * stays crypto-only, now backed by active contradicting evidence rather than merely absent
+ * evidence. See {@code StockPerSymbolMacdHistogramMagnitudeCalibrationTest}'s and {@code
+ * StockMaCrossoverSeparationCalibrationTest}'s own class Javadocs and docs/CHANGELOG.md's
+ * E8-F1-S12 entry for the full figures. No {@link #RULE_TABLE_VERSION} bump — nothing ships.
  */
 public final class SignalRuleEngine {
 

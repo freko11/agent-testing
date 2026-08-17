@@ -178,7 +178,23 @@ current weights, and the two regimes that differ from the shipped default
 are a tie (0.00, provably byte-identical on the real fixture data) or
 strictly worse (anything above 1, which produces zero calls since
 BULLISH_UNANIMOUS/BEARISH_UNANIMOUS never fire in this data) — see its
-entry below for the full mathematical-and-empirical breakdown.
+entry below for the full mathematical-and-empirical breakdown. E8-F1-S12,
+found in the same kind of sweep, evaluates AAPL — this repo's only stock
+fixture — against the two axes that shipped real production changes since
+E8-F1-S7 first gathered stock evidence (the per-symbol
+`macdMinHistogramMagnitudePct` mechanism, E8-F1-S8, and the already-wired
+`MaCrossoverSellGate`, E8-F1-S11), neither of which had ever been checked
+against a stock before. Also done, also no-ship on the fresh per-symbol
+sweep of both axes (AAPL's tuning window genuinely produces winners this
+time, unlike DOGEUSDT/SOLUSDT's own "no tuning-window winner to begin
+with" shape, but none confirm on AAPL's own held-out tail) — and a
+distinct, narrower check found the already-shipped `MaCrossoverSellGate`
+value (`ma>=2.00%`) actively makes AAPL's own SELL-side expectancy worse,
+not better, at every one of six checkpoints checked, directly
+contradicting the crypto-wide finding that gate's scoping already relies
+on. `MaCrossoverSellGate.sellGateAppliesTo` stays crypto-only, same as
+before, but now backed by real contradicting stock evidence rather than
+merely absent evidence — see its entry below for the full figures.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -1802,6 +1818,45 @@ entry below for the full mathematical-and-empirical breakdown.
   stays 0.5; `WeightedVoteRuleEngine` stays unwired — no
   `SignalService`/`OrderService`/`RULE_TABLE_VERSION` change. `./mvnw
   verify`: 570 tests, 0 failures, up from 566.
+- E8-F1-S12: evaluates AAPL — this repo's only stock fixture — against the
+  two axes that shipped real production changes since E8-F1-S7 first
+  gathered stock evidence: the per-symbol `macdMinHistogramMagnitudePct`
+  mechanism (E8-F1-S8, SOLUSDT-only today) and the already-wired,
+  crypto-only `MaCrossoverSellGate` (E8-F1-S11). Neither had ever been
+  checked against a stock before — both shipped purely "for lack of stock
+  evidence," not because stock evidence contradicted them. New
+  `StockPerSymbolMacdHistogramMagnitudeCalibrationTest` and
+  `StockMaCrossoverSeparationCalibrationTest` mirror
+  `StockPerSymbolRsiOverboughtCalibrationTest` (E8-F1-S7)'s own template. A
+  throwaway probe (written, run once, deleted before committing) confirmed
+  the existing crypto candidate grids (0.00%-2.00% for MACD, 0.00%-10.00%
+  for MA separation) remain appropriately sized for AAPL's own
+  distributions, so both were reused verbatim. Result: **no ship on either
+  axis, but AAPL's tuning window genuinely produces tuning-window winners
+  this time** (unlike DOGEUSDT/SOLUSDT's own "no tuning-window winner to
+  begin with" shape on these axes) — `macd>=0.50%/0.75%` and
+  `ma>=1.00%/2.00%/3.00%/4.00%` each beat their respective baselines at
+  every tuning-window checkpoint, but every single one fails held-out
+  confirmation, most commonly at the MIN checkpoint specifically. A
+  distinct, narrower check found the more notable result: the
+  already-shipped `MaCrossoverSellGate` value (`ma>=2.00%`) actively makes
+  AAPL's own SELL-side after-cost expectancy uniformly *worse*, not
+  better, at all six checkpoints checked (tuning and held-out) — a clean
+  contradiction of the crypto-wide finding that gate's scoping already
+  relies on, the second time a stock has actively contradicted a
+  crypto-wide pattern in this backlog (the first being E8-F1-S7's own
+  regime-gate finding). `PerSymbolRuleThresholds.OVERRIDES` is unchanged
+  (still SOLUSDT-only); `MaCrossoverSellGate.sellGateAppliesTo` stays
+  crypto-only, now backed by active contradicting stock evidence rather
+  than merely absent evidence — its own Javadoc updated accordingly, same
+  "gap closed with negative evidence" treatment E8-F1-S7 gave
+  `PerSymbolRuleThresholds`/`RegimeGatedRuleEngine`. No `RULE_TABLE_VERSION`
+  bump — nothing ships. Since this story shipped no production behavior
+  change, no live-browser/`SignalServiceTest` end-to-end verification was
+  needed beyond the two new calibration tests' own runs, the same
+  no-production-change precedent E8-F1-S2/S3/S5/S6/S7/E8-F3-S4/E8-F1-S9/
+  S10/E8-F3-S6 established. `./mvnw verify`: 580 tests, 0 failures, up
+  from 570.
 
 ## Build / lint / test
 

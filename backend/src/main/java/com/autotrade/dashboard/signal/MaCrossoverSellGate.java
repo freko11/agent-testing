@@ -85,11 +85,22 @@ public final class MaCrossoverSellGate {
      * Restricted to {@link AssetType#CRYPTO}, the same restriction {@link
      * RegimeGatedRuleEngine#sellGateAppliesTo} uses and for the same reason: {@code
      * SellMaCrossoverSeparationCalibrationTest}'s evidence covers only BTCUSDT/DOGEUSDT/SOLUSDT
-     * (all crypto) — zero stock evidence exists anywhere in this backlog for the MA-crossover
-     * separation axis specifically (E8-F1-S7's stock fixture only evaluated the per-symbol RSI
-     * override and the regime gate), so extrapolating onto stock tickers would repeat the same
-     * mistake {@code PerSymbolRuleThresholds} and {@code RegimeGatedRuleEngine} both already guard
-     * against.
+     * (all crypto) — zero stock evidence existed for the MA-crossover separation axis specifically
+     * when this gate first shipped (E8-F1-S7's stock fixture only evaluated the per-symbol RSI
+     * override and the regime gate), so extrapolating onto stock tickers would have repeated the
+     * same mistake {@code PerSymbolRuleThresholds} and {@code RegimeGatedRuleEngine} both already
+     * guard against.
+     *
+     * <p><b>E8-F1-S12 closed that gap and found active contradicting evidence, not merely absent
+     * evidence.</b> {@code StockMaCrossoverSeparationCalibrationTest} checked whether {@link
+     * #SELL_MIN_SEPARATION_PCT_OF_PRICE} (2.00%) actually improves AAPL's own SELL-side after-cost
+     * expectancy the way it does for all three crypto symbols — it does not. The shipped value
+     * makes AAPL's SELL-side expectancy uniformly <em>worse</em> at all six checkpoints checked
+     * (three on AAPL's own tuning window, three on its held-out tail), a direct contradiction of
+     * the crypto-wide finding this gate's scoping already relies on, not a mixed or marginal
+     * result. This method's crypto-only scoping is unchanged by this finding — it was already
+     * crypto-only — but the reasoning behind it is now backed by a real, checked stock result
+     * rather than an absent one. See docs/CHANGELOG.md's E8-F1-S12 entry for the full figures.
      */
     public static boolean sellGateAppliesTo(AssetType assetType) {
         return assetType == AssetType.CRYPTO;

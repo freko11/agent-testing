@@ -8279,3 +8279,145 @@ E8-F1-S2/S3/S5/S6/E8-F3-S4/E8-F1-S9/S10 established.
 
 **`./mvnw verify`: 570 tests, 0 failures/errors, `BUILD SUCCESS`** (up
 from 566 after E8-F1-S11).
+
+## E8-F1-S12 — AAPL evaluated against the MACD-magnitude and MA-crossover-separation axes
+
+**Story**: filed after a sweep for flagged-but-unactioned findings found
+this specific gap, back on F8.1 alongside E8-F1-S2 through S11. This
+repo's only stock fixture, AAPL, was added by E8-F1-S7 and evaluated
+against exactly two mechanisms at the time (the per-symbol
+`rsiOverbought` override and the SELL-side regime gate) — both came back
+no-ship. Since then, two more axes shipped real per-symbol/production
+changes but were never evaluated against AAPL at all:
+`macdMinHistogramMagnitudePct` (E8-F1-S5, extended per-symbol by
+E8-F1-S8 — SOLUSDT ships `0.10`) and `maMinSeparationPctOfPrice`'s
+SELL-only gate (E8-F1-S11, `MaCrossoverSellGate`, `ma>=2.00%` wired for
+crypto tickers only). Both were scoped crypto-only purely "for lack of
+stock evidence," not because stock evidence contradicted them — this
+story closes that gap the same way E8-F1-S7 closed it for the other two
+axes.
+
+### Design
+
+No design gate — same "gather more evidence for an already-reviewed
+mechanism, following an established methodology" shape E8-F1-S7 itself
+used (and E8-F4-S2/E8-F3-S4 before it), not a new resolution mechanism.
+
+A throwaway probe (written, run once, deleted before committing, same
+precedent as E8-F1-S5/S6's own probes) of `MacdCalculator`/
+`MovingAverageCrossoverCalculator` against AAPL's own tuning window
+found `histogramPctOfPrice` median 0.30%, p90 0.99%, max 2.52%, and
+`separationPctOfPrice` median 2.23%, p90 5.48%, max 9.45%. Both existing
+crypto grids (`0.00%`-`2.00%` for MACD, `0.00%`-`10.00%` for MA
+separation) comfortably span AAPL's own distributions — reused verbatim
+rather than re-derived, per the story's own guidance.
+
+Two new test files, mirroring `StockPerSymbolRsiOverboughtCalibrationTest`
+(E8-F1-S7)'s own template:
+
+- `StockPerSymbolMacdHistogramMagnitudeCalibrationTest` — the same
+  tune-then-confirm design `PerSymbolMacdHistogramMagnitudeCalibrationTest`
+  (E8-F1-S8) used per crypto symbol, run fresh against AAPL's own
+  `FixtureSplits.AAPL_TUNING`/`AAPL_HELD_OUT` split.
+- `StockMaCrossoverSeparationCalibrationTest` — two distinct checks: (1)
+  the same tune-then-confirm sweep on the BUY side, mirroring
+  `PerSymbolMaCrossoverSeparationCalibrationTest` (E8-F1-S10); and (2) a
+  narrower, fixed-value check of whether the already-shipped SELL-only
+  gate value (`MaCrossoverSellGate.SELL_MIN_SEPARATION_PCT_OF_PRICE`,
+  `2.00%`) actually improves AAPL's own SELL-side after-cost expectancy
+  the way it does for all three crypto symbols per
+  `SellMaCrossoverSeparationCalibrationTest` (E8-F1-S11) — a distinct
+  question from (1), since the gate is a global, already-shipped value,
+  not something AAPL gets to have its own candidate for.
+
+### Result 1: `macdMinHistogramMagnitudePct` — no ship
+
+AAPL's tuning window genuinely produces two candidates that beat the
+`magnitude=0` baseline's BUY-side after-cost expectancy at all three
+checkpoints — unlike DOGEUSDT/SOLUSDT's own "no tuning-window winner to
+begin with" shape on this axis:
+
+```
+                    tuning (n)                              held-out (n)
+baseline (0.00%)    min -0.256% mid -0.036% max +0.216% (202)   min +0.111% mid +0.189% max +0.279% (95)
+macd>=0.50%         min -0.234% mid +0.052% max +0.479% (69)    min -0.015% mid +0.296% max +0.584% (39)
+macd>=0.75%         min +0.220% mid +0.440% max +0.821% (38)    min -0.811% mid -1.490% max -1.343% (17)
+```
+
+Neither confirms on AAPL's own held-out tail: `macd>=0.50%` fails
+specifically at the MIN checkpoint (MID/MAX still improve) — the same
+partial-miss shape `PerSymbolMacdHistogramMagnitudeCalibrationTest`
+found for BTCUSDT — while `macd>=0.75%` reverses sharply at every
+checkpoint, a sharper failure than either crypto symbol's own no-ship
+outcome on this axis. AAPL keeps falling back to
+`RuleThresholds.DEFAULT` (magnitude 0), same as it already does on the
+RSI axis per E8-F1-S7.
+
+### Result 2a: `maMinSeparationPctOfPrice` per-symbol BUY-side sweep — no ship
+
+Four candidates beat the `separation=0` baseline's BUY-side after-cost
+expectancy at all three tuning-window checkpoints (`ma>=1.00%/2.00%/
+3.00%/4.00%`), but every one fails held-out confirmation, most commonly
+at the MIN checkpoint specifically — e.g. `ma>=2.00%` tuning
+`-0.072%/+0.266%/+0.531%` (n=128) vs. baseline `-0.256%/-0.036%/+0.216%`
+(n=202, all three better) but held-out `+0.012%/+0.133%/+0.343%` (n=68)
+vs. baseline `+0.111%/+0.189%/+0.279%` (n=95, worse at MIN/MID, better
+only at MAX). AAPL keeps falling back to `RuleThresholds.DEFAULT`
+(separation 0) on this axis too.
+
+### Result 2b: already-shipped `MaCrossoverSellGate` value vs. AAPL — active contradiction
+
+This is the story's most notable finding. Checking whether the
+already-shipped `ma>=2.00%` SELL-only gate value actually helps AAPL's
+own SELL-side expectancy, the way it does for all three crypto symbols
+in E8-F1-S11, found the opposite — the shipped value makes AAPL's
+SELL-side after-cost expectancy uniformly **worse**, not better, at all
+six checkpoints checked:
+
+```
+                    tuning (n)                                held-out (n)
+baseline (0.00%)    min -0.537% mid -0.955% max -1.173% (155)   min +0.333% mid +1.163% max +1.401% (49)
+ma>=2.00% (shipped) min -0.613% mid -1.355% max -1.590% (85)    min +0.102% mid +0.038% max -0.378% (28)
+```
+
+Every one of the six checkpoints (three on the tuning window, three on
+the held-out tail) moves in the wrong direction — not a mixed or
+marginal result, a clean contradiction of the crypto-wide finding
+`MaCrossoverSellGate`'s scoping already relies on. This is the second
+time a stock has actively contradicted a crypto-wide pattern in this
+backlog — the first being E8-F1-S7's own regime-gate finding (ranging
+beat trending on AAPL, the opposite of all three crypto symbols).
+`MaCrossoverSellGate.sellGateAppliesTo` stays crypto-only — it already
+was — but the reasoning behind that scoping is now backed by a real,
+checked, actively-contradicting stock result rather than merely absent
+evidence.
+
+### Documentation
+
+`SignalRuleEngine`'s class Javadoc gained a new closing paragraph
+recording both findings. `PerSymbolRuleThresholds`'s class Javadoc
+gained a new paragraph recording the two no-ship per-symbol sweeps.
+`MaCrossoverSellGate`'s class Javadoc (specifically
+`sellGateAppliesTo`'s own doc comment) was updated to record that the
+"zero stock evidence exists" gap is now closed with *actively
+contradicting* evidence, not merely absent evidence — the same
+"gap closed with negative evidence, not left absent" treatment E8-F1-S7
+gave `PerSymbolRuleThresholds`'s and `RegimeGatedRuleEngine`'s own
+Javadocs.
+
+### Scope confirmation
+
+**No ship on either axis.** `PerSymbolRuleThresholds.OVERRIDES` is
+unchanged (still SOLUSDT-only, from E8-F1-S8). `MaCrossoverSellGate`'s
+crypto-only scoping is unchanged (it already excluded stocks). No
+`RULE_TABLE_VERSION` bump — nothing ships. Since this story shipped no
+production behavior change, no live-browser/`SignalServiceTest`
+end-to-end verification was needed beyond the two new calibration test
+files' own runs — the same no-production-change precedent
+E8-F1-S2/S3/S5/S6/S7/E8-F3-S4/E8-F1-S9/S10/E8-F3-S6 established. Docker
+wasn't available in this session (same recurring blocker prior E8/E6
+stories hit), which is moot here since no live verification was needed
+either way.
+
+**`./mvnw verify`: 580 tests, 0 failures/errors, `BUILD SUCCESS`** (up
+from 570 after E8-F3-S6).
