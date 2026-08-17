@@ -91,6 +91,9 @@ class LiveSignalDriftServiceTest {
         // win=1 @ +5.00%, no loss -> expectancyPct = 5.00, after 20bps round-trip cost = 4.80.
         assertEquals(4.80, maxCheckpoint.liveExpectancyPctAfterCosts(), 1e-6);
         assertFalse(maxCheckpoint.possibleDecay(), "a single win is nowhere near a decay signal");
+        // E8-F5-S2: the crossing resolved on day 1, so avgHoldingDays=1 -> funding cost =
+        // (3bps/100) * (24/8 periods/day) * 1 day = 0.09pp -> 4.80 - 0.09 = 4.71.
+        assertEquals(4.71, maxCheckpoint.liveExpectancyPctAfterCostsAndFunding(), 1e-6);
     }
 
     @Test
@@ -111,6 +114,44 @@ class LiveSignalDriftServiceTest {
         assertEquals(1, maxCheckpoint.scored());
         // loss=1 @ -3.00%, no win -> expectancyPct = -3.00, after 20bps cost = -3.20.
         assertEquals(-3.20, maxCheckpoint.liveExpectancyPctAfterCosts(), 1e-6);
+        // E8-F5-S2: same day-1 crossing as the TP case -> funding cost = 0.09pp -> -3.20 - 0.09 = -3.29.
+        assertEquals(-3.29, maxCheckpoint.liveExpectancyPctAfterCostsAndFunding(), 1e-6);
+    }
+
+    /** E8-F5-S2's motivating case: a live sample that looks fine on the cost-only figure (a small
+     * but real win, no TP/SL crossing so it resolves via {@code HORIZON_EXPIRED} at the full
+     * checkpoint horizon) reveals a longer-holding-duration decay once funding is included — the
+     * cost-only comparison alone would never surface this. */
+    @Test
+    void smallWinThatResolvesAtFullHorizonLooksPositiveAfterCostsButNegativeAfterFunding() {
+        Ticker ticker = ticker("BTCUSDT");
+        OrderAuditEntry entry = buyAuditEntry(ticker, DECISION_AT);
+        when(orderAuditEntryRepository.findByResultStatusInAndLoggedAtAfterOrderByLoggedAtAsc(any(), any()))
+                .thenReturn(List.of(entry));
+        // Five days, none crossing the 5%-TP (105)/3%-SL (97) band -- resolves via HORIZON_EXPIRED
+        // at day 5 (this fixture's MAX_DAYS) with a modest +0.50% close, just past the 0.25%
+        // WIN/LOSS deadband.
+        List<Candle> candles = List.of(
+                candle(DECISION_AT.plusSeconds(1L * 86400), 102, 99, 100.20),
+                candle(DECISION_AT.plusSeconds(2L * 86400), 102, 99, 100.30),
+                candle(DECISION_AT.plusSeconds(3L * 86400), 102, 99, 100.10),
+                candle(DECISION_AT.plusSeconds(4L * 86400), 102, 99, 100.40),
+                candle(DECISION_AT.plusSeconds(5L * 86400), 102, 99, 100.50));
+        when(marketDataService.getPriceHistory(eq("BTCUSDT"), anyInt()))
+                .thenReturn(new PriceHistoryResult(ticker, Broker.BINANCE, candles));
+
+        SignalDriftReport report = service.computeDrift(30);
+
+        RuleTableVersionDrift version = report.versions().get(0);
+        CheckpointDrift maxCheckpoint = checkpointDrift(version.buy(), Checkpoint.MAX);
+        assertEquals(1, maxCheckpoint.scored());
+        // win=1 @ +0.50%, no loss -> expectancyPct = 0.50, after 20bps cost = 0.30 -- looks
+        // profitable on the pre-existing cost-only figure.
+        assertEquals(0.30, maxCheckpoint.liveExpectancyPctAfterCosts(), 1e-6);
+        // Resolved via HORIZON_EXPIRED at the full 5-day checkpoint horizon -> avgHoldingDays=5 ->
+        // funding cost = (3bps/100) * (24/8 periods/day) * 5 days = 0.45pp -> 0.30 - 0.45 = -0.15:
+        // the funding-adjusted figure flips negative even though the cost-only one still looks fine.
+        assertEquals(-0.15, maxCheckpoint.liveExpectancyPctAfterCostsAndFunding(), 1e-6);
     }
 
     @Test

@@ -8421,3 +8421,131 @@ either way.
 
 **`./mvnw verify`: 580 tests, 0 failures/errors, `BUILD SUCCESS`** (up
 from 570 after E8-F3-S6).
+
+## E8-F5-S2 — funding-adjusted live signal-drift monitoring
+
+**Story**: the third story from the same sweep as E8-F3-S6/E8-F1-S12,
+filed on F8.5 (Live signal monitoring) alongside E8-F5-S1. E8-F2-S3's own
+CLAUDE.md entry named this explicitly as future work: "confirmed with the
+user before implementation, matching E8-F2-S1/S2's own backtest-report-only
+precedent: `LiveSignalDriftService`/`LiveDriftBaseline`'s live-monitoring
+comparison keeps comparing on `expectancyPctAfterCosts()` unchanged —
+wiring the funding-adjusted figure into live drift monitoring is a real,
+separate future story, not folded in here." This is that story.
+
+### Design
+
+No design gate — this is additive wiring of an already-built backtest
+capability (`CheckpointStats.expectancyPctAfterCostsAndFunding()`,
+E8-F2-S3) into an already-built live-monitoring comparison (E8-F5-S1),
+not a new calibration or a new resolution mechanism.
+
+### Mechanism
+
+`LiveDriftBaseline` gained six new pinned constants —
+`BUY_MIN/MID/MAX_EXPECTANCY_PCT_AFTER_COSTS_AND_FUNDING` and
+`SELL_MIN/MID/MAX_EXPECTANCY_PCT_AFTER_COSTS_AND_FUNDING` — re-derived
+from the real BTCUSDT/DOGEUSDT fixtures via a throwaway probe test (run
+once, deleted before committing, same precedent as E8-F1-S5/S6/S12's own
+probes), replayed through the exact same both-gates-applied run
+(`applySellRegimeGate=true`, `applyMaCrossoverSellGate=true`) the existing
+v6 cost-only SELL constants already use, and the same call-count-weighted
+combine across both fixtures — the only change is calling
+`.expectancyPctAfterCostsAndFunding()` instead of
+`.expectancyPctAfterCosts()` on the same `CheckpointStats`. A new
+`expectancyPctAfterCostsAndFunding(boolean isBuy, Checkpoint)` accessor on
+`LiveDriftBaseline` mirrors the existing `expectancyPctAfterCosts` one.
+
+Getting a live call's holding duration needed no new plumbing:
+`LiveSignalDriftService`'s replay path already threads
+`WalkForwardScorer.score`'s `DirectionalScoreResult.daysHeld` through the
+same `DirectionalAccumulator`/`CheckpointStats` the cost-only figures are
+built from — `daysHeld` was promoted to `src/main/java` by E8-F2-S3
+specifically so both the backtest and the live-monitoring paths could
+share it. `LiveSignalDriftService.buildCheckpointDrift` now computes both
+the cost-only and funding-adjusted live/baseline/drift figures from the
+same `CheckpointStats` in one pass. `CheckpointDrift` gained three
+trailing fields: `liveExpectancyPctAfterCostsAndFunding`,
+`baselineExpectancyPctAfterCostsAndFunding`, `driftPctAfterFunding` —
+surfaced on `GET /api/monitoring/signal-drift`'s existing response shape
+alongside, not instead of, the cost-only fields. `logDirection`'s
+INFO/WARN log lines were extended to include the new fields too.
+
+### Design decision: `possibleDecay` stays cost-only
+
+Confirmed and documented directly on `buildCheckpointDrift`'s Javadoc:
+`possibleDecay` — the boolean that actually trips a WARN-level "possible
+signal decay" log line — continues to gate on the cost-only `driftPct`
+alone, not the new funding-adjusted `driftPctAfterFunding`. Both the
+existing `minSampleSize`/`decayThresholdPct` pair and
+`FUNDING_RATE_BPS_PER_PERIOD` (E8-F2-S3) are documented, uncalibrated
+placeholders; stacking an uncalibrated alarm threshold onto a doubly-
+uncalibrated figure (funding rate compounding transaction cost) would mean
+alarming on a number with no real calibration basis at all, worse than the
+cost-only figure's own already-approximate one. The funding-adjusted
+figures are surfaced as additional informational output only —
+`CheckpointDrift`'s own Javadoc documents this explicitly so a future
+reader doesn't assume they feed the alarm.
+
+### Findings: funding materially erodes both directions
+
+Pinned funding-adjusted values (percentage points, BTCUSDT+DOGEUSDT
+combined, same fixtures/gates as the v6 cost-only baseline):
+
+```
+                cost-only                      funding-adjusted
+BUY   MIN       +0.010374                      -0.192350
+      MID       +0.027064                      -0.203779
+      MAX       +0.033141                      -0.226813
+SELL  MIN       +0.067244                      -0.052442
+      MID       +0.165253                      -0.029354
+      MAX       +0.241016                      +0.031330
+```
+
+BUY's funding-adjusted expectancy is negative at every checkpoint — BUY
+calls in these fixtures hold 1.5-2.9 days on average, long enough for
+funding cost to fully erase the small cost-only edge. SELL's MIN/MID flip
+from positive to negative despite SELL calls holding slightly less long on
+average (1.3-2.3 days); only MAX retains a positive figure after funding.
+This is the same kind of duration-sensitivity E8-F2-S3's own backtest-report
+findings illustrated (a positive-after-costs branch eroding toward
+breakeven once funding is included) — now visible in the live-monitoring
+comparison specifically, not just the offline backtest report.
+
+### Scope confirmation
+
+Confirmed no frontend consumer of `/api/monitoring/signal-drift` exists
+(grepped `frontend/src` for any reference to the endpoint or its response
+shape, zero hits) — stayed backend-only, the same precedent E8-F5-S1 set
+for its own first version of this endpoint. No `RULE_TABLE_VERSION` bump,
+no `SignalService`/`OrderService`/`SignalRuleEngine` change — this story
+only changes what live monitoring *reports*, not the rule table's actual
+resolution logic.
+
+### Testing
+
+`LiveDriftBaselineTest` gained two new cases re-deriving the six
+funding-adjusted constants against the real fixtures, mirroring its
+existing cost-only re-derivation cases exactly. `LiveSignalDriftServiceTest`
+gained two new assertions on existing cases (confirming the new fields are
+populated and consistent) plus one new case,
+`smallWinThatResolvesAtFullHorizonLooksPositiveAfterCostsButNegativeAfterFunding`,
+constructing the story's own motivating scenario directly: a live audit
+entry that resolves via `HORIZON_EXPIRED` at the full 5-day checkpoint
+horizon (not an early TP/SL crossing) with a small positive return —
+cost-only expectancy reads +0.30% (looks fine), funding-adjusted reads
+-0.15% (reveals the longer holding duration actually cost more than the
+trade earned) — the exact gap this story's mechanism is meant to surface
+that the cost-only figure alone would have missed.
+
+Docker wasn't available in this sandboxed session (same recurring blocker
+prior E8/E6 stories hit); since this story shipped no `SignalService`/
+`OrderService`/`SignalRuleEngine` change, no live-browser verification was
+needed beyond `LiveDriftBaselineTest`/`LiveSignalDriftServiceTest`'s own
+real-fixture-backed runs — the same no-production-change precedent
+E8-F3-S6/E8-F1-S12 (this sweep's other two stories) both used.
+
+**`./mvnw verify`: 585 tests, 0 failures/errors, `BUILD SUCCESS`** (up
+from 580 after E8-F1-S12). This closes out the third sweep-found batch
+(E8-F3-S6, E8-F1-S12, E8-F5-S2); E8's backlog is complete again until a
+future sweep finds more flagged, never-converted findings.

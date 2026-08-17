@@ -32,6 +32,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * is expected to be nondeterministic. A genuine mismatch beyond that tolerance means {@code
  * BacktestHarness}, the fixtures, or {@code SignalRuleEngine.RuleThresholds.DEFAULT} changed
  * since {@link LiveDriftBaseline} was computed, and the constants need re-deriving.
+ *
+ * <p>E8-F5-S2 added the funding-adjusted BUY/SELL re-derivations below, same methodology, reading
+ * {@code expectancyPctAfterCostsAndFunding()} instead of {@code expectancyPctAfterCosts()}.
  */
 class LiveDriftBaselineTest {
 
@@ -56,6 +59,28 @@ class LiveDriftBaselineTest {
                 LiveDriftBaseline.expectancyPctAfterCosts(true, Checkpoint.MID), TOLERANCE);
         assertEquals(LiveDriftBaseline.BUY_MAX_EXPECTANCY_PCT_AFTER_COSTS,
                 LiveDriftBaseline.expectancyPctAfterCosts(true, Checkpoint.MAX), TOLERANCE);
+    }
+
+    /** E8-F5-S2: same combined-fixture derivation as {@link #buyBaselineMatchesCombinedFixtureComputation()},
+     * but reading {@code expectancyPctAfterCostsAndFunding()} instead of {@code
+     * expectancyPctAfterCosts()} — re-derives {@link LiveDriftBaseline}'s new funding-adjusted BUY
+     * constants. */
+    @Test
+    void buyFundingAdjustedBaselineMatchesCombinedFixtureComputation() {
+        BacktestReport btc = BacktestHarness.run("BTCUSDT", BTCUSDT);
+        BacktestReport doge = BacktestHarness.run("DOGEUSDT", DOGEUSDT);
+
+        assertCombinedFundingMatches(btc.overallBuy(), doge.overallBuy(),
+                LiveDriftBaseline.BUY_MIN_EXPECTANCY_PCT_AFTER_COSTS_AND_FUNDING,
+                LiveDriftBaseline.BUY_MID_EXPECTANCY_PCT_AFTER_COSTS_AND_FUNDING,
+                LiveDriftBaseline.BUY_MAX_EXPECTANCY_PCT_AFTER_COSTS_AND_FUNDING);
+
+        assertEquals(LiveDriftBaseline.BUY_MIN_EXPECTANCY_PCT_AFTER_COSTS_AND_FUNDING,
+                LiveDriftBaseline.expectancyPctAfterCostsAndFunding(true, Checkpoint.MIN), TOLERANCE);
+        assertEquals(LiveDriftBaseline.BUY_MID_EXPECTANCY_PCT_AFTER_COSTS_AND_FUNDING,
+                LiveDriftBaseline.expectancyPctAfterCostsAndFunding(true, Checkpoint.MID), TOLERANCE);
+        assertEquals(LiveDriftBaseline.BUY_MAX_EXPECTANCY_PCT_AFTER_COSTS_AND_FUNDING,
+                LiveDriftBaseline.expectancyPctAfterCostsAndFunding(true, Checkpoint.MAX), TOLERANCE);
     }
 
     /** E8-F1-S11: the SELL baseline now must reflect both wired SELL-only gates' combined behavior
@@ -83,11 +108,42 @@ class LiveDriftBaselineTest {
                 LiveDriftBaseline.expectancyPctAfterCosts(false, Checkpoint.MAX), TOLERANCE);
     }
 
+    /** E8-F5-S2: same both-gates-applied derivation as {@link #sellBaselineMatchesCombinedFixtureComputation()},
+     * but reading {@code expectancyPctAfterCostsAndFunding()} instead of {@code
+     * expectancyPctAfterCosts()} — re-derives {@link LiveDriftBaseline}'s new funding-adjusted
+     * SELL constants. */
+    @Test
+    void sellFundingAdjustedBaselineMatchesCombinedFixtureComputation() {
+        BacktestReport btc = BacktestHarness.run("BTCUSDT", BTCUSDT, SignalRuleEngine::evaluate,
+                SignalRuleEngine.RuleThresholds.DEFAULT, true, RegimeClassifier.ADX_TRENDING_THRESHOLD, true);
+        BacktestReport doge = BacktestHarness.run("DOGEUSDT", DOGEUSDT, SignalRuleEngine::evaluate,
+                SignalRuleEngine.RuleThresholds.DEFAULT, true, RegimeClassifier.ADX_TRENDING_THRESHOLD, true);
+
+        assertCombinedFundingMatches(btc.overallSell(), doge.overallSell(),
+                LiveDriftBaseline.SELL_MIN_EXPECTANCY_PCT_AFTER_COSTS_AND_FUNDING,
+                LiveDriftBaseline.SELL_MID_EXPECTANCY_PCT_AFTER_COSTS_AND_FUNDING,
+                LiveDriftBaseline.SELL_MAX_EXPECTANCY_PCT_AFTER_COSTS_AND_FUNDING);
+
+        assertEquals(LiveDriftBaseline.SELL_MIN_EXPECTANCY_PCT_AFTER_COSTS_AND_FUNDING,
+                LiveDriftBaseline.expectancyPctAfterCostsAndFunding(false, Checkpoint.MIN), TOLERANCE);
+        assertEquals(LiveDriftBaseline.SELL_MID_EXPECTANCY_PCT_AFTER_COSTS_AND_FUNDING,
+                LiveDriftBaseline.expectancyPctAfterCostsAndFunding(false, Checkpoint.MID), TOLERANCE);
+        assertEquals(LiveDriftBaseline.SELL_MAX_EXPECTANCY_PCT_AFTER_COSTS_AND_FUNDING,
+                LiveDriftBaseline.expectancyPctAfterCostsAndFunding(false, Checkpoint.MAX), TOLERANCE);
+    }
+
     private void assertCombinedMatches(DirectionalOutcomeStats btc, DirectionalOutcomeStats doge,
                                         double expectedMin, double expectedMid, double expectedMax) {
         assertEquals(expectedMin, combine(btc.min(), doge.min()).expectancyPctAfterCosts(), TOLERANCE, "min checkpoint");
         assertEquals(expectedMid, combine(btc.mid(), doge.mid()).expectancyPctAfterCosts(), TOLERANCE, "mid checkpoint");
         assertEquals(expectedMax, combine(btc.max(), doge.max()).expectancyPctAfterCosts(), TOLERANCE, "max checkpoint");
+    }
+
+    private void assertCombinedFundingMatches(DirectionalOutcomeStats btc, DirectionalOutcomeStats doge,
+                                               double expectedMin, double expectedMid, double expectedMax) {
+        assertEquals(expectedMin, combine(btc.min(), doge.min()).expectancyPctAfterCostsAndFunding(), TOLERANCE, "min checkpoint");
+        assertEquals(expectedMid, combine(btc.mid(), doge.mid()).expectancyPctAfterCostsAndFunding(), TOLERANCE, "mid checkpoint");
+        assertEquals(expectedMax, combine(btc.max(), doge.max()).expectancyPctAfterCostsAndFunding(), TOLERANCE, "max checkpoint");
     }
 
     /** Same call-count-weighted combine formula as {@code BacktestHarness.combineCheckpoint}

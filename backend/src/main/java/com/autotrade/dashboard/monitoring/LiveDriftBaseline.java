@@ -74,6 +74,20 @@ import com.autotrade.dashboard.backtest.Checkpoint;
  * a given checkpoint even while the other two move up). BUY is unaffected by both gates (neither
  * ever touches BUY calls) and the BUY constants below are confirmed byte-identical to their v5
  * values by {@link LiveDriftBaselineTest}'s own unchanged (ungated) BUY assertions.
+ *
+ * <p><b>E8-F5-S2 added funding-adjusted counterparts</b> ({@code
+ * *_EXPECTANCY_PCT_AFTER_COSTS_AND_FUNDING}) to every constant above, computed the exact same way
+ * (same fixtures, same gates, same call-count-weighted combine) but reading {@code
+ * CheckpointStats.expectancyPctAfterCostsAndFunding()} instead of {@code
+ * expectancyPctAfterCosts()} — the follow-up E8-F2-S3 itself named ("wiring the funding-adjusted
+ * figure into live drift monitoring is a real, separate future story, not folded in here"). Every
+ * funding-adjusted BUY constant lands well below its cost-only sibling and turns net negative at
+ * every checkpoint (funding cost scales with {@code avgHoldingDays}, and BUY calls in these
+ * fixtures hold on average 1.5-2.9 days across MIN/MID/MAX); SELL's funding-adjusted MIN/MID
+ * constants are negative even though their cost-only siblings are positive (SELL calls hold
+ * slightly less long on average, 1.3-2.3 days, but not enough to avoid funding erasing the
+ * cost-only edge at the shorter checkpoints — only MAX stays positive after funding). {@link
+ * LiveDriftBaselineTest} re-derives and pins these down the same way as the cost-only constants.
  */
 public final class LiveDriftBaseline {
 
@@ -86,6 +100,11 @@ public final class LiveDriftBaseline {
     public static final double BUY_MID_EXPECTANCY_PCT_AFTER_COSTS = 0.027064;
     public static final double BUY_MAX_EXPECTANCY_PCT_AFTER_COSTS = 0.033141;
 
+    /** E8-F5-S2: funding-adjusted counterparts to the three constants above — see class Javadoc. */
+    public static final double BUY_MIN_EXPECTANCY_PCT_AFTER_COSTS_AND_FUNDING = -0.192350;
+    public static final double BUY_MID_EXPECTANCY_PCT_AFTER_COSTS_AND_FUNDING = -0.203779;
+    public static final double BUY_MAX_EXPECTANCY_PCT_AFTER_COSTS_AND_FUNDING = -0.226813;
+
     /** E8-F1-S11: recomputed against both gates' combined behavior ({@code
      * applySellRegimeGate=true}, {@code applyMaCrossoverSellGate=true}) — see class Javadoc. Every
      * checkpoint moved up again from its v4/v5 (regime-gated-only) value, since layering the
@@ -95,6 +114,12 @@ public final class LiveDriftBaseline {
     public static final double SELL_MID_EXPECTANCY_PCT_AFTER_COSTS = 0.165253;
     public static final double SELL_MAX_EXPECTANCY_PCT_AFTER_COSTS = 0.241016;
 
+    /** E8-F5-S2: funding-adjusted counterparts to the three constants above — see class Javadoc.
+     * Recomputed against the same both-gates-applied run as the cost-only SELL constants above. */
+    public static final double SELL_MIN_EXPECTANCY_PCT_AFTER_COSTS_AND_FUNDING = -0.052442;
+    public static final double SELL_MID_EXPECTANCY_PCT_AFTER_COSTS_AND_FUNDING = -0.029354;
+    public static final double SELL_MAX_EXPECTANCY_PCT_AFTER_COSTS_AND_FUNDING = 0.031330;
+
     private LiveDriftBaseline() {
     }
 
@@ -103,6 +128,16 @@ public final class LiveDriftBaseline {
             case MIN -> isBuy ? BUY_MIN_EXPECTANCY_PCT_AFTER_COSTS : SELL_MIN_EXPECTANCY_PCT_AFTER_COSTS;
             case MID -> isBuy ? BUY_MID_EXPECTANCY_PCT_AFTER_COSTS : SELL_MID_EXPECTANCY_PCT_AFTER_COSTS;
             case MAX -> isBuy ? BUY_MAX_EXPECTANCY_PCT_AFTER_COSTS : SELL_MAX_EXPECTANCY_PCT_AFTER_COSTS;
+        };
+    }
+
+    /** E8-F5-S2: funding-adjusted counterpart to {@link #expectancyPctAfterCosts(boolean,
+     * Checkpoint)}. */
+    public static double expectancyPctAfterCostsAndFunding(boolean isBuy, Checkpoint checkpoint) {
+        return switch (checkpoint) {
+            case MIN -> isBuy ? BUY_MIN_EXPECTANCY_PCT_AFTER_COSTS_AND_FUNDING : SELL_MIN_EXPECTANCY_PCT_AFTER_COSTS_AND_FUNDING;
+            case MID -> isBuy ? BUY_MID_EXPECTANCY_PCT_AFTER_COSTS_AND_FUNDING : SELL_MID_EXPECTANCY_PCT_AFTER_COSTS_AND_FUNDING;
+            case MAX -> isBuy ? BUY_MAX_EXPECTANCY_PCT_AFTER_COSTS_AND_FUNDING : SELL_MAX_EXPECTANCY_PCT_AFTER_COSTS_AND_FUNDING;
         };
     }
 }

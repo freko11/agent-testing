@@ -195,6 +195,20 @@ contradicting the crypto-wide finding that gate's scoping already relies
 on. `MaCrossoverSellGate.sellGateAppliesTo` stays crypto-only, same as
 before, but now backed by real contradicting stock evidence rather than
 merely absent evidence — see its entry below for the full figures.
+E8-F5-S2, the third story from this same sweep, closes a gap E8-F2-S3
+itself named as a separate future story: `LiveSignalDriftService`/
+`LiveDriftBaseline` compared live performance against a funding-blind
+`expectancyPctAfterCosts()` figure even after E8-F2-S3 added a
+funding-aware `expectancyPctAfterCostsAndFunding()` to the backtest layer.
+Also done and this time it does surface new figures (not a ship/no-ship
+calibration story like the other two): `LiveDriftBaseline` gained six
+funding-adjusted pinned constants and `CheckpointDrift` gained three
+funding-adjusted fields, presented alongside (not replacing) the existing
+cost-only comparison — see its entry below for why `possibleDecay` still
+gates on the cost-only figure alone, and for the pinned values themselves
+(funding erases BUY's edge entirely at every checkpoint and flips SELL's
+MIN/MID negative too). No `RULE_TABLE_VERSION` bump, no
+`SignalService`/`OrderService`/`SignalRuleEngine` change.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -1857,6 +1871,60 @@ merely absent evidence — see its entry below for the full figures.
   no-production-change precedent E8-F1-S2/S3/S5/S6/S7/E8-F3-S4/E8-F1-S9/
   S10/E8-F3-S6 established. `./mvnw verify`: 580 tests, 0 failures, up
   from 570.
+- E8-F5-S2: wires E8-F2-S3's funding-rate carry cost into live signal-drift
+  monitoring — that story's own CLAUDE.md entry explicitly named this as
+  "a real, separate future story, not folded in here," left open until
+  this sweep picked it up. `LiveDriftBaseline` gained six funding-adjusted
+  counterparts (`*_EXPECTANCY_PCT_AFTER_COSTS_AND_FUNDING`, BUY/SELL x
+  MIN/MID/MAX) to its existing pinned cost-only constants, re-derived from
+  the real BTCUSDT/DOGEUSDT fixtures the same way as the cost-only ones —
+  same fixtures, same call-count-weighted combine, same both-gates-applied
+  (`applySellRegimeGate`, `applyMaCrossoverSellGate`) replay the v6
+  cost-only SELL constants already use — just reading
+  `CheckpointStats.expectancyPctAfterCostsAndFunding()` instead of
+  `expectancyPctAfterCosts()`. No new plumbing was needed to get a live
+  call's holding duration: `LiveSignalDriftService`'s replay already
+  threads `WalkForwardScorer.score`'s `DirectionalScoreResult.daysHeld`
+  through the same `DirectionalAccumulator`/`CheckpointStats` the cost-only
+  figures come from (E8-F2-S3's own promotion of this plumbing to
+  `src/main/java`), so `buildCheckpointDrift` just reads the
+  already-available `avgHoldingDays`-scaled figure a second way.
+  `CheckpointDrift` gained three trailing fields
+  (`liveExpectancyPctAfterCostsAndFunding`,
+  `baselineExpectancyPctAfterCostsAndFunding`, `driftPctAfterFunding`),
+  surfaced on `GET /api/monitoring/signal-drift`'s existing response shape
+  alongside the cost-only fields, not replacing them. Deliberate scope
+  decision, documented on `buildCheckpointDrift`'s own Javadoc:
+  `possibleDecay` still gates on the cost-only `driftPct` alone, not the
+  new funding-adjusted one — stacking the existing min-sample-size/
+  decay-threshold gate (itself an uncalibrated placeholder) onto a second,
+  independently-uncalibrated figure (funding rate on top of transaction
+  cost) would mean alarming on a number nobody has picked a threshold for;
+  the funding-adjusted figures are informational only. Confirmed no
+  frontend consumer of the signal-drift endpoint exists (grepped
+  `frontend/src`), so this stayed backend-only, matching E8-F5-S1's own
+  precedent. Pinned figures found funding materially erodes both
+  directions: BUY's funding-adjusted expectancy is negative at every
+  checkpoint (MIN -0.192350, MID -0.203779, MAX -0.226813 — BUY calls hold
+  1.5-2.9 days on average, and funding scales with that), and SELL's
+  MIN/MID flip negative despite positive cost-only figures (MIN -0.052442,
+  MID -0.029354; only MAX stays positive at +0.031330). New test coverage:
+  `LiveDriftBaselineTest` gained two cases re-deriving the funding-adjusted
+  constants the same way its existing cases pin the cost-only ones;
+  `LiveSignalDriftServiceTest` gained two assertions on existing cases plus
+  a new case (`smallWinThatResolvesAtFullHorizonLooksPositiveAfterCostsButNegativeAfterFunding`)
+  constructing the story's own motivating scenario — a live win that reads
+  positive cost-only (+0.30%) but negative once funding is included
+  (-0.15%), because it resolved via `HORIZON_EXPIRED` at the full 5-day
+  checkpoint horizon rather than an early TP/SL crossing. No
+  `RULE_TABLE_VERSION` bump, no `SignalService`/`OrderService`/
+  `SignalRuleEngine` change — this story only changes what live monitoring
+  reports, not the rule table itself, so no live-browser verification was
+  needed beyond `LiveSignalDriftServiceTest`/`LiveDriftBaselineTest`'s own
+  runs, the same no-production-change precedent this sweep's other two
+  stories used. `./mvnw verify`: 585 tests, 0 failures, up from 580. This
+  closes out the third sweep-found batch (E8-F3-S6, E8-F1-S12, E8-F5-S2);
+  E8's backlog is complete again until a future sweep finds more.
 
 ## Build / lint / test
 
@@ -1980,7 +2048,10 @@ merely absent evidence — see its entry below for the full figures.
   using `backtest.WalkForwardScorer` against real forward market data, grouped
   by `rule_table_version` and BUY/SELL; `LiveDriftBaseline` pins the current
   version's original-backtest `expectancyPctAfterCosts` figures to diff
-  against. `SignalDriftController` (`GET /api/monitoring/signal-drift`) and
+  against, plus (E8-F5-S2) funding-adjusted `expectancyPctAfterCostsAndFunding`
+  counterparts surfaced alongside the cost-only comparison on `CheckpointDrift`
+  as an informational-only figure — `possibleDecay` still gates on the
+  cost-only `driftPct` alone. `SignalDriftController` (`GET /api/monitoring/signal-drift`) and
   the scheduled job call the same `computeDrift` method; ephemeral only, no
   new table.
 - `watchlist`, `security` (session auth), `common` (`Clock`/`SchedulingConfig`).

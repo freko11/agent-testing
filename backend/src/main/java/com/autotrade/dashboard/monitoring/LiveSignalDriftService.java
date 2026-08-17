@@ -67,6 +67,12 @@ import java.util.stream.Collectors;
  * possibleDecay} on any checkpoint, so a two-trade sample never triggers a false alarm; raw call
  * counts are always surfaced alongside percentages so a near-empty audit log reads as "no data
  * yet," not "flat performance."
+ *
+ * <p>E8-F5-S2 added a funding-adjusted comparison alongside the cost-only one above, reusing the
+ * same live-scored {@code CheckpointStats} (its {@code avgHoldingDays} already comes from {@code
+ * WalkForwardScorer.score}'s own {@code DirectionalScoreResult.daysHeld}, no separate plumbing
+ * needed) against {@link LiveDriftBaseline}'s new funding-adjusted constants — see {@link
+ * #buildCheckpointDrift} for why {@code possibleDecay} still gates on the cost-only figure alone.
  */
 @Component
 @ConditionalOnProperty(name = "monitoring.live-drift.enabled", havingValue = "true", matchIfMissing = true)
@@ -114,16 +120,22 @@ public class LiveSignalDriftService {
         for (CheckpointDrift checkpoint : drift.checkpoints()) {
             if (checkpoint.possibleDecay()) {
                 log.warn("ruleTableVersion={} direction={} checkpoint={} scored={} liveExpectancyPctAfterCosts={} "
-                                + "baselineExpectancyPctAfterCosts={} driftPct={} - possible signal decay detected",
+                                + "baselineExpectancyPctAfterCosts={} driftPct={} "
+                                + "liveExpectancyPctAfterCostsAndFunding={} baselineExpectancyPctAfterCostsAndFunding={} "
+                                + "driftPctAfterFunding={} - possible signal decay detected",
                         ruleTableVersion, direction, checkpoint.checkpoint(), checkpoint.scored(),
                         checkpoint.liveExpectancyPctAfterCosts(), checkpoint.baselineExpectancyPctAfterCosts(),
-                        checkpoint.driftPct());
+                        checkpoint.driftPct(), checkpoint.liveExpectancyPctAfterCostsAndFunding(),
+                        checkpoint.baselineExpectancyPctAfterCostsAndFunding(), checkpoint.driftPctAfterFunding());
             } else {
                 log.info("ruleTableVersion={} direction={} checkpoint={} scored={} liveExpectancyPctAfterCosts={} "
-                                + "baselineExpectancyPctAfterCosts={} driftPct={}",
+                                + "baselineExpectancyPctAfterCosts={} driftPct={} "
+                                + "liveExpectancyPctAfterCostsAndFunding={} baselineExpectancyPctAfterCostsAndFunding={} "
+                                + "driftPctAfterFunding={}",
                         ruleTableVersion, direction, checkpoint.checkpoint(), checkpoint.scored(),
                         checkpoint.liveExpectancyPctAfterCosts(), checkpoint.baselineExpectancyPctAfterCosts(),
-                        checkpoint.driftPct());
+                        checkpoint.driftPct(), checkpoint.liveExpectancyPctAfterCostsAndFunding(),
+                        checkpoint.baselineExpectancyPctAfterCostsAndFunding(), checkpoint.driftPctAfterFunding());
             }
         }
     }
@@ -256,12 +268,28 @@ public class LiveSignalDriftService {
         return new DirectionalDrift(stats.totalCalls(), checkpoints);
     }
 
+    /**
+     * {@code possibleDecay} (E8-F5-S1) is decided from the cost-only {@code driftPct} alone, not
+     * the funding-adjusted one added by E8-F5-S2 — extended, not replaced, per that story's
+     * confirmed scope: funding-adjusted drift is surfaced on {@link CheckpointDrift} purely as an
+     * additional informational figure (see that record's own Javadoc for why), reusing the exact
+     * same {@code minSampleSize}/{@code decayThresholdPct} gate would mean applying an already-
+     * uncalibrated threshold to a doubly-uncalibrated figure (funding rate on top of transaction
+     * cost) with no basis for picking a different threshold for it — the cost-only comparison
+     * stays the one signal that actually trips an alarm.
+     */
     private CheckpointDrift buildCheckpointDrift(boolean isBuy, Checkpoint checkpoint, CheckpointStats cp) {
         double live = cp.expectancyPctAfterCosts();
         double baseline = LiveDriftBaseline.expectancyPctAfterCosts(isBuy, checkpoint);
         double driftPct = live - baseline;
         boolean possibleDecay = cp.scored() >= minSampleSize && driftPct <= -decayThresholdPct;
-        return new CheckpointDrift(checkpoint, cp.scored(), live, baseline, driftPct, possibleDecay);
+
+        double liveWithFunding = cp.expectancyPctAfterCostsAndFunding();
+        double baselineWithFunding = LiveDriftBaseline.expectancyPctAfterCostsAndFunding(isBuy, checkpoint);
+        double driftPctAfterFunding = liveWithFunding - baselineWithFunding;
+
+        return new CheckpointDrift(checkpoint, cp.scored(), live, baseline, driftPct, possibleDecay,
+                liveWithFunding, baselineWithFunding, driftPctAfterFunding);
     }
 
     private CheckpointStats checkpointStats(DirectionalOutcomeStats stats, Checkpoint checkpoint) {
