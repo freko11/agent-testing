@@ -206,6 +206,52 @@ class WeightedVoteRuleEngineTest {
                 VOLATILITY_NORMAL, VOLUME_TREND_NORMAL);
     }
 
+    /** E8-F3-S6's new 8-arg overload: passing {@code WEIGHTED_MAJORITY_FRACTION} explicitly must
+     * match the 7-arg overload's own delegation to it exactly. */
+    @Test
+    void explicitDefaultFraction_matchesSevenArgOverload() {
+        assertEquals(
+                WeightedVoteRuleEngine.evaluate(RSI_NEUTRAL, MACD_BULLISH, MA_NEUTRAL, VOLATILITY_NORMAL, VOLUME_TREND_NORMAL,
+                        SignalRuleEngine.RuleThresholds.DEFAULT, IndicatorWeights.DEFAULT),
+                WeightedVoteRuleEngine.evaluate(RSI_NEUTRAL, MACD_BULLISH, MA_NEUTRAL, VOLATILITY_NORMAL, VOLUME_TREND_NORMAL,
+                        SignalRuleEngine.RuleThresholds.DEFAULT, IndicatorWeights.DEFAULT,
+                        WeightedVoteRuleEngine.WEIGHTED_MAJORITY_FRACTION));
+    }
+
+    /** E8-F3-S6's most permissive regime ({@code majorityFraction == 0}): a lone vote from a
+     * still-zero-weighted indicator (RSI, under {@code IndicatorWeights.DEFAULT}) promotes to
+     * BULLISH_MAJORITY, unlike at the shipped 0.5 where it stays NO_STRONG_SIGNAL — proven here at
+     * the unit level even though {@code WeightedMajorityFractionCalibrationTest} found this
+     * composition (a lone vote with no MACD involvement) never actually occurs in the real
+     * BTCUSDT/DOGEUSDT fixture data. */
+    @Test
+    void zeroFraction_loneZeroWeightedVote_promotesToBullishMajority() {
+        assertEquals(SignalRuleId.NO_STRONG_SIGNAL,
+                WeightedVoteRuleEngine.evaluate(RSI_OVERSOLD, MACD_NEUTRAL, MA_NEUTRAL, VOLATILITY_NORMAL, VOLUME_TREND_NORMAL,
+                        SignalRuleEngine.RuleThresholds.DEFAULT, IndicatorWeights.DEFAULT),
+                "sanity check: at the shipped 0.5, a lone RSI vote (RSI still zero-weighted) stays NO_STRONG_SIGNAL");
+
+        assertEquals(SignalRuleId.BULLISH_MAJORITY,
+                WeightedVoteRuleEngine.evaluate(RSI_OVERSOLD, MACD_NEUTRAL, MA_NEUTRAL, VOLATILITY_NORMAL, VOLUME_TREND_NORMAL,
+                        SignalRuleEngine.RuleThresholds.DEFAULT, IndicatorWeights.DEFAULT, BigDecimal.ZERO));
+    }
+
+    /** E8-F3-S6's least permissive regime ({@code majorityFraction > 1}): even a lone MACD vote —
+     * the one indicator with a real nonzero {@code IndicatorWeights.DEFAULT} weight, which clears
+     * the bar at every fraction in {@code (0, 1]} including the shipped 0.5 — fails to clear a
+     * threshold above 1, since {@code majorityThreshold} then exceeds the maximum achievable
+     * weighted sum (0.714). */
+    @Test
+    void aboveOneFraction_loneMacdVote_staysNoStrongSignal() {
+        assertEquals(SignalRuleId.BULLISH_MAJORITY,
+                WeightedVoteRuleEngine.evaluate(RSI_NEUTRAL, MACD_BULLISH, MA_NEUTRAL, VOLATILITY_NORMAL, VOLUME_TREND_NORMAL),
+                "sanity check: at the shipped 0.5, a lone MACD vote already promotes (E8-F3-S5)");
+
+        assertEquals(SignalRuleId.NO_STRONG_SIGNAL,
+                WeightedVoteRuleEngine.evaluate(RSI_NEUTRAL, MACD_BULLISH, MA_NEUTRAL, VOLATILITY_NORMAL, VOLUME_TREND_NORMAL,
+                        SignalRuleEngine.RuleThresholds.DEFAULT, IndicatorWeights.DEFAULT, new BigDecimal("1.01")));
+    }
+
     private void assertEqualsBothEngines(SignalRuleId expected, BigDecimal rsi, MacdResult macd,
                                           MovingAverageResult ma, BigDecimal volatility, BigDecimal volumeTrend) {
         SignalRuleId fromUnweightedTable = SignalRuleEngine.evaluate(rsi, macd, ma, volatility, volumeTrend);

@@ -168,7 +168,17 @@ constants are recomputed against both wired SELL-only gates' combined
 behavior — see its entry below for the full figures. This closes out the
 second E8-F1 follow-up batch (E8-F1-S8 through S11); E8's backlog is
 fully complete again, until a future sweep finds more flagged,
-never-converted findings.
+never-converted findings. E8-F3-S6, found in exactly that kind of sweep,
+calibrates `WeightedVoteRuleEngine.WEIGHTED_MAJORITY_FRACTION` — a
+constant flagged as sweep-worthy since E8-F3-S1 but structurally inert
+until E8-F3-S5 gave `IndicatorWeights.DEFAULT` a real nonzero weight to
+act on. Also done, and also no-ship (stays 0.5): the constant's entire
+real-valued range collapses to exactly three behavioral regimes given the
+current weights, and the two regimes that differ from the shipped default
+are a tie (0.00, provably byte-identical on the real fixture data) or
+strictly worse (anything above 1, which produces zero calls since
+BULLISH_UNANIMOUS/BEARISH_UNANIMOUS never fire in this data) — see its
+entry below for the full mathematical-and-empirical breakdown.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -1755,6 +1765,43 @@ never-converted findings.
   shipped-value changes. `./mvnw verify`: 566 tests, 0 failures, up from
   552. This closes out the second E8-F1 follow-up batch (E8-F1-S8 through
   S11); E8's backlog is fully complete again.
+- E8-F3-S6: calibrates `WeightedVoteRuleEngine.WEIGHTED_MAJORITY_FRACTION`,
+  found in a sweep for flagged-but-unactioned findings — its own Javadoc
+  had flagged it as sweep-worthy since E8-F3-S1, but the constant was
+  structurally inert (an explicit `totalWeight.signum() <= 0` guard made
+  it unreachable) until E8-F3-S5 gave `IndicatorWeights.DEFAULT` a real
+  nonzero weight (`macdWeight = 0.714`). Worked out from `evaluate`'s own
+  code before running anything: with only MACD nonzero-weighted, a
+  lone-or-2-of-3 vote's weighted sum can only ever be 0.714 (MACD voted)
+  or 0.000 (it didn't), so the constant's entire real-valued range
+  collapses to exactly three behavioral regimes, not a continuum —
+  `fraction == 0` (most permissive, every lone/2-of-3 vote promotes),
+  `0 < fraction <= 1` (only MACD-inclusive votes promote — every value
+  here, including the shipped 0.5, is provably byte-identical), and
+  `fraction > 1` (least permissive, only UNANIMOUS ever resolves a call).
+  New 8-arg `WeightedVoteRuleEngine.evaluate` overload takes an explicit
+  `majorityFraction` (the 7-arg overload delegates to it with the static
+  constant, zero behavior change for every existing caller) and new
+  `BacktestHarness.runCombinedCallExpectancy` scores the combined BUY/SELL
+  rule-table call (not a single indicator's vote) at the same
+  15-day/TP15%/SL9% horizon `macdWeight` was itself calibrated at.
+  `WeightedMajorityFractionCalibrationTest` swept one candidate per regime
+  (0.00, 0.50, 1.50) against the full BTCUSDT+DOGEUSDT tuning fixtures.
+  Result: no ship, stays 0.5. `0.00` produced a report byte-identical to
+  `0.50` on both fixtures — not a general mathematical guarantee, but a
+  real property of this data (a throwaway probe found zero RSI-only/
+  MA-only lone/2-of-3 votes across either fixture; MACD's histogram is
+  essentially never exactly zero, so every lone/2-of-3 vote already
+  includes it). `1.50` produced zero scored calls on both fixtures —
+  BULLISH_UNANIMOUS/BEARISH_UNANIMOUS never fire in this data at all (the
+  same finding `WeightedVoteBacktestTest`/E8-F3-S1 already documented),
+  so disabling majority resolution disables the engine's output entirely.
+  Net: 0.00 ties the default, everything above 1 is strictly worse (an
+  always-empty population) — no candidate clears "beats the default," so
+  no out-of-sample validation step was needed either. `WEIGHTED_MAJORITY_FRACTION`
+  stays 0.5; `WeightedVoteRuleEngine` stays unwired — no
+  `SignalService`/`OrderService`/`RULE_TABLE_VERSION` change. `./mvnw
+  verify`: 570 tests, 0 failures, up from 566.
 
 ## Build / lint / test
 
@@ -1802,7 +1849,12 @@ never-converted findings.
   gives MACD a nonzero weight (0.714, derived at a 15-day/TP15%/SL9%
   horizon after E8-F3-S1's original 5-day calibration came back all-zero);
   RSI/MA-crossover stay at 0.000 — a real constant change, but the class
-  itself is still unwired. `IndicatorId` (RSI/MACD/MA_CROSSOVER) keys
+  itself is still unwired. `WEIGHTED_MAJORITY_FRACTION` (E8-F3-S6) stays
+  at its original 0.5 — with only MACD nonzero-weighted, the constant's
+  entire range collapses to three behavioral regimes (0, `(0,1]`, `>1`)
+  and neither of the other two regimes beats 0.5 on the tuning fixtures
+  (0 ties byte-identically, `>1` produces zero calls since UNANIMOUS never
+  fires in this data). `IndicatorId` (RSI/MACD/MA_CROSSOVER) keys
   per-indicator data for both. `RegimeGatedRuleEngine` (E8-F3-S2) has both a
   both-directions `applyGate` (still **unwired** — the combined BUY+SELL
   mechanism never cleared the wiring bar) and a SELL-only `applySellGate`

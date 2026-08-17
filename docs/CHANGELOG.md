@@ -8122,3 +8122,160 @@ kept).
 from 552 after E8-F1-S10). This closes out the second E8-F1 follow-up
 batch (E8-F1-S8 through S11) — E8's backlog is fully complete again,
 until a future sweep finds more flagged, never-converted findings.
+
+## E8-F3-S6 — `WEIGHTED_MAJORITY_FRACTION` calibration
+
+**Story**: filed after a sweep for flagged-but-unactioned findings, back
+on F8.3 alongside E8-F3-S1 through S5. `WeightedVoteRuleEngine.WEIGHTED_MAJORITY_FRACTION`'s
+own Javadoc had carried an open note since E8-F3-S1 — "not
+backtest-derived... a future story could sweep this the same way
+E8-F1-S1 swept RSI thresholds" — but sweeping it was pointless while
+`IndicatorWeights.DEFAULT` was all-zero: `evaluate`'s explicit
+`totalWeight.signum() <= 0` guard made the fraction unreachable code for
+every candidate. E8-F3-S5 changed that by giving MACD a real nonzero
+weight (0.714), so this is the first time the constant is actually live
+and worth calibrating.
+
+### Design
+
+No design gate — same "pure re-parameterization of an existing,
+already-reviewed scoring path" shape E8-F3-S5 used to skip one, not a new
+resolution mechanism with contamination risk the way E8-F3-S4's per-symbol
+work needed one.
+
+**Worked out the achievable behavior from the code before running
+anything, the same way E8-F3-S5's Javadoc reasoning preceded its own
+sweep.** `evaluate`'s `clearsMajorityBar` compares a voting indicator's
+own weighted sum against `totalWeight * majorityFraction`. With
+`IndicatorWeights.DEFAULT` (rsiWeight=0.000, macdWeight=0.714,
+maCrossoverWeight=0.000), `totalWeight` is always exactly 0.714, and a
+lone-or-2-of-3 vote's weighted sum can only ever be one of two values:
+0.714 (MACD voted in that direction — RSI/MA contribute nothing even if
+they also voted) or 0.000 (MACD did not vote). Comparing those two
+achievable sums against a threshold that scales linearly with
+`majorityFraction` collapses the entire real-valued range into exactly
+three behavioral regimes, not a continuum to optimize over:
+
+- `majorityFraction == 0`: threshold is 0, so both achievable sums
+  (0.000 and 0.714) clear it — every lone/2-of-3 vote promotes, including
+  ones driven entirely by still-zero-weighted RSI/MA-crossover. Most
+  permissive.
+- `0 < majorityFraction <= 1`: threshold lands strictly between 0.000 and
+  0.714 (or exactly at 0.714 when `majorityFraction == 1`, still cleared
+  by `>=`) — only MACD-inclusive votes promote. Every value in this
+  half-open interval, including the shipped 0.5, is provably
+  byte-identical to every other value in it, since only two sums are ever
+  achievable and one threshold partition separates them the same way
+  everywhere in the interval.
+- `majorityFraction > 1`: threshold exceeds 0.714, so neither achievable
+  sum ever clears it — no lone/2-of-3 vote can ever promote, only the
+  raw-count UNANIMOUS branch (decided independently of weight) still
+  resolves a call. Least permissive.
+
+### Mechanism: a calibration seam, not a wired change
+
+`WeightedVoteRuleEngine` gained an 8-arg `evaluate` overload taking an
+explicit `majorityFraction` parameter instead of always reading the
+static `WEIGHTED_MAJORITY_FRACTION` — the same seam `RuleThresholds`-
+accepting overloads (E8-F1-S1) and `BacktestHarness`'s `regimeThreshold`
+overload (E8-F3-S4) already established for their own tunable constants.
+The existing 7-arg overload now delegates to it with
+`WEIGHTED_MAJORITY_FRACTION`, so every existing caller (including every
+prior `WeightedVoteRuleEngineTest` case) is byte-identical to before.
+
+New `BacktestHarness.runCombinedCallExpectancy(candles, evaluator,
+thresholds, horizonDays, takeProfitPct, stopLossPct)` — `runIndicatorExpectancy`'s
+sibling (E8-F3-S5), but scores the evaluator-resolved *combined* rule-table
+call (BUY vs. SELL) rather than a single indicator's own vote, at an
+explicit horizon instead of a rule-derived hold term. Needed because
+`WEIGHTED_MAJORITY_FRACTION` changes which decision points get promoted
+to a directional call at all — a property of the whole multi-indicator
+vote, not any one indicator's read — and scoring that at the normal
+rule-derived hold term (via `run`) would reintroduce the short-horizon
+mismatch E8-F3-S1's original all-zero finding hit, rather than the
+15-day/TP15%/SL9% horizon `macdWeight` was itself calibrated at. Reuses
+the existing package-private `IndicatorAccumulator`/`scoreIndicator`
+machinery directly (keyed by `SignalCall` instead of `IndicatorId`), so
+this is the same scoring arithmetic as `runIndicatorExpectancy`, not a
+second copy of it.
+
+### Sweep and result: no ship, kept at 0.5
+
+New `backtest.WeightedMajorityFractionCalibrationTest` swept one
+representative candidate per regime (0.00, 0.50, 1.50) against the
+combined, full (untouched-by-split) BTCUSDT+DOGEUSDT tuning fixtures —
+the same "tuning fixtures" terminology and scope E8-F3-S1/E8-F3-S5 used
+for the weight calibration itself, not `FixtureSplits`' 70/30 split
+(reserved for out-of-sample validation of an actual tuning-window winner,
+which this story never produced).
+
+```
+majorityFraction = 0.00: COMBINED ALL  47.2% win (825 scored, 838 n) | expectancy +1.121% (after costs +0.921%)
+majorityFraction = 0.50: COMBINED ALL  47.2% win (825 scored, 838 n) | expectancy +1.121% (after costs +0.921%)
+majorityFraction = 1.50: COMBINED ALL   0.0% win (0 scored, 0 n)     | expectancy  +0.000% (after costs  +0.000%)
+```
+
+**`majorityFraction = 0.00` produced a report byte-identical to 0.50 on
+both fixtures** — not because the math forces it in general (0.00 is
+strictly more permissive in principle, admitting RSI-only/MA-only lone
+votes that 0.50 excludes), but because of a real property of this
+specific data: a throwaway probe (written, run once, deleted before
+committing, same precedent as E8-F1-S5/S6's own probes) found MACD's
+histogram is essentially never exactly zero across either fixture, so
+*every* lone/2-of-3 vote that exists already includes MACD — zero
+RSI-only or MA-only lone/2-of-3 votes anywhere in either fixture's
+combined decision points (BTCUSDT: bullishWithMacd=262, bullishNoMacd=0,
+bearishWithMacd=251, bearishNoMacd=0; DOGEUSDT: bullishWithMacd=213,
+bullishNoMacd=0, bearishWithMacd=270, bearishNoMacd=0). So the two
+theoretically-distinct permissive regimes turn out to be practically
+identical on this codebase's real fixtures.
+
+**`majorityFraction = 1.50` produced zero scored calls on both
+fixtures** — BULLISH_UNANIMOUS/BEARISH_UNANIMOUS never fire anywhere in
+either fixture (the same finding `WeightedVoteBacktestTest`/E8-F3-S1
+already documented: "all three indicators never agree simultaneously"),
+so disabling majority resolution entirely disables the weighted engine's
+output on this data. An unusable, always-empty call population, not a
+candidate worth carrying to out-of-sample validation.
+
+**Net: no candidate beats the shipped default.** 0.00 ties it exactly;
+everything above 1 is strictly worse (an always-empty population).
+`WEIGHTED_MAJORITY_FRACTION` stays 0.5, unchanged. Per this story's own
+ship bar, out-of-sample validation (BTCUSDT/DOGEUSDT held-out tails plus
+the untouched SOLUSDT fixture, the E8-F4-S1/E8-F3-S5 methodology) was not
+needed — nothing tuning-window-positive existed to carry forward.
+
+### Test coverage
+
+- `WeightedMajorityFractionCalibrationTest`: the sweep above
+  (`printExpectancyAcrossRegimes`), plus two structural confirmations of
+  the code-level analysis — `midRangeFractionsProduceByteIdenticalReports`
+  (0.10/0.25/0.50/0.75/0.90/1.00 all produce a `CheckpointStats` byte-
+  identical to 0.50's, both fixtures) and `aboveOneNeverPromotesMajorityCall`
+  (1.01 and 5.00 produce identical, empty reports, both fixtures).
+- Three new `WeightedVoteRuleEngineTest` cases exercising the new 8-arg
+  overload directly: `explicitDefaultFraction_matchesSevenArgOverload`
+  (delegation check), `zeroFraction_loneZeroWeightedVote_promotesToBullishMajority`
+  (proves the most-permissive regime's behavior at the unit level, even
+  though the calibration test found this composition never actually
+  occurs in the real fixtures), and `aboveOneFraction_loneMacdVote_staysNoStrongSignal`
+  (proves the least-permissive regime suppresses even a real-weight MACD
+  vote that clears the bar at every fraction in `(0, 1]` including 0.5).
+
+### Scope confirmation
+
+**No ship.** `WEIGHTED_MAJORITY_FRACTION` stays `0.5`. `WeightedVoteRuleEngine`
+stays unwired — `SignalService`/`OrderService` untouched, no config flag,
+no `RULE_TABLE_VERSION` change (this constant lives entirely outside
+`SignalRuleEngine`'s own rule table, same as E8-F3-S5's `macdWeight`
+change). `WeightedVoteRuleEngine`'s class Javadoc and the
+`WEIGHTED_MAJORITY_FRACTION` field's own Javadoc both updated with the
+full three-regime finding, matching the detail level `IndicatorWeights.DEFAULT`'s
+own Javadoc carries for its E8-F3-S1/S5 history. Since this
+story shipped no production behavior change, no live-browser/
+`SignalServiceTest` end-to-end verification was needed beyond the
+calibration test's own run — the same no-production-change precedent
+E8-F1-S2/S3/S5/S6/E8-F3-S4/E8-F1-S9/S10 established.
+
+**`./mvnw verify`: 570 tests, 0 failures/errors, `BUILD SUCCESS`** (up
+from 566 after E8-F1-S11).

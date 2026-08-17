@@ -25,6 +25,10 @@ import java.math.BigDecimal;
  * E8-F3-S5 then re-attempted the calibration at longer horizons and found MACD's weight does clear
  * the bar there — see {@link IndicatorWeights#DEFAULT}'s own Javadoc for the full account of both
  * passes and docs/CHANGELOG.md's E8-F3-S1/E8-F4-S1/E8-F3-S5 entries for the printed reports.
+ * E8-F3-S6 then swept {@link #WEIGHTED_MAJORITY_FRACTION} — the one calibratable constant in this
+ * class {@code IndicatorWeights.DEFAULT} left untried, now that E8-F3-S5 gave it a real nonzero
+ * weight to act on — and found no candidate beats the shipped 0.5; see that constant's own Javadoc
+ * for the full three-regime breakdown.
  *
  * <p>Reuses {@link SignalRuleEngine#computeVotes} for "what counts as a bullish/bearish read" (one
  * source of truth, not a second copy) and keeps its three safety gates and its conflict/dissent
@@ -97,8 +101,40 @@ public final class WeightedVoteRuleEngine {
      * (a simple "more than half the total weighted confidence" bar), the same treatment as {@code
      * BacktestConfig.TAKE_PROFIT_PCT}/{@code STOP_LOSS_PCT} — chosen for being a defensible,
      * easy-to-reason-about default (majority of weight, mirroring "majority of votes" in the
-     * unweighted table), not backtest-derived. A future story could sweep this the same way
-     * E8-F1-S1 swept RSI thresholds.
+     * unweighted table), not backtest-derived.
+     *
+     * <p><b>E8-F3-S6 swept this constant, now that {@link IndicatorWeights#DEFAULT} carries a real
+     * nonzero weight (E8-F3-S5's {@code macdWeight = 0.714}) and this constant is no longer
+     * structurally inert.</b> Worked out directly from {@link #evaluate(BigDecimal, MacdResult,
+     * MovingAverageResult, BigDecimal, BigDecimal, RuleThresholds, IndicatorWeights, BigDecimal)}'s
+     * own code before running anything: with {@code DEFAULT}'s weights, {@code totalWeight} is
+     * always exactly 0.714 (entirely from MACD), and a lone-or-2-of-3 vote's weighted sum can only
+     * ever be 0.714 (MACD voted in that direction) or 0.000 (it didn't) — so the entire real-valued
+     * fraction range collapses to exactly three behavioral regimes, not a continuum: {@code
+     * fraction == 0} (most permissive — every lone/2-of-3 vote promotes, including ones driven
+     * entirely by still-zero-weighted RSI/MA-crossover), {@code 0 < fraction <= 1} (only
+     * MACD-inclusive votes promote — every value here, including the shipped 0.5, is provably
+     * byte-identical), and {@code fraction > 1} (least permissive — no lone/2-of-3 vote can ever
+     * promote, only the raw-count UNANIMOUS branch still resolves a call).
+     *
+     * <p>{@code WeightedMajorityFractionCalibrationTest} swept one representative candidate per
+     * regime (0.00, 0.50, 1.50) against the combined BTCUSDT+DOGEUSDT tuning fixtures at the same
+     * 15-day/TP15%/SL9% horizon {@code macdWeight} was itself calibrated at (E8-F3-S5), via a new
+     * {@code BacktestHarness.runCombinedCallExpectancy} (the combined rule-table call's own
+     * expectancy, not a single indicator's). Result, empirically confirmed rather than only
+     * theoretically derived: {@code fraction = 0.00} produced a byte-identical report to {@code
+     * 0.50} on both fixtures (combined after-cost expectancy +0.921%, n=825/838) — not because the
+     * math forces it in general, but because in this real data MACD's histogram is essentially
+     * never exactly zero, so every lone/2-of-3 vote that exists already includes MACD (confirmed
+     * directly: zero RSI-only or MA-only lone/2-of-3 votes found across both fixtures' combined
+     * ~1900 decision points). {@code fraction = 1.50} produced zero scored calls on both fixtures —
+     * BULLISH_UNANIMOUS/BEARISH_UNANIMOUS never fire in this data at all (the same finding {@code
+     * WeightedVoteBacktestTest}/E8-F3-S1 already documented), so disabling majority resolution
+     * entirely disables the engine's output here. Net: no candidate clears "beats the current
+     * default" — 0.00 ties, 1.50 (and everything above 1) is strictly worse (an unusable,
+     * always-empty call population) — so this stays at 0.5, unchanged. See {@code
+     * WeightedMajorityFractionCalibrationTest}'s class Javadoc for the full regime breakdown and
+     * docs/CHANGELOG.md's E8-F3-S6 entry for the printed report.
      */
     public static final BigDecimal WEIGHTED_MAJORITY_FRACTION = new BigDecimal("0.5");
 
@@ -136,6 +172,21 @@ public final class WeightedVoteRuleEngine {
     public static SignalRuleId evaluate(BigDecimal rsi, MacdResult macd, MovingAverageResult movingAverage,
                                          BigDecimal volatility, BigDecimal volumeTrend, RuleThresholds thresholds,
                                          IndicatorWeights weights) {
+        return evaluate(rsi, macd, movingAverage, volatility, volumeTrend, thresholds, weights, WEIGHTED_MAJORITY_FRACTION);
+    }
+
+    /**
+     * E8-F3-S6: as the 7-arg overload above, but takes an explicit {@code majorityFraction} instead
+     * of always reading the static {@link #WEIGHTED_MAJORITY_FRACTION} — the same calibration seam
+     * {@code RuleThresholds}-accepting overloads (E8-F1-S1) and {@code BacktestHarness}'s {@code
+     * regimeThreshold} overload (E8-F3-S4) already established for their own tunable constants, so
+     * {@code WeightedMajorityFractionCalibrationTest} can sweep candidate fractions without mutating
+     * the production constant. The 7-arg overload delegates here with {@code WEIGHTED_MAJORITY_FRACTION}
+     * so every existing caller is unaffected.
+     */
+    public static SignalRuleId evaluate(BigDecimal rsi, MacdResult macd, MovingAverageResult movingAverage,
+                                         BigDecimal volatility, BigDecimal volumeTrend, RuleThresholds thresholds,
+                                         IndicatorWeights weights, BigDecimal majorityFraction) {
         if (volumeTrend == null) {
             return SignalRuleId.NO_VOLUME_DATA;
         }
@@ -155,7 +206,7 @@ public final class WeightedVoteRuleEngine {
         }
 
         BigDecimal totalWeight = weights.rsiWeight().add(weights.macdWeight()).add(weights.maCrossoverWeight());
-        BigDecimal majorityThreshold = totalWeight.multiply(WEIGHTED_MAJORITY_FRACTION);
+        BigDecimal majorityThreshold = totalWeight.multiply(majorityFraction);
 
         if (bullishCount == 3) {
             return SignalRuleId.BULLISH_UNANIMOUS;

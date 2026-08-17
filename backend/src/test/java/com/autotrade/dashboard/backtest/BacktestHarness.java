@@ -356,6 +356,60 @@ public final class BacktestHarness {
         return indicatorStats;
     }
 
+    /**
+     * E8-F3-S6: scores the {@code evaluator}-resolved *combined* rule-table call (BUY vs. SELL) at
+     * an explicit {@code horizonDays}/{@code takeProfitPct}/{@code stopLossPct} — {@link
+     * #runIndicatorExpectancy}'s sibling, but for the whole multi-indicator vote rather than a
+     * single indicator's own read. Lets {@code WeightedMajorityFractionCalibrationTest} measure how
+     * a candidate {@code WeightedVoteRuleEngine.WEIGHTED_MAJORITY_FRACTION} value changes both which
+     * decision points get promoted to a directional call and that call population's own expectancy,
+     * at the same 15-day/TP15%/SL9% horizon {@code IndicatorWeights.DEFAULT}'s {@code macdWeight}
+     * was itself calibrated at (E8-F3-S5) — deliberately not the rule-derived hold term {@link #run}
+     * uses, since scoring at a rule-derived hold term here would reintroduce the short-horizon
+     * mismatch E8-F3-S1's original all-zero finding hit. Non-BUY/SELL rule IDs (HOLD-cause gates,
+     * NO_STRONG_SIGNAL, CONFLICTING_SIGNALS) are skipped, same as {@link #run}'s hold-gate branch
+     * being a separate accumulator from the directional one. Reuses {@link IndicatorAccumulator} —
+     * a plain win/loss/wash tally keyed here by {@link SignalCall} instead of {@link IndicatorId} —
+     * so this shares the exact same scoring arithmetic as {@link #runIndicatorExpectancy}, not a
+     * second copy of it.
+     */
+    public static Map<SignalCall, CheckpointStats> runCombinedCallExpectancy(List<Candle> candles, RuleEvaluator evaluator,
+                                                                                SignalRuleEngine.RuleThresholds thresholds,
+                                                                                int horizonDays, BigDecimal takeProfitPct,
+                                                                                BigDecimal stopLossPct) {
+        IndicatorAccumulator buyAcc = new IndicatorAccumulator();
+        IndicatorAccumulator sellAcc = new IndicatorAccumulator();
+
+        for (int i = MIN_CANDLES - 1; i < candles.size(); i++) {
+            List<Candle> window = candles.subList(0, i + 1);
+
+            BigDecimal rsi = RsiCalculator.calculate(window, RsiCalculator.DEFAULT_PERIOD);
+            MacdResult macd = MacdCalculator.calculate(window, MacdCalculator.DEFAULT_FAST_PERIOD,
+                    MacdCalculator.DEFAULT_SLOW_PERIOD, MacdCalculator.DEFAULT_SIGNAL_PERIOD);
+            MovingAverageResult ma = MovingAverageCrossoverCalculator.calculate(window,
+                    MovingAverageCrossoverCalculator.DEFAULT_SHORT_PERIOD, MovingAverageCrossoverCalculator.DEFAULT_LONG_PERIOD);
+            BigDecimal volatility = VolatilityCalculator.calculate(window, VolatilityCalculator.DEFAULT_PERIOD);
+            BigDecimal volumeTrend = VolumeTrendCalculator.calculate(window,
+                    VolumeTrendCalculator.DEFAULT_SHORT_PERIOD, VolumeTrendCalculator.DEFAULT_LONG_PERIOD);
+
+            SignalRuleId matchedRule = evaluator.evaluate(rsi, macd, ma, volatility, volumeTrend);
+            if (matchedRule.call() != SignalCall.BUY && matchedRule.call() != SignalCall.SELL) {
+                continue;
+            }
+
+            BigDecimal decisionClose = candles.get(i).close();
+            List<Candle> forward = candles.subList(i + 1, candles.size());
+            boolean isBuy = matchedRule.call() == SignalCall.BUY;
+            scoreIndicator(forward, decisionClose, isBuy, !isBuy, isBuy ? buyAcc : sellAcc,
+                    horizonDays, takeProfitPct, stopLossPct);
+        }
+
+        Map<SignalCall, CheckpointStats> result = new EnumMap<>(SignalCall.class);
+        result.put(SignalCall.BUY, buyAcc.toStats());
+        result.put(SignalCall.SELL, sellAcc.toStats());
+        return result;
+    }
+
     private static Optional<HoldGateOutcome> scoreHoldGate(List<Candle> candles, int decisionIndex, BigDecimal decisionClose) {
         int futureIndex = decisionIndex + BacktestConfig.HOLD_REFERENCE_HORIZON_DAYS;
         if (futureIndex >= candles.size()) {
