@@ -214,16 +214,15 @@ validated, execution-realistic, and monitored" — enhancements identified revie
 E2's existing rule engine (`SignalRuleEngine`) and backtest harness
 (`BacktestHarness`, E2-F4-S1/S2) against professional quant practice. Backlog added
 after E2 shipped, same pattern as E4-F3-S3's post-launch addition to E4. The
-original 8 stories below plus 14 follow-ups (E8-F1-S2 through S9, E8-F2-S3,
-E8-F3-S3 through S5, E8-F4-S2) are done — see CLAUDE.md's Status section for the
-full account. Four more follow-ups (E8-F1-S8 through S11) were added after that,
-found during a sweep for flagged-but-never-converted findings: E8-F1-S5/S6 each
-left a SELL-side secondary finding unactioned (chartered for the BUY-side
-mismatch instead), and E8-F1-S6's own closing note named per-symbol MACD/MA
-thresholds as the one BUY-side mechanism still untried. E8-F1-S10 is done
-(no ship) and E8-F1-S11 is done (shipped — see CLAUDE.md's Status section
-for both). This closes out the second E8-F1 follow-up batch; E8's backlog
-is fully complete again.*
+original 8 stories below, 14 F8.1-F8.5 follow-ups, and F8.6's own E8-F6-S1
+are all done — see CLAUDE.md's Status section for the full account. E8-F6-S1
+itself left one secondary finding flagged but not acted on (out of its own
+AC's scope): whether `TrendStrength.STRONG` should exist as a distinct tier
+at all, and whether `VOLATILITY_LOW_MAX` is calibrated for an asset class
+crypto doesn't resemble — both `STRONG_*` and `MODERATE_LOW` never fired
+once across ~2,100 real crypto decision points. Filed as two new stories,
+E8-F6-S2/S3 below, per this backlog's standing "flagged finding becomes its
+own story, not an opportunistic fix" convention. Not yet built.*
 
 **F8.1 Threshold calibration**
 | ID | Story | Acceptance Criteria | Pts |
@@ -271,6 +270,8 @@ is fully complete again.*
 | ID | Story | Acceptance Criteria | Pts |
 |---|---|---|---|
 | E8-F6-S1 | As a user, I want `HoldTermRule`'s 6 branch day-ranges checked against realized backtest expectancy, since its own doc comment has flagged them as "provisional engineering estimates, not yet backtest-validated" since E2-F3-S2 and named E2-F4-S1's backtest harness as the trigger to revisit them — a condition that's been true since E8-F5-S1 shipped but was never acted on. | A calibration test classifies every BUY/SELL decision point from the existing BTCUSDT/DOGEUSDT/SOLUSDT fixtures (via `TrendStrength`+`VolatilityBand`, the same inputs `HoldTermCalculator.calculate` uses) into its `HoldTermRule` branch, then sweeps a candidate day-horizon grid per branch using the existing `WalkForwardScorer`/`BacktestConfig` TP/SL-aware machinery, scored on `expectancyPctAfterCosts()`. Reuses `FixtureSplits`' existing chronological 70/30 tune/held-out split — no new fixture. A branch's current `(minDays, maxDays)` ships a change only if a candidate range beats it on the pooled tuning curve, the pooled held-out curve, and doesn't regress badly on any individual symbol's held-out curve; a branch with too few decision points to judge (n below a documented floor) is recorded as "insufficient data," distinct from a clean no-ship. `HoldTermCalculator.HOLD_TERM_TABLE_VERSION` bumps (v1→v2) only if at least one branch's range actually changes. A whole-story no-ship (every branch's current range confirmed or left as insufficient-data) is an equally valid, documented outcome. Crypto-only for this first pass; AAPL evaluation and any per-symbol hold-term mechanism are explicit out-of-scope follow-ups. Found post-launch during a review of E8's still-open flagged items (see docs/CHANGELOG.md's E8-F5-S2 entry). | 5 |
+| E8-F6-S2 | As a user, I want `VOLATILITY_LOW_MAX`/`VOLATILITY_MEDIUM_MAX` recalibrated against these three crypto fixtures' actual ATR% distribution, since E8-F6-S1 found `VolatilityBand.LOW` (ATR% below the current 2.0% cutoff) never occurs once across ~2,100 decision points on any of BTCUSDT/DOGEUSDT/SOLUSDT — permanently killing `MODERATE_LOW` (and, independent of E8-F6-S3's unanimous-vote question, `STRONG_LOW`) as dead branches, a sign the cutoff may be tuned for a lower-baseline-volatility asset class than crypto rather than for crypto itself. | A new test first reports each fixture's own ATR% distribution at decision points (min/percentiles/max) to establish whether *any* cutoff could produce a populated LOW band for these assets, then sweeps candidate `VOLATILITY_LOW_MAX`/`VOLATILITY_MEDIUM_MAX` pairs against the same chronological tuning/held-out split and `MIN_SCORED_FLOOR` machinery E8-F6-S1 established, checking whether a lower cutoff produces a genuinely distinct, sufficiently-populated LOW band with its own held-out expectancy signature (not just relabeling slices of the existing MEDIUM band). Any shipped cutoff change bumps `HoldTermCalculator.HOLD_TERM_TABLE_VERSION`; a no-ship (crypto's realized volatility floor genuinely has no useful LOW tier at any reasonable cutoff) is equally valid and documented, consistent with E8-F6-S1's own no-ship-is-valid precedent. Crypto-only, mirrors E8-F6-S1's own scope — stock re-evaluation stays a separate future follow-up per E8-F1-S7's precedent. | 3 |
+| E8-F6-S3 | As a user, I want to determine whether `TrendStrength.STRONG` (`BULLISH_UNANIMOUS`/`BEARISH_UNANIMOUS` — RSI, MACD, and MA-crossover all agreeing) is a real-but-rare regime worth keeping or effectively unreachable under the currently-calibrated per-axis thresholds, since E8-F6-S1 found zero STRONG-classified decision points across ~2,100 real crypto calls even though `SignalRuleEngine.evaluate`'s `bullishCount == 3`/`bearishCount == 3` branch is reachable in principle, not gated out structurally. | A new test measures, across each fixture's full decision-point population, how close every `BULLISH_MAJORITY`/`BEARISH_MAJORITY` call came to unanimity (the per-indicator vote breakdown `computeVotes` already exposes) to distinguish "one dissenting indicator is common because the per-axis thresholds are tuned to disagree with each other" from "genuinely rare regardless of tuning." If a specific already-shipped per-axis calibration (e.g. E8-F1-S4/S8/S10's per-symbol overrides) is identified as the structural reason unanimity is unreachable, that's reported and documented, not reversed — touching already-shipped calibration is out of this story's scope. The story concludes with a documented decision, not a code requirement: either leave `HoldTermRule`'s `STRONG_*` branches as-is (rare-but-real, dead in these fixtures but not necessarily for an untested asset class like stocks, per E8-F1-S7), or remove/merge them out of the branch table entirely. `HoldTermCalculator.HOLD_TERM_TABLE_VERSION` bumps only if branches are actually removed or merged; a "leave as-is" outcome is equally valid, requires no code change, and is documented the same as any other E8 no-ship. | 3 |
 
 ---
 
