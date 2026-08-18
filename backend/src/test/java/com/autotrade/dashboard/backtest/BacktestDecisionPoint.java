@@ -2,6 +2,7 @@ package com.autotrade.dashboard.backtest;
 
 import com.autotrade.dashboard.signal.HoldTerm;
 import com.autotrade.dashboard.signal.Regime;
+import com.autotrade.dashboard.signal.SignalRuleEngine.IndicatorVotes;
 import com.autotrade.dashboard.signal.SignalRuleId;
 
 import java.math.BigDecimal;
@@ -24,10 +25,17 @@ import java.util.Optional;
  * regardless of whether a regime filter is actually applied to the call (it isn't, in production;
  * see {@code RegimeGatedRuleEngine}), so the spot-check table and the regime-split stats can show
  * what regime the market was actually in at each historical decision.
+ *
+ * <p>{@code votes} (E8-F6-S3) is the same {@link IndicatorVotes} {@link
+ * com.autotrade.dashboard.signal.SignalRuleEngine#computeVotes} already produces inside {@code
+ * BacktestHarness#run}'s own loop (used there for per-indicator scoring) — threaded through here
+ * too so a MAJORITY-vs-UNANIMOUS analysis can identify which single indicator dissented on a given
+ * call without recomputing indicators from the candle window a second time.
  */
 public record BacktestDecisionPoint(int index, Instant date, BigDecimal rsi, BigDecimal macdHistogram,
                                      BigDecimal volatility, BigDecimal volumeTrend, SignalRuleId matchedRule,
                                      HoldTerm holdTerm, Optional<DirectionalScoreResult> minResult,
                                      Optional<DirectionalScoreResult> midResult,
-                                     Optional<DirectionalScoreResult> maxResult, Regime regime) {
+                                     Optional<DirectionalScoreResult> maxResult, Regime regime,
+                                     IndicatorVotes votes) {
 }

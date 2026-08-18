@@ -249,7 +249,7 @@ public final class BacktestHarness {
                 regimeAcc.record(Checkpoint.MAX, maxResult);
 
                 buySellPoints.add(new BacktestDecisionPoint(i, candles.get(i).timestamp(), rsi, macd.histogram(),
-                        volatility, volumeTrend, matchedRule, holdTerm, minResult, midResult, maxResult, regime));
+                        volatility, volumeTrend, matchedRule, holdTerm, minResult, midResult, maxResult, regime, votes));
             } else {
                 HoldGateAccumulator acc = holdGate.get(matchedRule);
                 acc.totalCalls++;

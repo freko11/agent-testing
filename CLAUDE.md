@@ -19,9 +19,11 @@ Testnet) with risk/safety guardrails (E6).
 E1–E7 are done (E6 Risk & Safety Controls, E7 Observability & Hardening). E8 (Signal
 Quality & Quant Rigor) is a backlog epic added after E7 shipped; it has gone through
 several follow-up batches as calibration findings surfaced new stories, and is currently
-**complete** pending the next sweep for flagged-but-unactioned findings. Every story below
-is a one-line current-state summary — see `docs/CHANGELOG.md` for the full design-gate
-rationale, figures, and live-verification notes per story.
+**complete** — E8-F6-S3 closed out the last two flagged-but-unactioned findings
+(E8-F6-S2/S3, both filed off E8-F6-S1). No open follow-up items remain in this epic as of
+this sweep. Every story below is a one-line current-state summary — see
+`docs/CHANGELOG.md` for the full design-gate rationale, figures, and live-verification
+notes per story.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -179,6 +181,11 @@ rationale, figures, and live-verification notes per story.
   ATR% distribution — no ship; the one candidate with a distinct `MODERATE_LOW` signal on
   tuning (2.0→3.5) flips sign on held-out. Confirms `MODERATE_LOW` is a genuinely dead
   branch for crypto at any reasonable cutoff, not a mis-tuned threshold.
+- E8-F6-S3: Measures whether `TrendStrength.STRONG` (unanimous vote) is real-but-rare or
+  structurally unreachable — RSI is the neutral/non-dissenting indicator in 100% of
+  MAJORITY calls (0 exceptions across 877 pooled decision points, both threshold regimes,
+  both directions), ruling out already-shipped per-symbol calibration as the cause.
+  `HoldTermRule.STRONG_*` left as-is (no code change); closes the last flagged E8 item.
 
 ## Build / lint / test
 

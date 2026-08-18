@@ -8815,3 +8815,122 @@ the test's own real-fixture-backed run.
 **`./mvnw verify`: 592 tests, 0 failures/errors, `BUILD SUCCESS`** (up
 from 588 after E8-F6-S1 — 4 new `@Test` methods, no existing test
 touched).
+
+## E8-F6-S3 — is `TrendStrength.STRONG` real-but-rare or structurally unreachable? (leave as-is)
+
+**Story**: E8-F6-S1 found zero `TrendStrength.STRONG` (unanimous
+RSI+MACD+MA-crossover agreement) decision points across ~2,100 real
+crypto BUY/SELL calls, even though `SignalRuleEngine.evaluate`'s
+`bullishCount == 3`/`bearishCount == 3` branch is reachable in principle
+— nothing structurally gates it out. This story, filed as a backlog
+story alongside E8-F6-S2 in the prior commit (`docs/agile-plan.md`'s
+E8-F6-S3 row), measures *why* rather than assuming an answer: is
+unanimity rare-but-real, or is it effectively unreachable under the
+currently-calibrated per-axis thresholds (`PerSymbolRuleThresholds`'
+SOLUSDT-only overrides)?
+
+### Mechanism
+
+New test file `UnanimityGapAnalysisTest`. `BacktestDecisionPoint`
+(test-only, `backend/src/test/java/.../backtest/`) gained one new field
+— `IndicatorVotes votes` — threaded through from `BacktestHarness#run`'s
+own loop, which already computes `SignalRuleEngine.computeVotes(rsi,
+macd, ma, thresholds)` per decision point for its existing per-indicator
+scoring. This is the one production-adjacent (test-infra) change this
+story needed: an additive record field, not a reimplementation of
+indicator computation, so the analysis reuses the exact same votes the
+matched rule was itself derived from rather than recomputing indicators
+from the candle window a second time.
+
+For every `BULLISH_MAJORITY`/`BEARISH_MAJORITY`/`BULLISH_UNANIMOUS`/
+`BEARISH_UNANIMOUS` decision point, `DissentTally` re-derives per-axis
+agree/oppose from the stored votes and identifies which single indicator
+(if any) stayed neutral. A MAJORITY call structurally has zero opposing
+votes (an opposing vote alongside two agreeing ones resolves to
+`CONFLICTING_SIGNALS` before the MAJORITY branch is even reached) — this
+invariant is asserted, not assumed, throwing if ever violated.
+
+**Primary population**: the real production gate chain (per-symbol
+thresholds → SELL regime gate → SELL MA-crossover gate, crypto-only),
+duplicated locally per this repo's convention, matching E8-F6-S1/S2's
+own population — real hold-term suggestions are generated against this
+today.
+
+**Secondary comparison**, isolating the AC's named hypothesis
+(`PerSymbolRuleThresholds`' SOLUSDT-only `rsiOverbought=70`/
+`macdMinHistogramMagnitudePct=0.10`, E8-F1-S4/E8-F1-S8): the bare rule
+table (no SELL gates — those only ever remove points from the
+population post-hoc, never change which indicator dissents on a
+surviving vote) run under both the calibrated per-symbol thresholds and
+the global `RuleThresholds.DEFAULT`. BTCUSDT/DOGEUSDT have no override
+at all, so their two runs are a built-in control — if those don't match
+exactly, the comparison mechanism itself is broken, independent of any
+finding about SOLUSDT.
+
+### Findings
+
+**RSI is the neutral (non-dissenting-vote) indicator in 100% of
+MAJORITY calls — zero exceptions across every symbol, every window,
+both directions.** Pooled tuning: BUY n=464 (rsiNeutral 464, 100.0%),
+SELL n=123 (rsiNeutral 123, 100.0%). Pooled held-out: BUY n=192
+(rsiNeutral 192, 100.0%), SELL n=98 (rsiNeutral 98, 100.0%). Every
+individual symbol (BTCUSDT/DOGEUSDT/SOLUSDT), both windows, both
+directions: `macdNeutral`/`maNeutral` are 0 everywhere, `unanimous` is 0
+everywhere — 877 total MAJORITY decision points across the full
+tuning+held-out population, all landing in the identical pattern. MACD
+and MA-crossover, when they both fire in the same direction, are never
+once observed to be joined by RSI in this data.
+
+**The secondary comparison rules out the already-shipped-calibration
+hypothesis.** BTCUSDT/DOGEUSDT's calibrated-vs-DEFAULT runs match
+exactly (confirming the control), and while SOLUSDT's population sizes
+do shift under DEFAULT vs. calibrated (BUY 157→188, SELL 84→88 — the
+`macdMinHistogramMagnitudePct=0.10` override tightens which candles
+qualify as a MACD vote at all, and the tighter `rsiOverbought=70`
+reclassifies some near-boundary candles from BULLISH_MAJORITY to
+CONFLICTING_SIGNALS), the *pattern* doesn't move: SOLUSDT is
+`rsiNeutral=100%` under both the calibrated and the DEFAULT threshold
+set, in both directions. Reverting SOLUSDT's shipped per-axis
+calibration entirely still produces the identical 100%-RSI-dissents
+shape. This isn't a mis-tuned-threshold artifact.
+
+**Read**: at a daily-candle horizon on these three crypto pairs, RSI's
+25/75 extremes and MACD+MA-crossover's directional agreement appear to
+be closer to anti-correlated in timing than coincident — RSI hits its
+oversold/overbought extremes near likely trend-exhaustion points, while
+MACD histogram sign and a 10/30 SMA crossover agreeing is more of a
+mid-trend signal. The two rarely land on the same candle. This is
+observed, not proven from first principles — it's a real, clean,
+zero-exception empirical pattern across ~877 decision points, not a
+structural impossibility in the rule table itself (the `bullishCount ==
+3` branch remains reachable in principle; it simply never triggers in
+this data).
+
+### Outcome
+
+**Leave `HoldTermRule`'s `STRONG_*` branches as-is — no code change,
+per this story's own AC allowing a documented "leave as-is" decision.**
+The crypto evidence here is unusually clean (zero exceptions, both
+threshold regimes, both directions, both windows), but per E8-F1-S7's
+established precedent that a stock (AAPL) has twice actively contradicted
+a crypto-wide finding, a 3-symbol, one-asset-class, one-set-of-indicator-
+periods result isn't strong enough grounds to remove branches that could
+turn out to be reachable under different indicator periods, a different
+RSI band, or a genuinely untested asset class. `HoldTermCalculator
+.HOLD_TERM_TABLE_VERSION` stays `"v1"`; `SignalRuleEngine
+.RULE_TABLE_VERSION` stays `"v6"` — nothing about which rule a decision
+point resolves to changed. This closes out the two backlog stories
+E8-F6-S1 flagged (E8-F6-S2, E8-F6-S3); no further follow-up items are
+currently open in this epic.
+
+The one test-infra change (`BacktestDecisionPoint`'s new `votes` field,
+threaded through `BacktestHarness#run`'s single construction site) is
+additive and backward-compatible — every existing consumer of that
+record is unaffected. No production (`src/main/java`) code changed;
+Docker wasn't available in this sandboxed session (same recurring
+blocker), so no live-browser verification beyond the test's own
+real-fixture-backed run.
+
+**`./mvnw verify`: 595 tests, 0 failures/errors, `BUILD SUCCESS`** (up
+from 592 after E8-F6-S2 — 3 new `@Test` methods, one existing test-only
+record widened by one field, no existing test's assertions touched).
