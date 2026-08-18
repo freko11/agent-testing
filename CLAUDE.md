@@ -175,6 +175,10 @@ rationale, figures, and live-verification notes per story.
   expectancy — no ship on any branch; 4 of 6 branches (all `STRONG_*` + `MODERATE_LOW`)
   never fire at all in these crypto fixtures, and the two that do (`MODERATE_MEDIUM`,
   `MODERATE_HIGH`) are asset-divergent/inconclusive. `HOLD_TERM_TABLE_VERSION` stays v1.
+- E8-F6-S2: Sweeps `VOLATILITY_LOW_MAX`/`VOLATILITY_MEDIUM_MAX` cutoffs against pooled
+  ATR% distribution — no ship; the one candidate with a distinct `MODERATE_LOW` signal on
+  tuning (2.0→3.5) flips sign on held-out. Confirms `MODERATE_LOW` is a genuinely dead
+  branch for crypto at any reasonable cutoff, not a mis-tuned threshold.
 
 ## Build / lint / test
 

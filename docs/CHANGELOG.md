@@ -8702,3 +8702,116 @@ live-browser verification was needed beyond
 **`./mvnw verify`: 588 tests, 0 failures/errors, `BUILD SUCCESS`** (up
 from 585 after E8-F5-S2 — 3 new `@Test` methods, no existing test
 touched).
+
+## E8-F6-S2 — `VOLATILITY_LOW_MAX`/`VOLATILITY_MEDIUM_MAX` cutoff calibration (no ship)
+
+**Story**: E8-F6-S1 found `VolatilityBand.LOW` (ATR% below the current
+2.0% `VOLATILITY_LOW_MAX` cutoff) never occurs once across ~2,100
+BUY/SELL decision points on any of BTCUSDT/DOGEUSDT/SOLUSDT, permanently
+killing `MODERATE_LOW` as a dead branch and raising the question of
+whether the 2.0% cutoff is simply tuned for a lower-baseline-volatility
+asset class than crypto. This story asks whether *any* cutoff could
+populate a genuinely distinct LOW band for these fixtures, filed as a
+backlog story alongside E8-F6-S3 in the prior commit
+(`docs/agile-plan.md`'s E8-F6-S2 row).
+
+### Mechanism
+
+New test file `VolatilityBandCutoffCalibrationTest`, reusing
+`FixtureSplits`'s chronological 70/30 tuning/held-out split and
+duplicating (per this repo's "no shared helper until a third use"
+convention) `HoldTermRangeCalibrationTest`'s production-gate replay
+(per-symbol thresholds → SELL regime gate → SELL MA-crossover gate,
+crypto-only). Unlike that test, decision points here carry their raw
+ATR% rather than a pre-banded `VolatilityBand`, since banding is exactly
+what this axis sweeps. `TrendStrength` is still derived up front so the
+sweep can isolate `MODERATE_LOW`/`MODERATE_MEDIUM` — the only two
+branches this axis can plausibly populate, since `STRONG` essentially
+never fires regardless of volatility (the E8-F6-S1 finding held here too,
+n=0 `STRONG`-trend points across all ~587 pooled tuning points).
+
+The candidate `VOLATILITY_LOW_MAX` grid is percentile-anchored to the
+*pooled tuning* ATR% distribution only (p5/p10/p20/p30/p40/p50, plus the
+2.0 baseline for reference) — held-out distributions are printed as a
+corroborating sanity check but never used to pick the grid, so the sweep
+can't overfit its own candidate set to the held-out tail. `MEDIUM_MAX`
+stays fixed at 5.0 throughout (never reached — no tuning-window candidate
+came close to needing it revisited).
+
+**Ship bar** (`MODERATE_LOW` only, per the design gate): (1) clears
+`MIN_SCORED_FLOOR` (30, E8-F6-S1's floor) at `MODERATE_LOW`'s mid-day
+checkpoint (7 days) on pooled tuning; (2) materially distinct
+`expectancyPctAfterCosts()` vs. shrunk `MODERATE_MEDIUM` at its own
+mid-day (5 days) on pooled tuning; (3) that distinctness replicates in
+the same direction on pooled held-out; (4) shrunk `MODERATE_MEDIUM`
+doesn't badly regress on any individual symbol's held-out curve vs. its
+current (unshrunk) performance.
+
+### Findings
+
+**Distribution confirms E8-F6-S1's read**: pooled tuning ATR% at
+decision points runs p10=2.94%/p50=5.29%/p90=7.30% — comfortably above
+the 2.0% cutoff, which is why `MODERATE_LOW` sits at n=3 (below floor)
+pooled even at the current baseline. DOGEUSDT's own distribution never
+dips below 3.83% at any tuning point, so `MODERATE_LOW` stays n=0 for
+that symbol up through candidate 3.5 regardless of cutoff.
+
+**Raising the cutoff does populate `MODERATE_LOW`, clearing the floor
+from candidate 2.5 onward** (pooled tuning n=30 at 2.5, rising to n=241
+at 4.7) — criterion (1) is achievable. But criteria (2)+(3) never hold
+together for any candidate:
+
+- At 2.5/2.9/4.1, pooled-tuning `MODERATE_LOW` vs. shrunk
+  `MODERATE_MEDIUM` expectancy-after-costs sit within ~0.1pp of each
+  other (e.g. 4.1: LOW +0.362% vs. MEDIUM +0.430%) — not distinct from
+  noise, just relabeled slices of the same population, exactly the
+  failure mode the design gate called out as a risk.
+- **4.7 does look distinct on tuning** (LOW +0.223% vs. MEDIUM +1.445%,
+  a 1.2pp gap) but `MODERATE_MEDIUM` shrinks to n=31 there — one point
+  above the floor, too thin to trust as the basis for a ship decision.
+- **3.5 is the one candidate with a clean, floor-respecting distinct
+  signal on tuning** (`MODERATE_LOW` d=7 n=115, +0.516% vs. shrunk
+  `MODERATE_MEDIUM` d=5 n=157, +0.190% — a 0.33pp gap, LOW ahead). This
+  is the closest thing to a promising candidate the sweep produced.
+- **3.5 fails criterion (3) outright — the sign flips on held-out.**
+  Pooled held-out at 3.5: `MODERATE_LOW` d=7 n=60 comes in at **-0.087%**
+  while shrunk `MODERATE_MEDIUM` d=5 n=122 comes in at **+0.919%** — the
+  branch that won on tuning loses on held-out, and by a wider margin than
+  it won by. This is the same non-replication failure mode E8-F4-S1's
+  RSI finding and E8-F3-S4's ADX threshold sweep hit — a tuning-window
+  artifact, not a real signal.
+
+No other candidate does better: 4.7's held-out comparison can't even be
+run (shrunk `MODERATE_MEDIUM` drops to n=16, below floor, on held-out).
+
+Per-symbol held-out regression check (criterion 4, run for completeness
+even though (2)+(3) already fail): BTCUSDT's shrunk `MODERATE_MEDIUM`
+actually *improves* at 3.5 (+0.070%→+0.303%), DOGEUSDT is unchanged
+(n=41 in both, ATR% never dips below 3.83%), SOLUSDT regresses modestly
+(-0.308%→-0.609%, already negative at baseline). Consistent with every
+prior E8-F1 threshold story's asset-divergent pattern — not itself
+disqualifying, but moot given (2)+(3) already fail.
+
+### Outcome
+
+**No ship.** `HoldTermCalculator.VOLATILITY_LOW_MAX`/
+`VOLATILITY_MEDIUM_MAX` stay at 2.0/5.0; `HOLD_TERM_TABLE_VERSION` stays
+`"v1"`. The current 2.0% cutoff being tuned for a lower-baseline-
+volatility asset class than crypto (the hypothesis motivating this story)
+turned out to be beside the point — no cutoff in the percentile-anchored
+grid produces a `MODERATE_LOW` band whose distinctness from
+`MODERATE_MEDIUM` survives out-of-sample. Confirms this is genuinely
+E8-F6-S1's second structural reason for `MODERATE_LOW`'s absence (not a
+mis-tuned threshold), closing the question E8-F6-S1 left open for that
+branch. `MODERATE_LOW`/`STRONG_LOW` remain dead branches in these crypto
+fixtures; E8-F6-S3 (evaluating whether `TrendStrength.STRONG` itself is
+worth keeping) is the next story in this backlog feature and is
+unaffected by this outcome.
+
+No production code changed; Docker wasn't available in this sandboxed
+session (same recurring blocker), so no live-browser verification beyond
+the test's own real-fixture-backed run.
+
+**`./mvnw verify`: 592 tests, 0 failures/errors, `BUILD SUCCESS`** (up
+from 588 after E8-F6-S1 — 4 new `@Test` methods, no existing test
+touched).
