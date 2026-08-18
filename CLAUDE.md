@@ -171,6 +171,10 @@ rationale, figures, and live-verification notes per story.
 - E8-F5-S2: Wires funding-adjusted expectancy into live signal-drift monitoring —
   `LiveDriftBaseline`/`CheckpointDrift` gain funding-adjusted fields, informational only
   (`possibleDecay` still gates on the cost-only figure alone).
+- E8-F6-S1: Calibrates `HoldTermRule`'s 6 branch day-ranges against realized backtest
+  expectancy — no ship on any branch; 4 of 6 branches (all `STRONG_*` + `MODERATE_LOW`)
+  never fire at all in these crypto fixtures, and the two that do (`MODERATE_MEDIUM`,
+  `MODERATE_HIGH`) are asset-divergent/inconclusive. `HOLD_TERM_TABLE_VERSION` stays v1.
 
 ## Build / lint / test
 
