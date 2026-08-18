@@ -1255,8 +1255,8 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1786972065.3274856,
-    "ast_hash": "78dbf103a711f1c32f9a8fe1aacafb8d",
+    "mtime": 1787036007.2725456,
+    "ast_hash": "1a58b2ec6f0525d82482f4c16716ca7f",
     "semantic_hash": ""
   },
   "docker-compose.yml": {
@@ -1265,8 +1265,8 @@
     "semantic_hash": ""
   },
   "docs/agile-plan.md": {
-    "mtime": 1786786976.2581673,
-    "ast_hash": "cb132347523deb6caa8843c2d669df50",
+    "mtime": 1787035335.6084628,
+    "ast_hash": "6a1645c3c2cb2c9c6d51eda03a99f776",
     "semantic_hash": ""
   },
   "docs/runbooks/credential-key-rotation.md": {
@@ -1305,8 +1305,8 @@
     "semantic_hash": "0756823c4681ef166f723b6b53959523"
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1786972111.5287817,
-    "ast_hash": "50ff3090a26e88e45295b9f09279604c",
+    "mtime": 1787035985.794521,
+    "ast_hash": "3ae049e9f59209a9eba427a37dee0e3b",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/autotrade/dashboard/risk/RiskExceptionHandler.java": {
@@ -1827,6 +1827,11 @@
   "backend/src/test/java/com/autotrade/dashboard/backtest/StockPerSymbolMacdHistogramMagnitudeCalibrationTest.java": {
     "mtime": 1786968923.014516,
     "ast_hash": "f54b78629dba08d7bc2569576c98afaf",
+    "semantic_hash": ""
+  },
+  "backend/src/test/java/com/autotrade/dashboard/backtest/HoldTermRangeCalibrationTest.java": {
+    "mtime": 1787035404.1037748,
+    "ast_hash": "4685cb44c09150b0c8d892400a87f2d1",
     "semantic_hash": ""
   }
 }
