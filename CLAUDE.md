@@ -186,6 +186,10 @@ notes per story.
   MAJORITY calls (0 exceptions across 877 pooled decision points, both threshold regimes,
   both directions), ruling out already-shipped per-symbol calibration as the cause.
   `HoldTermRule.STRONG_*` left as-is (no code change); closes the last flagged E8 item.
+- Post-E8 fix: live crypto E2E verification surfaced a duplicate error-message render on a
+  failed ticker lookup (`TickerMetrics.tsx`'s independent signal/chart fetches both
+  surfacing an identical `NO_PRICE_DATA` message) — fixed by suppressing the chart alert
+  when its text matches the signal alert already shown.
 
 ## Build / lint / test
 

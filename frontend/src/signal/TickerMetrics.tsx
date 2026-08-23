@@ -288,7 +288,7 @@ function TickerMetrics({ lookupRequest, onWatchlistChanged, onOrderPlaced }: Tic
           <TradeForm key={result.ticker.symbol} signal={result} onOrderPlaced={onOrderPlaced} />
         </>
       )}
-      {chartError && <p role="alert">{chartError}</p>}
+      {chartError && chartError !== error && <p role="alert">{chartError}</p>}
       {chartData && chartData.candles.length > 0 && (
         <div className="price-chart-container">
           {chartData.stale && (

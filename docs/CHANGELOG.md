@@ -8934,3 +8934,56 @@ real-fixture-backed run.
 **`./mvnw verify`: 595 tests, 0 failures/errors, `BUILD SUCCESS`** (up
 from 592 after E8-F6-S2 — 3 new `@Test` methods, one existing test-only
 record widened by one field, no existing test's assertions touched).
+
+## Post-E8 fix — duplicate error message on a failed ticker lookup
+
+### Context
+
+Manual crypto end-to-end verification (full stack: Docker Oracle XE,
+backend with real `.env`-sourced Alpaca/Binance credentials, frontend,
+driven live via browser automation) exercised the golden path across
+five live crypto tickers (BTCUSDT, SOLUSDT, ETHUSDT, DOGEUSDT, XRPUSDT).
+Every one of them was `HOLD`/`CONFLICTING_SIGNALS` under a genuine
+market-wide overbought rally (RSI 77–86 on all five, conflicting with a
+bullish MA-crossover vote), so live BUY/SELL order submission couldn't
+be exercised against fresh market data this session — validated
+indirectly instead via the existing historical crypto trades already in
+Orders/Audit Trail/Notifications (FILLED, REJECTED, PARTIALLY_PROTECTED,
+real Binance rejection reasons intact). The kill switch's engage/clear
+cycle (including its confirmation dialog) was also exercised live and
+worked correctly.
+
+Looking up an unregistered ticker (`NOTATICKER`) surfaced a UI bug:
+`"No price data is available for "NOTATICKER" right now."` rendered
+twice on the page. Not a duplicate-request bug — backend logs showed
+one `NO_PRICE_DATA` log line per independent endpoint call, exactly as
+designed. `TickerMetrics.tsx`'s `runLookup` fires `fetchSignal` and
+`fetchChartData` as two independent `Promise.allSettled` calls
+(deliberately, per the existing code comment: chart data never 422s
+`INSUFFICIENT_PRICE_HISTORY` the way `/signal` does, so one failing
+must not blank out the other) — each has its own error state (`error`,
+`chartError`) and its own `<p role="alert">`. When a ticker doesn't
+exist, both calls fail with the identical `NO_PRICE_DATA` message, so
+both alerts render with the same text back-to-back.
+
+### Fix
+
+`{chartError && <p role="alert">{chartError}</p>}` →
+`{chartError && chartError !== error && <p role="alert">{chartError}</p>}`
+in `frontend/src/signal/TickerMetrics.tsx`. Keeps the two fetches and
+their error states fully independent (a chart-only failure with
+distinct text still renders its own alert) but suppresses the second
+`<p>` when its text is byte-identical to the signal-lookup error
+already shown above it.
+
+### Verification
+
+`npm run build` (tsc -b + vite build): clean. `npm run lint` (oxlint):
+clean (pre-existing `only-export-components` warnings in unrelated
+files, untouched). `npm test`: 13/13 passing across both existing test
+files — no test exercises this exact duplicate-message path, so this
+was verified by re-reading the changed condition against the two
+`ERROR_MESSAGES` templates (`NO_PRICE_DATA` and `INSUFFICIENT_PRICE_
+HISTORY` both key off `symbol` alone, so an identical symbol always
+still produces byte-identical text for a shared error code, keeping the
+suppression correct) rather than a fresh live-browser repro.
