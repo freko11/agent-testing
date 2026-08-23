@@ -191,6 +191,15 @@ design-gate rationale, figures, and live-verification notes per story.
   failed ticker lookup (`TickerMetrics.tsx`'s independent signal/chart fetches both
   surfacing an identical `NO_PRICE_DATA` message) — fixed by suppressing the chart alert
   when its text matches the signal alert already shown.
+- Post-E8 follow-up: ran E8-F5-S3's shadow-scoring diagnostic against the 1,237
+  `SignalCallEntry` rows that have since accumulated (BTCUSDT/DOGEUSDT/SOLUSDT,
+  90-day lookback) — `WeightedVoteRuleEngine` agreed with the live unweighted rule
+  table on all 1,237 (0 in every disagreement bucket). No evidence either for or
+  against wiring it in: `IndicatorWeights.DEFAULT`'s current calibration (MACD
+  0.714, RSI/MA-crossover 0) never diverges from the live 2-of-3 vote on this
+  data, so swapping engines today would be behaviorally a no-op. Stays unwired;
+  recommendation is to leave it as backlog unless `IndicatorWeights` calibration
+  changes enough to produce divergence worth evaluating.
 - E8-F5-S3: read-only weighted-vote shadow-scoring diagnostic
   (`monitoring.WeightedVoteShadowScoringService`, `GET
   /api/monitoring/weighted-vote-shadow`) — replays persisted `SignalCallEntry` rows through
