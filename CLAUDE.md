@@ -19,11 +19,11 @@ Testnet) with risk/safety guardrails (E6).
 E1–E7 are done (E6 Risk & Safety Controls, E7 Observability & Hardening). E8 (Signal
 Quality & Quant Rigor) is a backlog epic added after E7 shipped; it has gone through
 several follow-up batches as calibration findings surfaced new stories, and is currently
-**complete** — E8-F6-S3 closed out the last two flagged-but-unactioned findings
-(E8-F6-S2/S3, both filed off E8-F6-S1). No open follow-up items remain in this epic as of
-this sweep. Every story below is a one-line current-state summary — see
-`docs/CHANGELOG.md` for the full design-gate rationale, figures, and live-verification
-notes per story.
+**complete** — E8-F5-S3 closed out the last flagged item, a Phase-0 read-only shadow-
+scoring diagnostic for `WeightedVoteRuleEngine` filed during E8-F6-S3's own closing
+design-gate sweep. No open follow-up items remain in this epic as of this sweep. Every
+story below is a one-line current-state summary — see `docs/CHANGELOG.md` for the full
+design-gate rationale, figures, and live-verification notes per story.
 
 ### E1 — Platform Foundation
 - E1-F1-S1: Local Oracle XE via Docker Compose
@@ -190,6 +190,12 @@ notes per story.
   failed ticker lookup (`TickerMetrics.tsx`'s independent signal/chart fetches both
   surfacing an identical `NO_PRICE_DATA` message) — fixed by suppressing the chart alert
   when its text matches the signal alert already shown.
+- E8-F5-S3: read-only weighted-vote shadow-scoring diagnostic
+  (`monitoring.WeightedVoteShadowScoringService`, `GET
+  /api/monitoring/weighted-vote-shadow`) — replays persisted `SignalCallEntry` rows through
+  `WeightedVoteRuleEngine.evaluate` and buckets disagreements (agree/weighted-only-BUY/
+  weighted-only-SELL/downgraded-by-weighted); no live signal history existed to sanity-check
+  against in this session, so no recommendation beyond "run this once live data accumulates."
 
 ## Build / lint / test
 
@@ -318,7 +324,27 @@ notes per story.
   as an informational-only figure — `possibleDecay` still gates on the
   cost-only `driftPct` alone. `SignalDriftController` (`GET /api/monitoring/signal-drift`) and
   the scheduled job call the same `computeDrift` method; ephemeral only, no
-  new table.
+  new table. `WeightedVoteShadowScoringService` (E8-F5-S3, same `@Scheduled`/
+  `@ConditionalOnProperty("monitoring.weighted-vote-shadow.enabled")` shape) is a
+  separate, read-only diagnostic: replays every persisted `SignalCallEntry` in a lookback
+  window through `WeightedVoteRuleEngine.evaluate` (reconstructing its inputs — `MacdResult`/
+  `MovingAverageResult`'s derived fields — from `IndicatorSnapshot`'s raw persisted values,
+  using the exact same formula/rounding as `MacdCalculator`/`MovingAverageCrossoverCalculator`)
+  and buckets each entry into `WeightedVoteAgreementBucket.{AGREE, WEIGHTED_ONLY_BUY,
+  WEIGHTED_ONLY_SELL, DOWNGRADED_BY_WEIGHTED}` — exhaustive, not an arbitrary subset, since
+  both engines share `computeVotes` and so can never disagree on bullish-vs-bearish leaning,
+  only on how confidently a lean resolves. Only disagreements are walk-forward-scored
+  (`WeightedVoteBucketOutcome`/`WeightedVoteDowngradeOutcome`, reusing `backtest.CheckpointStats`/
+  `DirectionalOutcomeStats` — `downgraded-by-weighted` entries keep their own recorded
+  hold-term/MIN-MID-MAX checkpoints, `weighted-only` entries were recorded HOLD and have none,
+  so they're scored at `BacktestConfig.HOLD_REFERENCE_HORIZON_DAYS`'s single fixed horizon
+  instead, via a new package-private `WeightedVoteSingleHorizonAccumulator`).
+  `WeightedVoteShadowReport.knownLimitations` explicitly documents (not silently omits) that
+  this replay cannot reproduce `RegimeGatedRuleEngine`/`MaCrossoverSellGate`'s SELL-only gate
+  effects, since `IndicatorSnapshot` persists no ADX/regime data. `WeightedVoteShadowController`
+  (`GET /api/monitoring/weighted-vote-shadow`) mirrors `SignalDriftController` exactly. Zero
+  change to `SignalService`/`OrderService`/`WeightedVoteRuleEngine` — still unwired from
+  production, per this story's own scope.
 - `watchlist`, `security` (session auth), `common` (`Clock`/`SchedulingConfig`).
 - Schema: Flyway `V1`–`V14` under `backend/src/main/resources/db/migration/` is the
   single source of truth; `spring.jpa.hibernate.ddl-auto=validate` everywhere.

@@ -8935,6 +8935,199 @@ real-fixture-backed run.
 from 592 after E8-F6-S2 — 3 new `@Test` methods, one existing test-only
 record widened by one field, no existing test's assertions touched).
 
+## E8-F5-S3 — weighted-vote shadow-scoring against real live signal history
+
+### Story
+
+Filed during the design-gate scoping pass on whether E8-F3-S1/S5's
+`WeightedVoteRuleEngine` was ready to wire into `SignalService`/
+`OrderService` (see `docs/agile-plan.md`'s E8 epic intro paragraph). That
+pass found the engine had only ever been validated against the two
+checked-in BTCUSDT/DOGEUSDT backtest fixtures (E8-F3-S1's original
+calibration, E8-F3-S5's horizon re-attempt, E8-F4-S1's out-of-sample
+check) — never against this app's own real, persisted `SignalCallEntry`
+history. Filed as Phase 0 of a staged approach: a passive, read-only
+shadow-scoring pass against already-persisted signal calls, zero change
+to the live decision path, before ever considering a live-shadow Phase 1
+or an actual engine switch.
+
+### Design
+
+No design-gate ambiguity to resolve — the AC is unusually prescriptive
+(exact bucket names, exact "must not modify" file list, exact documented
+gap requirement), so this was mostly a faithful-translation exercise:
+read `WeightedVoteRuleEngine`/`SignalRuleEngine`/`SignalCallEntry`/
+`IndicatorSnapshot` closely enough to reconstruct `evaluate`'s inputs
+from already-persisted data, then mirror `LiveSignalDriftService`'s
+established shape (E8-F5-S1) for exactly this kind of live-replay
+diagnostic.
+
+**Why exactly four agreement buckets are exhaustive.** Reading
+`WeightedVoteRuleEngine.evaluate` side by side with `SignalRuleEngine
+.evaluate` surfaced an invariant the AC's bucket list depends on but
+doesn't spell out: both engines call the exact same `SignalRuleEngine
+#computeVotes` with the exact same inputs and thresholds, so
+`bullishCount`/`bearishCount` — and therefore the three safety gates and
+the conflict/dissent gate, which both engines run identically before
+either ever applies weighting — are byte-identical between the two
+replays of one entry. A recorded BUY (bullish-leaning) can therefore
+never become a weighted SELL (bearish-leaning), or vice versa: a
+"flipped direction" bucket is structurally impossible, not merely
+unobserved. That's why `agree`/`weighted-only BUY`/`weighted-only
+SELL`/`downgraded-by-weighted` are exhaustive — there's no fifth case to
+account for. `WeightedVoteShadowScoringService.classify`'s Javadoc pins
+this down for a future reader.
+
+**Reconstructing `MacdResult`/`MovingAverageResult` from a persisted
+snapshot.** `IndicatorSnapshot` stores the raw `macdLine`/`macdSignal`/
+`macdHistogram` and `maShort`/`maLong` values but not the derived
+`histogramPctOfPrice`/`separationPctOfPrice`/`relation` fields
+`computeVotes` actually gates on. Confirmed by reading `MacdCalculator`/
+`MovingAverageCrossoverCalculator` directly: both derived fields are a
+simple, deterministic function of the raw persisted values plus the
+snapshot's own `price` (same `MathContext(50)`, same `setScale(4,
+HALF_UP)`), so recomputing them from storage reproduces byte-identical
+votes to what the unweighted engine saw at computation time — no
+information is actually lost, just not persisted in its derived form.
+`IndicatorService.computeForSignal` confirmed `rsi`/`macd*`/`ma*`/
+`volatility` are always non-null once a snapshot is persisted (candle
+history is checked for sufficiency before any indicator is computed);
+only `volumeTrend` is legitimately nullable, and both engines already
+handle that identically via the `NO_VOLUME_DATA` gate.
+
+**Scoring methodology.** Only disagreements are walk-forward scored, per
+the AC — `agree` is a pure count. `downgraded-by-weighted` entries are
+real recorded BUY/SELL calls and always carry their own persisted
+hold-term, so they're scored at their own MIN/MID/MAX checkpoints,
+exactly like `LiveSignalDriftService.scoreOne`, pooled across both
+directions into one `DirectionalAccumulator` (the AC names one bucket,
+not two) — `WalkForwardScorer.score`'s `isBuy` flag already normalizes
+each entry's signed return to "in the recorded call's own direction"
+before pooling, so this is a meaningful average, not apples-to-oranges.
+`weighted-only BUY`/`weighted-only SELL` entries were recorded as HOLD
+and carry no hold-term at all, so they're scored at a single fixed
+horizon instead — reusing `BacktestConfig.HOLD_REFERENCE_HORIZON_DAYS`,
+the same horizon `BacktestHarness` already uses for every "no hold-term
+to derive a range from" situation (HOLD calls, per-indicator reads). A
+new `WeightedVoteSingleHorizonAccumulator` (package-private) provides
+the single-checkpoint accumulation `backtest.DirectionalAccumulator`
+doesn't offer — a narrowly-scoped, independent re-implementation of
+`BacktestHarness`'s own private, test-only `IndicatorAccumulator`
+pattern, since that class stays out of this story's scope to touch.
+
+### Mechanism
+
+All new files, no modifications to any file on the AC's "must not
+modify" list (`SignalService`, `OrderService`, `SignalRuleEngine`,
+`WeightedVoteRuleEngine`, `SignalCallEntry`, `OrderAuditEntry`,
+`HoldTermCalculator`, `RegimeGatedRuleEngine`, `MaCrossoverSellGate`), no
+Flyway migration:
+
+- `monitoring.WeightedVoteAgreementBucket` — the four-value enum.
+- `monitoring.WeightedVoteBucketOutcome`/`WeightedVoteDowngradeOutcome` —
+  per-bucket count + scoring output (`backtest.CheckpointStats`/
+  `DirectionalOutcomeStats`, reused unchanged).
+- `monitoring.WeightedVoteSingleHorizonAccumulator` — package-private
+  single-checkpoint accumulator for the two "weighted-only" buckets.
+- `monitoring.WeightedVoteShadowReport` — the top-level ephemeral report
+  record, including a `knownLimitations` field (see below).
+- `monitoring.WeightedVoteShadowScoringService` — the diagnostic itself:
+  `@Component`/`@ConditionalOnProperty("monitoring.weighted-vote-shadow
+  .enabled")`, `@Scheduled` job + `computeShadowReport(int lookbackDays)`
+  callable on demand, mirroring `LiveSignalDriftService`'s shape exactly
+  (batch-per-ticker market-data fetch, catch-and-skip on a per-entry
+  reconstruction or scoring failure, ephemeral/no persistence).
+- `monitoring.WeightedVoteShadowController` — `GET
+  /api/monitoring/weighted-vote-shadow` (optional `lookbackDays` query
+  param), session-authenticated like every other endpoint, mirroring
+  `SignalDriftController` exactly.
+- `signal.SignalCallEntryRepository` gained one additive query method,
+  `findByCreatedAtAfterOrderByCreatedAtAsc` (`JOIN FETCH`es `ticker`/
+  `indicatorSnapshot`, same lazy-init-after-self-invocation reasoning as
+  `OrderAuditEntryRepository`'s own lookback query) — the repository
+  interface isn't on the "must not modify" list; only the `SignalCallEntry`
+  entity itself is.
+- `application.properties` (main + test) gained
+  `monitoring.weighted-vote-shadow.{enabled,fixed-delay-ms,lookback-days}`,
+  same shape/defaults as `monitoring.live-drift.*` (enabled in main,
+  disabled in test for the same "no live network calls in CI" reason).
+
+### Known, documented gap: cannot replay the SELL-only regime/MA gates
+
+Per the AC, explicitly surfaced rather than silently omitted — in both
+`WeightedVoteShadowScoringService`'s class Javadoc and a
+`knownLimitations` field on every `WeightedVoteShadowReport` (so it's
+visible in the actual API/JSON response, not just source comments):
+`RegimeGatedRuleEngine.applySellGate` and `MaCrossoverSellGate
+.applySellGate` are wired into production for crypto SELL calls,
+downgrading a raw rule-table SELL to HOLD when the regime is ranging or
+the MA-crossover separation is too thin — but `IndicatorSnapshot`
+persists neither ADX/regime data nor a re-runnable record of either gate
+decision. A recorded HOLD that was actually a gate-downgraded SELL,
+replayed through this diagnostic, can land in `weightedOnlySell` for a
+reason that has nothing to do with weighting at all: the weighted engine
+(which also never applies these SELL gates) simply agrees with what the
+raw, ungated rule table would have called. Closing this would need a new
+persisted ADX/regime column on `IndicatorSnapshot` — a schema change,
+out of this story's additive-only, no-migration scope — flagged here for
+whoever picks up a future regime-gate calibration story. The second,
+smaller documented limitation: thresholds are resolved via the
+*current* `PerSymbolRuleThresholds.forSymbol`, not whatever table was in
+effect (a possibly older `RULE_TABLE_VERSION`) when an older entry was
+originally computed.
+
+### Verification
+
+Unit tests (`WeightedVoteShadowScoringServiceTest`, mocked repository +
+market data, hand-crafted RSI/MACD/MA-crossover combinations that isolate
+each bucket rather than relying on a real fixture happening to contain
+one): all four buckets classify correctly from one batch; a
+reconstruction failure (forced null RSI) is skipped without aborting the
+rest of the batch; the `weighted-only BUY` bucket is walk-forward scored
+at the fixed reference horizon (clean TP-hit case, matches
+`LiveSignalDriftServiceTest`'s own expectancy-after-costs arithmetic);
+the `downgraded` bucket is scored at its own recorded hold-term; a
+per-ticker market-data outage is skipped without aborting other tickers'
+scoring. `WeightedVoteShadowControllerIntegrationTest` (real
+`@SpringBootTest`, H2-in-Oracle-mode, real session-cookie/CSRF login —
+same shape as `SignalDriftControllerIntegrationTest`): confirms the
+`@Value` constructor bindings and `@ConditionalOnProperty` wiring
+actually work end to end through real HTTP/JSON against an empty
+`signal_calls` table, including the `knownLimitations` array actually
+appearing in the JSON response. `./mvnw test
+-Dtest=WeightedVoteShadowScoringServiceTest,WeightedVoteShadowControllerIntegrationTest`:
+8/8 passing. Full `./mvnw verify`: passing (no regressions in any
+existing suite).
+
+**Sanity-check against real persisted data**: not possible in this
+session — unlike the shared working copy referenced in this file's
+"Post-E8 fix" live-verification entries (which had a running Docker
+Oracle instance with real historical orders), this story was implemented
+in an isolated git worktree with no `.env` and no `oracle-data` volume.
+Docker itself is available here, but bringing up a *fresh* Oracle
+instance from scratch would start with an empty `signal_calls` table —
+the exact same "zero entries" result
+`WeightedVoteShadowControllerIntegrationTest` already demonstrates
+against real Oracle-compatible SQL (H2 in Oracle mode), for no
+additional signal over the time cost of a from-scratch container boot.
+The full-context `@SpringBootTest` stands in for live verification here,
+the same substitution `LiveSignalDriftService`'s own E8-F5-S1 CHANGELOG
+entry already established and documented for exactly this kind of
+diagnostic.
+
+### Recommendation
+
+Documented, not acted on, per the AC (actually switching engines is
+explicit out-of-scope future work): this diagnostic has never been run
+against real live signal history yet, since no `SignalCallEntry` rows
+exist in any environment reachable from this session. The honest
+recommendation is therefore **run this once real live signal history
+accumulates, before deciding on a live-shadow Phase 1** — there is
+currently zero live evidence either way, only the backtest-fixture
+evidence E8-F3-S1/S5/E8-F4-S1 already produced. This story's contribution
+is the tool to answer that question when the data exists, not the answer
+itself.
+
 ## Post-E8 fix — duplicate error message on a failed ticker lookup
 
 ### Context

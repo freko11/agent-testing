@@ -228,7 +228,8 @@ Status section. A design-gate scoping pass on wiring E8-F3-S1/S5's
 flagged that no live evidence exists either way, only backtest-fixture
 evidence — filed as E8-F5-S3 below (Phase 0 of a staged approach: passive,
 read-only shadow-scoring against already-persisted signal history, zero
-change to the live decision path). Not yet built.*
+change to the live decision path). E8-F5-S3 is now done too — see CLAUDE.md's
+Status section — closing out every flagged item in this epic as of this sweep.*
 
 **F8.1 Threshold calibration**
 | ID | Story | Acceptance Criteria | Pts |
