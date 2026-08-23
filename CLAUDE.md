@@ -20,8 +20,9 @@ E1–E7 are done (E6 Risk & Safety Controls, E7 Observability & Hardening). E8 (
 Quality & Quant Rigor) is a backlog epic added after E7 shipped; it has gone through
 several follow-up batches as calibration findings surfaced new stories, and is currently
 **complete** — E8-F5-S3 closed out the last flagged item, a Phase-0 read-only shadow-
-scoring diagnostic for `WeightedVoteRuleEngine` filed during E8-F6-S3's own closing
-design-gate sweep. No open follow-up items remain in this epic as of this sweep. Every
+scoring diagnostic for `WeightedVoteRuleEngine` filed off a later design-gate scoping
+pass on wiring it into production. No open follow-up items remain in this epic as of
+this sweep. Every
 story below is a one-line current-state summary — see `docs/CHANGELOG.md` for the full
 design-gate rationale, figures, and live-verification notes per story.
 
