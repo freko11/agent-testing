@@ -221,8 +221,14 @@ AC's scope): whether `TrendStrength.STRONG` should exist as a distinct tier
 at all, and whether `VOLATILITY_LOW_MAX` is calibrated for an asset class
 crypto doesn't resemble — both `STRONG_*` and `MODERATE_LOW` never fired
 once across ~2,100 real crypto decision points. Filed as two new stories,
-E8-F6-S2/S3 below, per this backlog's standing "flagged finding becomes its
-own story, not an opportunistic fix" convention. Not yet built.*
+E8-F6-S2/S3, per this backlog's standing "flagged finding becomes its own
+story, not an opportunistic fix" convention; both are done — see CLAUDE.md's
+Status section. A design-gate scoping pass on wiring E8-F3-S1/S5's
+`WeightedVoteRuleEngine` into production (never itself a chartered story)
+flagged that no live evidence exists either way, only backtest-fixture
+evidence — filed as E8-F5-S3 below (Phase 0 of a staged approach: passive,
+read-only shadow-scoring against already-persisted signal history, zero
+change to the live decision path). Not yet built.*
 
 **F8.1 Threshold calibration**
 | ID | Story | Acceptance Criteria | Pts |
@@ -265,6 +271,7 @@ own story, not an opportunistic fix" convention. Not yet built.*
 | ID | Story | Acceptance Criteria | Pts |
 |---|---|---|---|
 | E8-F5-S1 | As a user, I want the rule table's live performance re-scored periodically against `OrderAuditEntry`'s frozen signal snapshots (E6-F3-S1/E6-F3-S2), so I can detect the rule table's edge decaying in live markets before it costs real money. | A scheduled or on-demand job replays `BacktestHarness`-style scoring against production audit-log entries, grouped by `rule_table_version`, and surfaces expectancy drift versus the original backtest. | 5 |
+| E8-F5-S3 | As a user, I want to know whether `WeightedVoteRuleEngine` (E8-F3-S1, weights recalibrated and out-of-sample-confirmed by E8-F3-S5) would actually help on real live signal history, before ever considering wiring it into `SignalService`/`OrderService`, since every validation to date ran against the two checked-in backtest fixtures rather than live production data. | A new read-only diagnostic replays every persisted `SignalCallEntry` in a lookback window through `WeightedVoteRuleEngine.evaluate`, using each entry's own stored `IndicatorSnapshot` raw values and `PerSymbolRuleThresholds.forSymbol` (the same inputs the live unweighted path already resolves), then walk-forward-scores (via the existing `WalkForwardScorer`) the decision points where the weighted engine's call disagrees with what was actually recorded — grouped into agreement buckets (agree; weighted-only BUY; weighted-only SELL; downgraded-by-weighted) rather than by `rule_table_version`, since there is no live weighted-engine version to group by yet. Must not modify `SignalService`, `OrderService`, `SignalRuleEngine`, `WeightedVoteRuleEngine`, `SignalCallEntry`, `OrderAuditEntry`, `HoldTermCalculator`, `RegimeGatedRuleEngine`, or `MaCrossoverSellGate`, and must not touch any Flyway migration — additive/new-files-only, since this changes no live decision. Because `IndicatorSnapshot` doesn't persist ADX/regime, the report must explicitly document (not silently omit) that it cannot replay `RegimeGatedRuleEngine.applySellGate`'s effect — a data-model gap independent of this story, flagged for whoever picks up a future regime-gate calibration story too. Concludes with a documented recommendation (worth a live-shadow Phase 1, or not) rather than a wiring decision — actually switching which engine drives real orders is explicit out-of-scope future work (a separate story, paper-environment-first, per this backlog's own "flag before switch" precedent). | 5 |
 
 **F8.6 Hold-term calibration**
 | ID | Story | Acceptance Criteria | Pts |
