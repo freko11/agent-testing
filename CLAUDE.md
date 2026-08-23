@@ -86,7 +86,7 @@ notes per story.
 - E5-F3-S2: CSV export of trade history
 - E5-F4-S1: In-app notifications (order outcomes, watchlist signal changes)
 
-### E6 — Risk & Safety Controls (in progress)
+### E6 — Risk & Safety Controls
 - E6-F1-S1: Global paper/live trading-mode switch
 - E6-F1-S2: Paper-trade threshold before live mode unlocks (default 10 filled paper
   orders, `trading-mode.paper-trade-threshold`).

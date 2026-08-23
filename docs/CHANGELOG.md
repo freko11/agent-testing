@@ -8987,3 +8987,27 @@ was verified by re-reading the changed condition against the two
 HISTORY` both key off `symbol` alone, so an identical symbol always
 still produces byte-identical text for a shared error code, keeping the
 suppression correct) rather than a fresh live-browser repro.
+
+## Post-E8 fix — stale "(in progress)" label on the E6 epic header
+
+### Context
+
+A conversational sweep of CLAUDE.md's Status section for deferred/pending
+work across every story surfaced a documentation inconsistency: the E6
+epic heading read `### E6 — Risk & Safety Controls (in progress)`, left
+over from mid-E6 development, even though the same Status section already
+lists every E6 story (F1-S1/S2/S3, F2-S1/S2/S3, F3-S1/S2/S3) as shipped
+and the top-level summary paragraph states E1–E7 are done. Not a code
+change — no story was actually incomplete, the heading label had simply
+never been updated after E6 closed out.
+
+### Fix
+
+Dropped the `(in progress)` suffix from the E6 heading in CLAUDE.md so the
+header matches the stories and summary paragraph beneath it.
+
+### Verification
+
+Text-only doc fix; re-read the surrounding Status section to confirm every
+E6 story listed under the heading is in fact marked done, with no other
+epic heading carrying a similar stale suffix.
