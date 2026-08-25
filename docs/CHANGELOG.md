@@ -9267,3 +9267,133 @@ CSRF cookie primed via `GET /api/auth/csrf` then re-primed via `GET
 /api/auth/me` per this repo's own CSRF-rotation gotcha) rather than
 assumed. No code changed by this follow-up — read-only against an
 already-shipped, already-unwired diagnostic endpoint.
+
+## Post-E8 — Signal Health tab + in-app system alerts
+
+### Context
+
+A user request for further recommendations to improve the app surfaced two
+gaps left over from E8/E7: E8's diagnostic monitoring endpoints (`GET
+/api/monitoring/signal-drift`, `GET /api/monitoring/weighted-vote-shadow`)
+were only reachable by curling the API — nothing in the dashboard surfaced
+rule-table decay or weighted-vote disagreement data to an actual user. And
+E7's "Observability & Hardening" epic only added structured logging, so
+there was no proactive alerting on two events an operator actually cares
+about: the kill switch tripping, or live drift crossing into
+`possibleDecay`. Went through this repo's design-gate workflow (Explore
+research on both the frontend tab conventions and backend observability
+infra, then a Plan pass) before implementing.
+
+Explicitly rejected Micrometer/Prometheus for the alerting half — no
+existing metrics-export infra in this repo (`spring-boot-starter-actuator`
+is present but bare, no registry), no Prometheus/Alertmanager in
+`docker-compose.yml`, and standing that stack up is disproportionate
+infrastructure for a solo paper-trading dashboard. Chose lightweight
+in-app alerts instead, reusing this codebase's existing patterns.
+
+### Design
+
+**Signal Health tab** (`frontend/src/monitoring/`) — `DriftReportPanel`/
+`WeightedVoteShadowPanel` render `SignalDriftReport`/`WeightedVoteShadowReport`
+verbatim (including `knownLimitations`), with a deliberate divergence from
+every other tab in this app: **no fetch on mount, no polling** — both
+backing endpoints (`LiveSignalDriftService.computeDrift`/
+`WeightedVoteShadowScoringService.computeShadowReport`) recompute from
+scratch on every call with zero caching, and `computeDrift` hits real
+Alpaca/Binance market data per distinct ticker symbol, so an on-mount fetch
+(this app's existing convention for every other tab) would silently fire a
+live-broker-hitting recomputation on every dashboard load whether or not a
+user ever opens the tab. Both panels start idle behind an explicit "Load
+report" button. A 404 (both controllers are `@ConditionalOnProperty
+(matchIfMissing = true)`) is caught as a distinct `FeatureDisabledError`
+before it reaches `parseMarketDataError`, which would otherwise mis-parse
+Spring's default 404 body as a generic `UNKNOWN`-code error.
+
+**System alerts** (`com.autotrade.dashboard.alert`, new `system_alerts`
+table, `V15__add_system_alerts.sql`) — a new package, not folded into
+`risk` or `monitoring` (both would need to depend on the other otherwise)
+and not an extension of `notification.Notification` (that entity
+DB-enforces every row is ticker-scoped via an XOR constraint neither a
+kill-switch trip nor a drift-decay event fits — widening that CHECK
+constraint would mean the drop-then-recreate cost this repo's own gotchas
+already warn about, for no reason when a new table is cleaner). One flat
+table, two alert types, CHECK-enforced nullable columns per type:
+`KILL_SWITCH_ENGAGED` references an existing, already-immutable
+`kill_switch_events` row by FK; `SIGNAL_DRIFT_DECAY` has no persisted
+source row to reference (`computeDrift` is ephemeral/recomputed-per-call),
+so its `rule_table_version`/`direction`/`checkpoint`/`drift_pct` are
+inlined snapshot values instead.
+
+`SystemAlertService` is injected into both `KillSwitchService.switchTo`
+(records right after the existing `repository.save`/`log.warn`, only on
+an `ENGAGED` transition — inherits `switchTo`'s existing same-state
+no-op for free, so no separate dedupe was needed there) and
+`LiveSignalDriftService.logDirection` (inside the existing
+`possibleDecay` branch, alongside its existing `log.warn`). `logDirection`
+is called only from `scheduledDriftCheck()` — `SignalDriftController`
+calls `computeDrift()` directly and never reaches it — so "the on-demand
+controller path never creates an alert" holds structurally by call-graph
+shape rather than needing an explicit guard; deliberately did not move
+alert-recording into `computeDrift()` itself, which would silently turn
+every dashboard page view of Signal Health into an alert-generating event.
+Drift-decay alerts dedupe via a cooldown (`alert.signal-drift-decay
+.re-alert-cooldown-ms`, default 24h — roughly four of the default 6h
+`monitoring.live-drift.fixed-delay-ms` scheduled runs) checked against an
+indexed `EXISTS` query on `(alert_type, rule_table_version, direction,
+checkpoint, created_at)`, so a still-decaying condition resurfaces once a
+day rather than spamming every scheduled run or going silent after the
+first alert.
+
+Surfaced via a new `SystemAlertStrip` in the existing status strip
+(alongside `TradingModeBanner`/`KillSwitchControl`), not the Notifications
+tab (ticker-scoped by schema, a different audience) or the Signal Health
+tab (a kill-switch trip isn't signal-related, and shouldn't require opening
+a specific tab to notice). Unlike the Signal Health panels, this strip
+fetches on mount — `GET /api/system-alerts` is a plain DB read, the same
+class of endpoint as `KillSwitchControl`/`TradingModeBanner`, which
+already fetch on mount.
+
+### Bug found and fixed
+
+First `./mvnw verify` run failed every `@SpringBootTest` context load
+(`BackendApplicationTests` and everything downstream that shares its
+cached context — 50 test errors, all the same root cause once traced
+through `target/surefire-reports/`): `SystemAlert.driftPct` (a `Double`
+mapped to `NUMBER(10,4)`) had no `@JdbcTypeCode` annotation, so Hibernate
+defaulted it to `FLOAT` and schema validation failed —
+`SchemaManagementException: wrong column type encountered in column
+[drift_pct] ... found [numeric], but expecting [float(53)]`. Exactly this
+repo's own documented gotcha ("Plain `Integer`/`int` columns need
+`@JdbcTypeCode(SqlTypes.NUMERIC)`"), just hit for the first time on a
+`Double` field rather than an `Integer` one — CLAUDE.md's gotcha entry
+broadened to say so explicitly. Fixed by adding
+`@JdbcTypeCode(SqlTypes.NUMERIC)` with matching `precision = 10, scale = 4`
+to `driftPct`, matching `kill_switch_event_id`'s existing `NUMERIC`
+annotation on the same entity.
+
+### Verification
+
+Backend: `./mvnw verify` — 606 tests, 0 failures, 0 errors, after the fix
+above (the first run's 50 errors were entirely the `driftPct` schema-
+validation cascade, confirmed by re-running clean afterward). New
+`SystemAlertServiceTest` covers both `record*` methods' message
+composition, the drift-decay cooldown (first call saves, an immediate
+second call for the same triple skips, a call after the clock advances
+past the cooldown saves again, via `Clock.fixed`), and that both methods
+swallow a repository exception rather than propagate. Extended
+`KillSwitchServiceTest` to verify `recordKillSwitchEngaged` fires exactly
+once on `engage()`, never on `clear()` or a same-state no-op. Extended
+`LiveSignalDriftServiceTest` with two new cases: `scheduledDriftCheck()`
+records one alert per `possibleDecay`-flagged checkpoint, and a direct
+`computeDrift()` call (the controller's path) never records one at all —
+pinning the on-demand-never-alerts invariant with an actual assertion, not
+just an inspection of the call graph.
+
+Frontend: `npm run build` (tsc -b + vite build) clean, `npm run lint`
+(oxlint) clean, `npm test` (Vitest) all passing. Not live-browser-verified
+this session (no Docker/backend stack running) — the manual-load-only
+behavior of the Signal Health panels and the on-mount fetch of
+`SystemAlertStrip` were verified by re-reading the component code against
+the design intent above, not by observing the Network tab live; flagged
+here as a gap for the next live-verification pass rather than silently
+treated as done.

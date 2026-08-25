@@ -1,5 +1,6 @@
 package com.autotrade.dashboard.risk;
 
+import com.autotrade.dashboard.alert.SystemAlertService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -18,9 +19,11 @@ public class KillSwitchService {
     private static final Logger log = LoggerFactory.getLogger(KillSwitchService.class);
 
     private final KillSwitchEventRepository repository;
+    private final SystemAlertService systemAlertService;
 
-    public KillSwitchService(KillSwitchEventRepository repository) {
+    public KillSwitchService(KillSwitchEventRepository repository, SystemAlertService systemAlertService) {
         this.repository = repository;
+        this.systemAlertService = systemAlertService;
     }
 
     public KillSwitchResponse currentState() {
@@ -54,6 +57,9 @@ public class KillSwitchService {
         }
         KillSwitchEvent saved = repository.save(new KillSwitchEvent(requested, changedBy));
         log.warn("Kill switch {} -> {} by '{}'", current.state(), saved.getState(), changedBy);
+        if (requested == KillSwitchState.ENGAGED) {
+            systemAlertService.recordKillSwitchEngaged(saved);
+        }
         return new KillSwitchResponse(saved.getState(), saved.getChangedAt(), saved.getChangedBy());
     }
 }

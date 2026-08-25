@@ -1,5 +1,6 @@
 package com.autotrade.dashboard.risk;
 
+import com.autotrade.dashboard.alert.SystemAlertService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,13 +29,15 @@ class KillSwitchServiceTest {
 
     @Mock
     private KillSwitchEventRepository repository;
+    @Mock
+    private SystemAlertService systemAlertService;
 
     private KillSwitchService service;
     private final AtomicReference<KillSwitchEvent> saved = new AtomicReference<>();
 
     @BeforeEach
     void setUp() {
-        service = new KillSwitchService(repository);
+        service = new KillSwitchService(repository, systemAlertService);
     }
 
     private void stubSave() {
@@ -82,6 +85,7 @@ class KillSwitchServiceTest {
         assertEquals(KillSwitchState.ENGAGED, response.state());
         assertEquals("alice", response.changedBy());
         verify(repository).save(any(KillSwitchEvent.class));
+        verify(systemAlertService, times(1)).recordKillSwitchEngaged(any(KillSwitchEvent.class));
     }
 
     @Test
@@ -102,6 +106,8 @@ class KillSwitchServiceTest {
         verify(repository, times(1)).save(any(KillSwitchEvent.class));
         assertEquals("alice", response.changedBy());
         assertEquals("alice", saved.get().getChangedBy());
+        // Still only the one alert from the first engage -- the idempotent no-op never re-alerts.
+        verify(systemAlertService, times(1)).recordKillSwitchEngaged(any(KillSwitchEvent.class));
     }
 
     @Test
@@ -114,6 +120,8 @@ class KillSwitchServiceTest {
         assertEquals(KillSwitchState.CLEARED, response.state());
         assertEquals("bob", response.changedBy());
         assertFalse(service.isEngaged());
+        // Exactly the one alert from the preceding engage() -- clear() itself never records one.
+        verify(systemAlertService, times(1)).recordKillSwitchEngaged(any());
     }
 
     @Test
@@ -124,5 +132,6 @@ class KillSwitchServiceTest {
 
         assertEquals(KillSwitchState.CLEARED, response.state());
         verify(repository, never()).save(any());
+        verify(systemAlertService, never()).recordKillSwitchEngaged(any());
     }
 }

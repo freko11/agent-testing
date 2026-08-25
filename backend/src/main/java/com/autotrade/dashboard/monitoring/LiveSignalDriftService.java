@@ -1,5 +1,6 @@
 package com.autotrade.dashboard.monitoring;
 
+import com.autotrade.dashboard.alert.SystemAlertService;
 import com.autotrade.dashboard.backtest.Checkpoint;
 import com.autotrade.dashboard.backtest.CheckpointStats;
 import com.autotrade.dashboard.backtest.DirectionalAccumulator;
@@ -91,17 +92,20 @@ public class LiveSignalDriftService {
 
     private final OrderAuditEntryRepository orderAuditEntryRepository;
     private final MarketDataService marketDataService;
+    private final SystemAlertService systemAlertService;
     private final int defaultLookbackDays;
     private final int minSampleSize;
     private final double decayThresholdPct;
 
     public LiveSignalDriftService(OrderAuditEntryRepository orderAuditEntryRepository,
                                    MarketDataService marketDataService,
+                                   SystemAlertService systemAlertService,
                                    @Value("${monitoring.live-drift.lookback-days}") int defaultLookbackDays,
                                    @Value("${monitoring.live-drift.min-sample-size}") int minSampleSize,
                                    @Value("${monitoring.live-drift.decay-threshold-pct}") double decayThresholdPct) {
         this.orderAuditEntryRepository = orderAuditEntryRepository;
         this.marketDataService = marketDataService;
+        this.systemAlertService = systemAlertService;
         this.defaultLookbackDays = defaultLookbackDays;
         this.minSampleSize = minSampleSize;
         this.decayThresholdPct = decayThresholdPct;
@@ -127,6 +131,8 @@ public class LiveSignalDriftService {
                         checkpoint.liveExpectancyPctAfterCosts(), checkpoint.baselineExpectancyPctAfterCosts(),
                         checkpoint.driftPct(), checkpoint.liveExpectancyPctAfterCostsAndFunding(),
                         checkpoint.baselineExpectancyPctAfterCostsAndFunding(), checkpoint.driftPctAfterFunding());
+                systemAlertService.recordSignalDriftDecay(ruleTableVersion, direction, checkpoint.checkpoint(),
+                        checkpoint.driftPct());
             } else {
                 log.info("ruleTableVersion={} direction={} checkpoint={} scored={} liveExpectancyPctAfterCosts={} "
                                 + "baselineExpectancyPctAfterCosts={} driftPct={} "

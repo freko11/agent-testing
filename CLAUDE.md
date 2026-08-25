@@ -206,6 +206,22 @@ design-gate rationale, figures, and live-verification notes per story.
   `WeightedVoteRuleEngine.evaluate` and buckets disagreements (agree/weighted-only-BUY/
   weighted-only-SELL/downgraded-by-weighted); no live signal history existed to sanity-check
   against in this session, so no recommendation beyond "run this once live data accumulates."
+- Post-E8: added a "Signal Health" dashboard tab (`frontend/src/monitoring/`) surfacing the
+  two E8 diagnostic endpoints (`GET /api/monitoring/signal-drift`,
+  `GET /api/monitoring/weighted-vote-shadow`) — both were previously reachable only by
+  curling the API. Manual-load-only (no auto-fetch on mount, no polling): both endpoints
+  recompute expensively on every call, and `signal-drift` hits real Alpaca/Binance market
+  data per ticker.
+- Post-E8: added in-app system alerts (`com.autotrade.dashboard.alert`, new `system_alerts`
+  table, `GET /api/system-alerts`) for two ops-facing events with no prior proactive
+  surface: the kill switch engaging and live signal drift crossing `possibleDecay`. Chosen
+  over Micrometer/Prometheus (no existing metrics infra, disproportionate for a solo
+  dashboard). Hooked at `KillSwitchService.switchTo`'s existing `ENGAGED` transition and
+  `LiveSignalDriftService`'s scheduled job only (never the on-demand controller path, so
+  opening the dashboard never itself creates an alert); drift-decay alerts dedupe via a
+  24h re-alert cooldown per `(ruleTableVersion, direction, checkpoint)` triple. Surfaced via
+  a `SystemAlertStrip` in the status strip, not the Notifications tab (ticker-scoped by
+  schema) or Signal Health tab (kill-switch trips aren't signal-related).
 
 ## Build / lint / test
 
@@ -355,8 +371,20 @@ design-gate rationale, figures, and live-verification notes per story.
   (`GET /api/monitoring/weighted-vote-shadow`) mirrors `SignalDriftController` exactly. Zero
   change to `SignalService`/`OrderService`/`WeightedVoteRuleEngine` — still unwired from
   production, per this story's own scope.
+- `alert` (post-E8) — `SystemAlertService` records ops-facing `SystemAlert` rows (new
+  `system_alerts` table, append-only, deliberately separate from `notification.Notification`
+  since that entity is ticker-scoped by a DB-enforced XOR constraint that neither a
+  kill-switch trip nor a drift-decay event fits) for two triggers: `risk.KillSwitchService
+  .switchTo`'s `ENGAGED` transition (no dedupe needed — the idempotent same-state no-op
+  already prevents repeats), and `monitoring.LiveSignalDriftService`'s scheduled job only
+  when it flags `possibleDecay` (never the on-demand `SignalDriftController` path — alert-
+  recording lives in `logDirection`, called only from `scheduledDriftCheck`). Drift-decay
+  alerts dedupe via `alert.signal-drift-decay.re-alert-cooldown-ms` (default 24h) per
+  `(ruleTableVersion, direction, checkpoint)` triple, checked against an indexed `EXISTS`
+  query. `SystemAlertController` (`GET /api/system-alerts`) mirrors
+  `NotificationController`'s shape, no read/unread state since the entity is append-only.
 - `watchlist`, `security` (session auth), `common` (`Clock`/`SchedulingConfig`).
-- Schema: Flyway `V1`–`V14` under `backend/src/main/resources/db/migration/` is the
+- Schema: Flyway `V1`–`V15` under `backend/src/main/resources/db/migration/` is the
   single source of truth; `spring.jpa.hibernate.ddl-auto=validate` everywhere.
 - Logging (E7-F1-S1): `backend/src/main/resources/logback-spring.xml` — one console
   pattern across every profile. SLF4J `private static final Logger log` per class;
@@ -369,8 +397,14 @@ design-gate rationale, figures, and live-verification notes per story.
 `chart`, `trade`, `order`, `auditentry` (E6-F3-S3's audit-trail viewer, its own
 domain despite reading through the `order` resource — a distinct concept, order
 status vs. why an order fired), `watchlist`, `notification`, `tradingmode`,
-`killswitch`, `auth`. Each domain has its own `api.ts` (typed fetch wrapper, shared
-`MarketDataError` parsing) and one or two components wired into `DashboardPage`.
+`killswitch`, `auth`, `monitoring` (post-E8, the Signal Health tab —
+`DriftReportPanel`/`WeightedVoteShadowPanel` are manual-load-only, no fetch on mount or
+poll, since their backing endpoints recompute expensively on every call), `alert`
+(post-E8, `SystemAlertStrip` in the status strip — fetches on mount like
+`KillSwitchControl`/`TradingModeBanner`, since `GET /api/system-alerts` is a plain DB
+read, unlike `monitoring`'s two endpoints). Each domain has its own `api.ts` (typed fetch
+wrapper, shared `MarketDataError` parsing) and one or two components wired into
+`DashboardPage`.
 
 Project-specific subagents live in `.claude/agents/` (`Plan`, `Explore`,
 `general-purpose`); project-specific skills in `.claude/skills/` (`run`, `dataviz`,
@@ -399,9 +433,12 @@ new is broken. Full detail/original story for each is in `docs/CHANGELOG.md`.
 - **`Instant` columns need `@JdbcTypeCode(SqlTypes.TIMESTAMP)`** when mapped to a
   plain `TIMESTAMP(6)` (no timezone) column, or real Oracle throws
   `ORA-18716` on read (H2 doesn't catch this).
-- **Plain `Integer`/`int` columns need `@JdbcTypeCode(SqlTypes.NUMERIC)`** (with
-  matching `precision`/`scale`) to match a `NUMBER(n)` column, or Hibernate schema
-  validation fails (`found [numeric], but expecting [integer]`).
+- **Plain `Integer`/`int` (and `Double`/`double`) columns need
+  `@JdbcTypeCode(SqlTypes.NUMERIC)`** (with matching `precision`/`scale`) to match a
+  `NUMBER(n[,s])` column, or Hibernate schema validation fails (`found [numeric], but
+  expecting [integer]` / `... [float(53)]` for an unannotated `Double`) — hit again by
+  `alert.SystemAlert.driftPct` (a `Double` mapped to `NUMBER(10,4)`), same root cause as
+  the original `Integer` case, just a different Java type.
 - **Widening a CHECK constraint on Oracle** needs drop-then-recreate, not a direct
   `ALTER ... MODIFY`.
 - **Oracle reserved words** (e.g. `MODE`) can't be column names — fails with

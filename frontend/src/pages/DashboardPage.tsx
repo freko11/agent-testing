@@ -1,9 +1,11 @@
 import { useState } from 'react'
+import SystemAlertStrip from '../alert/SystemAlertStrip'
 import AuditTrail from '../auditentry/AuditTrail'
 import { useAuth } from '../auth/AuthContext'
 import KillSwitchControl from '../killswitch/KillSwitchControl'
 import Tabs from '../layout/Tabs'
 import ThemeToggle from '../layout/ThemeToggle'
+import SignalHealth from '../monitoring/SignalHealth'
 import NotificationPanel from '../notification/NotificationPanel'
 import OrderHistory from '../order/OrderHistory'
 import TickerMetrics from '../signal/TickerMetrics'
@@ -15,6 +17,7 @@ const TABS = [
   { id: 'orders', label: 'Orders' },
   { id: 'notifications', label: 'Notifications' },
   { id: 'audit', label: 'Audit Trail' },
+  { id: 'signal-health', label: 'Signal Health' },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
@@ -58,6 +61,7 @@ function DashboardPage() {
       <div className="app-status-strip">
         <TradingModeBanner />
         <KillSwitchControl />
+        <SystemAlertStrip />
       </div>
 
       <div className="app-body">
@@ -85,6 +89,9 @@ function DashboardPage() {
           </div>
           <div className="app-tab-panel" hidden={activeTab !== 'audit'}>
             <AuditTrail />
+          </div>
+          <div className="app-tab-panel" hidden={activeTab !== 'signal-health'}>
+            <SignalHealth />
           </div>
         </main>
       </div>

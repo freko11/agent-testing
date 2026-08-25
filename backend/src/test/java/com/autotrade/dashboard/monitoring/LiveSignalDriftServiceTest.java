@@ -1,5 +1,6 @@
 package com.autotrade.dashboard.monitoring;
 
+import com.autotrade.dashboard.alert.SystemAlertService;
 import com.autotrade.dashboard.backtest.Checkpoint;
 import com.autotrade.dashboard.broker.Broker;
 import com.autotrade.dashboard.broker.BrokerCredential;
@@ -33,8 +34,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -56,6 +62,8 @@ class LiveSignalDriftServiceTest {
     private OrderAuditEntryRepository orderAuditEntryRepository;
     @Mock
     private MarketDataService marketDataService;
+    @Mock
+    private SystemAlertService systemAlertService;
 
     private LiveSignalDriftService service;
 
@@ -63,7 +71,7 @@ class LiveSignalDriftServiceTest {
     void setUp() {
         // lookbackDays=30, minSampleSize=3, decayThresholdPct=0.5 -- deliberately small/simple
         // values for a unit test, unrelated to the real application.properties defaults.
-        service = new LiveSignalDriftService(orderAuditEntryRepository, marketDataService, 30, 3, 0.5);
+        service = new LiveSignalDriftService(orderAuditEntryRepository, marketDataService, systemAlertService, 30, 3, 0.5);
     }
 
     @Test
@@ -192,6 +200,47 @@ class LiveSignalDriftServiceTest {
         CheckpointDrift maxCheckpoint = checkpointDrift(version.buy(), Checkpoint.MAX);
         assertEquals(3, maxCheckpoint.scored());
         assertTrue(maxCheckpoint.possibleDecay(), "sample size met and drift is well beyond the 0.5pp threshold");
+    }
+
+    /** Post-E8 follow-up: {@code scheduledDriftCheck()} must record a system alert for every
+     * checkpoint it flags {@code possibleDecay} on -- the only path that's allowed to. */
+    @Test
+    void scheduledDriftCheckRecordsASystemAlertForEveryDecayFlaggedCheckpoint() {
+        Ticker ticker = ticker("BTCUSDT");
+        List<Candle> slHitCandles = List.of(candle(DECISION_AT.plusSeconds(86400), 101, 95, 97));
+        when(marketDataService.getPriceHistory(eq("BTCUSDT"), anyInt()))
+                .thenReturn(new PriceHistoryResult(ticker, Broker.BINANCE, slHitCandles));
+        when(orderAuditEntryRepository.findByResultStatusInAndLoggedAtAfterOrderByLoggedAtAsc(any(), any()))
+                .thenReturn(List.of(buyAuditEntry(ticker, DECISION_AT), buyAuditEntry(ticker, DECISION_AT),
+                        buyAuditEntry(ticker, DECISION_AT)));
+
+        service.scheduledDriftCheck();
+
+        // All three checkpoints (MIN/MID/MAX) flag decay identically here -- the SL crossing on
+        // day 1 resolves before any of their forward horizons diverge -- so exactly three calls,
+        // one per checkpoint, all on the BUY side (no SELL entries exist in this fixture).
+        verify(systemAlertService, times(3))
+                .recordSignalDriftDecay(anyString(), eq("BUY"), any(Checkpoint.class), anyDouble());
+    }
+
+    /** Post-E8 follow-up: the on-demand path ({@code SignalDriftController} calls {@code
+     * computeDrift} directly) must never itself record an alert -- only the scheduled job may,
+     * so opening the dashboard's Signal Health tab never creates one. */
+    @Test
+    void computeDriftCalledDirectlyNeverRecordsASystemAlert() {
+        Ticker ticker = ticker("BTCUSDT");
+        List<Candle> slHitCandles = List.of(candle(DECISION_AT.plusSeconds(86400), 101, 95, 97));
+        when(marketDataService.getPriceHistory(eq("BTCUSDT"), anyInt()))
+                .thenReturn(new PriceHistoryResult(ticker, Broker.BINANCE, slHitCandles));
+        when(orderAuditEntryRepository.findByResultStatusInAndLoggedAtAfterOrderByLoggedAtAsc(any(), any()))
+                .thenReturn(List.of(buyAuditEntry(ticker, DECISION_AT), buyAuditEntry(ticker, DECISION_AT),
+                        buyAuditEntry(ticker, DECISION_AT)));
+
+        SignalDriftReport report = service.computeDrift(30);
+
+        assertTrue(checkpointDrift(report.versions().get(0).buy(), Checkpoint.MAX).possibleDecay(),
+                "sanity: this fixture really does flag decay, so a missing alert call isn't just an empty result");
+        verify(systemAlertService, never()).recordSignalDriftDecay(any(), any(), any(), anyDouble());
     }
 
     @Test
